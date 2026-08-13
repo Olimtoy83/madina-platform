@@ -1,4 +1,5 @@
-﻿import { Link } from 'react-router-dom'
+﻿import './Clients.css'
+import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'

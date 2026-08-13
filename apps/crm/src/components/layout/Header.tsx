@@ -1,8 +1,23 @@
-interface HeaderProps {
-  title?: string
+import { useLocation } from 'react-router-dom'
+
+const pageTitles: Record<string, string> = {
+  '/': 'Dashboard',
+  '/clients': 'Clients',
+  '/warehouse': 'Warehouse',
+  '/purchases': 'Purchases',
+  '/sales': 'Sales',
+  '/income': 'Income',
+  '/accounting': 'Accounting',
+  '/tasks': 'Tasks',
+  '/statistics': 'Statistics',
 }
 
-export function Header({ title = 'Dashboard' }: HeaderProps) {
+export function Header() {
+  const location = useLocation()
+
+  const title =
+    pageTitles[location.pathname] ?? 'Madina CRM'
+
   return (
     <header className="app-header">
       <div className="app-header__title">
@@ -10,7 +25,9 @@ export function Header({ title = 'Dashboard' }: HeaderProps) {
       </div>
 
       <div className="app-header__actions">
-        <span className="app-header__brand">Madina CRM</span>
+        <span className="app-header__brand">
+          Madina CRM
+        </span>
       </div>
     </header>
   )
