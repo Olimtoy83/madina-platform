@@ -227,7 +227,7 @@ export function Sales() {
 
         <button
           type="button"
-          className="sales-page__add-button"
+          className="sales-page__cancel-button"
           onClick={() => openModal()}
         >
           Новая продажа
@@ -327,7 +327,7 @@ export function Sales() {
                         <div className="sales-page__actions">
                           <button
                             type="button"
-                            className="sales-page__complete-button"
+                            className="sales-page__cancel-button"
                             onClick={() =>
                               completeSale(sale.id)
                             }
@@ -542,7 +542,7 @@ export function Sales() {
 
               <button
                 type="button"
-                className="sales-modal__save"
+                className="btn-secondary"
                 onClick={handleAddItem}
                 disabled={
                   !selectedProduct ||
@@ -595,6 +595,7 @@ export function Sales() {
 
                           <button
                             type="button"
+                            className="btn-danger"
                             onClick={() =>
                               handleRemoveItem(
                                 item.productId,
@@ -625,7 +626,7 @@ export function Sales() {
             <div className="sales-modal__footer">
               <button
                 type="button"
-                className="sales-modal__cancel"
+                className="btn-secondary"
                 onClick={closeModal}
               >
                 Отмена
@@ -633,7 +634,7 @@ export function Sales() {
 
               <button
                 type="button"
-                className="sales-modal__save"
+                className="btn-secondary"
                 onClick={handleSaveDraft}
                 disabled={
                   !clientId ||

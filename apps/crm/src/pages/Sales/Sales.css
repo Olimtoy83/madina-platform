@@ -1,115 +1,206 @@
 ﻿.sales-page {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
+/* =========================================================
+   Header
+   ========================================================= */
+
 .sales-page__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
 }
 
 .sales-page__header h1 {
-  margin: 0;
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 32px;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .sales-page__header p {
-  margin: 6px 0 0;
-  color: #666;
+  margin: 0;
+  color: #6b7280;
+  font-size: 15px;
 }
 
-.sales-page__add-button {
-  border: 0;
-  border-radius: 8px;
-  padding: 10px 16px;
-  cursor: pointer;
-}
+/* =========================================================
+   Summary
+   ========================================================= */
 
 .sales-page__summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
 .sales-page__summary-card {
+  min-height: 110px;
+  padding: 20px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 8px;
-  padding: 20px;
-  background: #fff;
-  border-radius: 8px;
 }
 
 .sales-page__summary-card span {
-  color: #666;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .sales-page__summary-card strong {
-  font-size: 24px;
+  color: #111827;
+  font-size: 26px;
+  font-weight: 600;
 }
 
+/* =========================================================
+   Sales table
+   ========================================================= */
+
 .sales-page__table-card {
-  background: #fff;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .sales-page__table-header {
   padding: 20px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .sales-page__table-header h2 {
   margin: 0;
+  color: #111827;
   font-size: 18px;
+  font-weight: 600;
 }
 
 .sales-page__table-wrapper {
+  width: 100%;
   overflow-x: auto;
 }
 
 .sales-page__table {
   width: 100%;
+  min-width: 850px;
   border-collapse: collapse;
+  text-align: left;
 }
 
 .sales-page__table th,
 .sales-page__table td {
   padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  vertical-align: middle;
 }
 
 .sales-page__table th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
   font-weight: 600;
 }
 
+.sales-page__table td {
+  color: #334155;
+  font-size: 14px;
+}
+
+.sales-page__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sales-page__table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* =========================================================
+   Sale link
+   ========================================================= */
+
+.sales-page__sale-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #00695c;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sales-page__sale-link:hover {
+  text-decoration: underline;
+}
+
+/* =========================================================
+   Status
+   ========================================================= */
+
 .sales-page__status {
   display: inline-flex;
-  padding: 4px 10px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
   font-size: 13px;
+  font-weight: 500;
 }
 
 .sales-page__status--draft {
-  background: #fff3cd;
+  background: #fff7ed;
+  color: #c2410c;
 }
 
 .sales-page__status--completed {
-  background: #d1e7dd;
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .sales-page__status--cancelled {
-  background: #f8d7da;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
-.sales-page__empty {
-  padding: 40px;
-  text-align: center;
-  color: #666;
+/* =========================================================
+   Actions
+   ========================================================= */
+
+.sales-page__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+
+/* =========================================================
+   Empty state
+   ========================================================= */
+
+.sales-page__empty {
+  padding: 40px 20px;
+  color: #6b7280;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* =========================================================
+   Modal
+   ========================================================= */
 
 .sales-modal {
   position: fixed;
@@ -119,15 +210,18 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.45);
 }
 
 .sales-modal__content {
-  width: min(600px, 100%);
+  width: min(680px, 100%);
   max-height: calc(100vh - 48px);
   overflow-y: auto;
-  background: #fff;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
 }
 
 .sales-modal__header {
@@ -136,25 +230,43 @@
   justify-content: space-between;
   gap: 20px;
   padding: 20px 24px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .sales-modal__header h2 {
   margin: 0;
+  color: #111827;
+  font-size: 22px;
+  font-weight: 600;
 }
 
 .sales-modal__header p {
   margin: 6px 0 0;
-  color: #666;
+  color: #6b7280;
+  font-size: 14px;
 }
 
 .sales-modal__close {
-  border: 0;
-  background: transparent;
-  font-size: 28px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
 }
+
+.sales-modal__close:hover {
+  background: #f8fafc;
+  border-color: #9ca3af;
+}
+
+/* =========================================================
+   Modal body
+   ========================================================= */
 
 .sales-modal__body {
   display: flex;
@@ -170,125 +282,215 @@
 }
 
 .sales-modal__field span {
+  color: #334155;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .sales-modal__field input,
 .sales-modal__field select {
   width: 100%;
+  min-height: 40px;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border: 1px solid #d8d8d8;
-  border-radius: 8px;
-  background: #fff;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
   font: inherit;
+  font-size: 14px;
 }
+
+.sales-modal__field input:focus,
+.sales-modal__field select:focus {
+  outline: none;
+  border-color: #00695c;
+  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
+}
+
+/* =========================================================
+   Modal fields row
+   ========================================================= */
 
 .sales-modal__row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
+/* =========================================================
+   Stock information
+   ========================================================= */
+
 .sales-modal__stock {
   padding: 12px 14px;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #f5f5f5;
-  color: #555;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 14px;
 }
+
+.sales-modal__stock strong {
+  color: #334155;
+}
+
+/* =========================================================
+   Sale items
+   ========================================================= */
+
+.sales-modal__items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sales-modal__items>strong {
+  color: #111827;
+  font-size: 15px;
+}
+
+.sales-modal__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.sales-modal__item>div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sales-modal__item>div:last-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.sales-modal__item strong {
+  color: #111827;
+  font-size: 14px;
+}
+
+.sales-modal__item span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* =========================================================
+   Modal total
+   ========================================================= */
 
 .sales-modal__total {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 16px;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #f5f5f5;
+  background: #f8fafc;
+}
+
+.sales-modal__total span {
+  color: #64748b;
+  font-size: 14px;
 }
 
 .sales-modal__total strong {
+  color: #111827;
   font-size: 20px;
+  font-weight: 600;
 }
+
+/* =========================================================
+   Modal footer
+   ========================================================= */
 
 .sales-modal__footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
   padding: 16px 24px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #e5e7eb;
 }
 
-.sales-modal__cancel,
-.sales-modal__save {
-  border: 0;
-  border-radius: 8px;
-  padding: 10px 16px;
-  cursor: pointer;
-  font: inherit;
+/* =========================================================
+   Responsive
+   ========================================================= */
+
+@media (max-width: 1000px) {
+  .sales-page__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.sales-modal__save:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
+@media (max-width: 700px) {
+  .sales-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-@media (max-width: 640px) {
+  .sales-page__header .btn-primary {
+    width: 100%;
+  }
+
   .sales-modal {
     padding: 12px;
+  }
+
+  .sales-modal__content {
+    max-height: calc(100vh - 24px);
   }
 
   .sales-modal__row {
     grid-template-columns: 1fr;
   }
 
+  .sales-modal__item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sales-modal__item>div:last-child {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 600px) {
+  .sales-page__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-page__header h1 {
+    font-size: 28px;
+  }
+
+  .sales-modal__header,
+  .sales-modal__body {
+    padding: 18px;
+  }
+
   .sales-modal__footer {
     flex-direction: column-reverse;
+    padding: 16px 18px;
   }
 
-  .sales-modal__cancel,
-  .sales-modal__save {
+  .sales-modal__footer .btn-primary,
+  .sales-modal__footer .btn-secondary {
     width: 100%;
   }
-}
 
-.sales-page__complete-button {
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.sales-page__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sales-page__complete-button,
-.sales-page__cancel-button {
-  border: 0;
-  border-radius: 6px;
-  padding: 7px 10px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.sales-page__complete-button {
-  background: #d1e7dd;
-}
-
-.sales-page__cancel-button {
-  background: #f8d7da;
-}
-
-.sales-page__sale-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  text-decoration: underline;
+  .sales-modal__total {
+    justify-content: space-between;
+  }
 }

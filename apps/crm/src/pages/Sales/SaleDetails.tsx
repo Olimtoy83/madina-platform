@@ -63,6 +63,7 @@ export function SaleDetails() {
 
   function handleCancel() {
     cancelSale(saleIdValue)
+    setActionMessage(null)
   }
 
   return (
