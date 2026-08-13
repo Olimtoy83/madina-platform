@@ -48,6 +48,29 @@ function loadTransactions(): Transaction[] {
   )
 }
 
+function hasReference(
+  transaction: Transaction,
+): boolean {
+  return Boolean(transaction.referenceId)
+}
+
+function isDuplicateTransaction(
+  transactions: Transaction[],
+  transaction: Transaction,
+): boolean {
+  if (!hasReference(transaction)) {
+    return false
+  }
+
+  return transactions.some(
+    (currentTransaction) =>
+      currentTransaction.category ===
+      transaction.category &&
+      currentTransaction.referenceId ===
+      transaction.referenceId,
+  )
+}
+
 export function TransactionsProvider({
   children,
 }: TransactionsProviderProps) {
@@ -59,6 +82,15 @@ export function TransactionsProvider({
   const addTransaction = useCallback(
     (transaction: Transaction) => {
       setTransactions((currentTransactions) => {
+        if (
+          isDuplicateTransaction(
+            currentTransactions,
+            transaction,
+          )
+        ) {
+          return currentTransactions
+        }
+
         const nextTransactions = [
           transaction,
           ...currentTransactions,
@@ -84,13 +116,12 @@ export function TransactionsProvider({
         const nextTransactions =
           currentTransactions.map(
             (transaction) =>
-              transaction.id ===
-              transactionId
+              transaction.id === transactionId
                 ? {
-                    ...transaction,
-                    ...updates,
-                    updatedAt: new Date(),
-                  }
+                  ...transaction,
+                  ...updates,
+                  updatedAt: new Date(),
+                }
                 : transaction,
           )
 
