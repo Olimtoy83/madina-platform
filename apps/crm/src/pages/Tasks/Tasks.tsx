@@ -209,6 +209,7 @@ export function Tasks() {
           <div>
             <button
               type="button"
+              className="btn-primary"
               onClick={handleCreateTask}
               disabled={!title.trim()}
             >
@@ -217,6 +218,7 @@ export function Tasks() {
 
             <button
               type="button"
+              className="btn-secondary"
               onClick={() => {
                 resetForm()
                 setIsFormOpen(false)
@@ -341,6 +343,7 @@ export function Tasks() {
                   <td>
                     <button
                       type="button"
+                      className="btn-danger"
                       onClick={() =>
                         deleteTask(task.id)
                       }
