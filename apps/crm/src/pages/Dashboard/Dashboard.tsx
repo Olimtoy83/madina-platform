@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
+import './Dashboard.css'
 
 export function Dashboard() {
   const navigate = useNavigate()
