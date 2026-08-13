@@ -1,218 +1,319 @@
 ﻿.accounting-page {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 24px;
 }
 
+/* =========================================================
+   Header
+   ========================================================= */
+
 .accounting-page__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
 }
 
 .accounting-page__header h1 {
-  margin: 0;
-  font-size: 28px;
+  margin: 0 0 6px;
+  color: #111827;
+  font-size: 32px;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .accounting-page__header p {
-  margin: 6px 0 0;
-  color: #666;
+  margin: 0;
+  color: #64748b;
+  font-size: 15px;
 }
+
+/* =========================================================
+   Filters
+   ========================================================= */
 
 .accounting-filters {
   display: flex;
   gap: 10px;
+  align-items: center;
 }
 
 .accounting-filters select {
   min-width: 170px;
-  padding: 9px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  background: #fff;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
   font: inherit;
+  font-size: 14px;
 }
+
+.accounting-filters select:focus {
+  outline: none;
+  border-color: #00695c;
+  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
+}
+
+/* =========================================================
+   Summary
+   ========================================================= */
 
 .accounting-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
 .accounting-card {
+  min-height: 110px;
+  padding: 20px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 20px;
-  background: #fff;
-  border: 1px solid #e5e5e5;
-  border-radius: 8px;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .accounting-card span {
-  color: #666;
+  color: #64748b;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .accounting-card strong {
-  font-size: 25px;
+  color: #111827;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 600;
 }
 
 .accounting-card__income {
-  color: #2e7d32;
+  color: #00695c !important;
 }
 
 .accounting-card__expense {
-  color: #c62828;
+  color: #b42318 !important;
 }
+
+/* =========================================================
+   Two-column section
+   ========================================================= */
 
 .accounting-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
 }
 
+/* =========================================================
+   Panels
+   ========================================================= */
+
 .accounting-panel {
-  background: #fff;
-  border: 1px solid #e5e5e5;
+  width: 100%;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   overflow: hidden;
 }
 
 .accounting-panel__header {
-  padding: 18px 20px;
-  border-bottom: 1px solid #eee;
+  padding: 20px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .accounting-panel__header h2 {
   margin: 0;
-  font-size: 19px;
+  color: #111827;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 600;
 }
 
 .accounting-panel__header span {
   display: block;
-  margin-top: 4px;
-  color: #777;
+  margin-top: 5px;
+  color: #64748b;
   font-size: 13px;
 }
+
+/* =========================================================
+   Category list
+   ========================================================= */
 
 .accounting-category-list {
   display: flex;
   flex-direction: column;
 }
 
-.accounting-category-list div {
+.accounting-category-list>div {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #eee;
+  gap: 20px;
+  min-height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
-.accounting-category-list div:last-child {
-  border-bottom: 0;
+.accounting-category-list>div:last-child {
+  border-bottom: none;
 }
 
 .accounting-category-list span {
-  color: #555;
+  color: #475569;
+  font-size: 14px;
 }
 
+.accounting-category-list strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* =========================================================
+   Financial result
+   ========================================================= */
+
 .accounting-result {
+  min-height: 156px;
+  padding: 24px;
+  box-sizing: border-box;
+
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 12px;
-  padding: 28px 20px;
 }
 
 .accounting-result span {
-  color: #666;
+  color: #64748b;
+  font-size: 14px;
 }
 
 .accounting-result strong {
-  font-size: 30px;
+  color: #111827;
+  font-size: 28px;
+  font-weight: 600;
 }
 
+/* =========================================================
+   Operations table
+   ========================================================= */
+
 .accounting-panel--table {
-  width: 100%;
+  overflow: hidden;
 }
 
 .accounting-table-wrapper {
+  width: 100%;
   overflow-x: auto;
 }
 
 .accounting-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
+  text-align: left;
 }
 
 .accounting-table th,
 .accounting-table td {
-  padding: 14px 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
   text-align: left;
-  border-bottom: 1px solid #eee;
-  white-space: nowrap;
+  vertical-align: middle;
 }
 
 .accounting-table th {
-  background: #fafafa;
-  color: #555;
+  background: #f8fafc;
+  color: #475569;
   font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .accounting-table td {
+  color: #334155;
   font-size: 14px;
 }
 
+.accounting-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.accounting-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* =========================================================
+   Transaction type
+   ========================================================= */
+
 .accounting-type {
   display: inline-flex;
-  padding: 4px 8px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .accounting-type--income {
-  color: #2e7d32;
-  background: #e8f5e9;
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .accounting-type--expense {
-  color: #c62828;
-  background: #ffebee;
+  background: #fef2f2;
+  color: #b42318;
+}
+
+/* =========================================================
+   Amount
+   ========================================================= */
+
+.accounting-amount {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .accounting-amount--income {
-  color: #2e7d32;
+  color: #00695c;
 }
 
 .accounting-amount--expense {
-  color: #c62828;
+  color: #b42318;
 }
 
+/* =========================================================
+   Empty state
+   ========================================================= */
+
 .accounting-empty {
-  padding: 50px 20px;
+  padding: 48px 20px;
+  color: #64748b;
   text-align: center;
-  color: #777;
+  font-size: 14px;
 }
+
+/* =========================================================
+   Responsive
+   ========================================================= */
 
 @media (max-width: 1100px) {
   .accounting-summary {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 800px) {
-  .accounting-page__header {
-    flex-direction: column;
-  }
-
-  .accounting-filters {
-    width: 100%;
-    flex-direction: column;
-  }
-
-  .accounting-filters select {
-    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .accounting-grid {
@@ -220,8 +321,45 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+  .accounting-page__header {
+    flex-direction: column;
+  }
+
+  .accounting-filters {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .accounting-filters select {
+    width: 100%;
+  }
+
   .accounting-summary {
     grid-template-columns: 1fr;
+  }
+
+  .accounting-page__header h1 {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 600px) {
+  .accounting-card {
+    min-height: 100px;
+    padding: 18px;
+  }
+
+  .accounting-card strong {
+    font-size: 24px;
+  }
+
+  .accounting-panel__header {
+    padding: 18px;
+  }
+
+  .accounting-result {
+    padding: 20px;
   }
 }

@@ -1,35 +1,44 @@
 ﻿.tasks-page {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
+
+/* =========================================================
+   Header
+   ========================================================= */
 
 .tasks-page__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 28px;
 }
 
 .tasks-page__header h1 {
   margin: 0 0 6px;
+  color: #111827;
   font-size: 32px;
   line-height: 1.2;
-  color: #0f172a;
+  font-weight: 600;
 }
 
 .tasks-page__header p {
   margin: 0;
   color: #64748b;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .tasks-page__header>button {
-  padding: 10px 18px;
+  min-height: 40px;
+  padding: 0 16px;
   border: 1px solid #00695c;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #00695c;
   color: #ffffff;
   font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -37,29 +46,38 @@
   background: #00574d;
 }
 
+/* =========================================================
+   Create form
+   ========================================================= */
+
 .tasks-page__form {
-  margin-bottom: 28px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
   padding: 24px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
 }
 
 .tasks-page__form h2 {
-  margin: 0 0 20px;
-  color: #0f172a;
-  font-size: 22px;
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  color: #111827;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 600;
 }
 
 .tasks-page__form>div {
-  margin-bottom: 16px;
+  min-width: 0;
 }
 
 .tasks-page__form label {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  color: #334155;
+  color: #374151;
   font-size: 14px;
   font-weight: 500;
 }
@@ -73,12 +91,13 @@
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #ffffff;
-  color: #0f172a;
+  color: #334155;
   font: inherit;
+  font-size: 14px;
 }
 
 .tasks-page__form textarea {
-  min-height: 90px;
+  min-height: 92px;
   resize: vertical;
 }
 
@@ -87,22 +106,34 @@
 .tasks-page__form select:focus {
   outline: none;
   border-color: #00695c;
+  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
 }
 
+/*
+  Last div contains the action buttons.
+*/
 .tasks-page__form>div:last-child {
+  grid-column: 1 / -1;
   display: flex;
-  gap: 8px;
-  margin-bottom: 0;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .tasks-page__form>div:last-child button {
-  padding: 10px 16px;
+  min-height: 38px;
+  padding: 0 16px;
   border: 1px solid #00695c;
   border-radius: 6px;
   background: #00695c;
   color: #ffffff;
   font: inherit;
+  font-size: 14px;
   cursor: pointer;
+}
+
+.tasks-page__form>div:last-child button:hover {
+  background: #00574d;
 }
 
 .tasks-page__form>div:last-child button:last-child {
@@ -111,43 +142,62 @@
   color: #334155;
 }
 
+.tasks-page__form>div:last-child button:last-child:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
 .tasks-page__form>div:last-child button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* =========================================================
+   Summary
+   ========================================================= */
+
 .tasks-page__summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-  margin-bottom: 28px;
+  gap: 16px;
 }
 
 .tasks-page__card {
-  padding: 22px 24px;
+  min-height: 104px;
+  padding: 20px;
+  box-sizing: border-box;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .tasks-page__card span {
-  display: block;
-  margin-bottom: 10px;
   color: #64748b;
   font-size: 14px;
+  font-weight: 500;
 }
 
 .tasks-page__card strong {
-  display: block;
-  color: #0f172a;
-  font-size: 28px;
+  color: #111827;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 600;
 }
+
+/* =========================================================
+   Table
+   ========================================================= */
 
 .tasks-page__table-wrapper {
   width: 100%;
   overflow-x: auto;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
 }
 
@@ -155,12 +205,14 @@
   width: 100%;
   min-width: 850px;
   border-collapse: collapse;
+  color: #334155;
+  font-size: 14px;
 }
 
 .tasks-page__table th,
 .tasks-page__table td {
   padding: 14px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e5e7eb;
   text-align: left;
   vertical-align: middle;
 }
@@ -170,6 +222,7 @@
   color: #475569;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .tasks-page__table td {
@@ -186,32 +239,53 @@
 }
 
 .tasks-page__table td strong {
-  color: #0f172a;
+  color: #111827;
+  font-weight: 600;
 }
 
 .tasks-page__table td p {
+  max-width: 360px;
   margin: 5px 0 0;
   color: #64748b;
   font-size: 13px;
+  line-height: 1.4;
 }
 
+/* =========================================================
+   Status select
+   ========================================================= */
+
 .tasks-page__table select {
-  min-width: 140px;
-  padding: 7px 10px;
+  min-width: 150px;
+  min-height: 36px;
+  padding: 0 10px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #ffffff;
   color: #334155;
   font: inherit;
+  font-size: 13px;
 }
 
+.tasks-page__table select:focus {
+  outline: none;
+  border-color: #00695c;
+  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
+}
+
+/* =========================================================
+   Delete button
+   ========================================================= */
+
 .tasks-page__table td button {
-  padding: 7px 12px;
+  min-height: 34px;
+  padding: 0 12px;
   border: 1px solid #fecaca;
   border-radius: 6px;
   background: #fff1f2;
   color: #b91c1c;
   font: inherit;
+  font-size: 13px;
   cursor: pointer;
 }
 
@@ -219,15 +293,32 @@
   background: #ffe4e6;
 }
 
+/* =========================================================
+   Empty state
+   ========================================================= */
+
 .tasks-page__empty {
-  padding: 36px 16px !important;
+  padding: 48px 20px !important;
   color: #64748b !important;
   text-align: center !important;
 }
 
+/* =========================================================
+   Responsive
+   ========================================================= */
+
 @media (max-width: 900px) {
   .tasks-page__summary {
     grid-template-columns: 1fr;
+  }
+
+  .tasks-page__form {
+    grid-template-columns: 1fr;
+  }
+
+  .tasks-page__form h2,
+  .tasks-page__form>div:last-child {
+    grid-column: auto;
   }
 
   .tasks-page__header {
@@ -246,5 +337,23 @@
 
   .tasks-page__form {
     padding: 18px;
+  }
+
+  .tasks-page__card {
+    min-height: 96px;
+    padding: 18px;
+  }
+
+  .tasks-page__card strong {
+    font-size: 24px;
+  }
+
+  .tasks-page__form>div:last-child {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tasks-page__form>div:last-child button {
+    width: 100%;
   }
 }

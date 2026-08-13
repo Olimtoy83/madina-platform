@@ -1,13 +1,23 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useProducts } from '../../context/useProducts'
+import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
 
 export function Dashboard() {
   const navigate = useNavigate()
 
   const { products } = useProducts()
+  const { sales } = useSales()
   const { transactions } = useTransactions()
+
+  const completedSales = useMemo(
+    () =>
+      sales.filter(
+        (sale) => sale.status === 'completed',
+      ),
+    [sales],
+  )
 
   const completedTransactions = useMemo(
     () =>
@@ -36,14 +46,7 @@ export function Dashboard() {
     [completedTransactions],
   )
 
-  const salesCount = useMemo(
-    () =>
-      incomeTransactions.filter(
-        (transaction) =>
-          transaction.category === 'sale',
-      ).length,
-    [incomeTransactions],
-  )
+  const salesCount = completedSales.length
 
   const income = useMemo(
     () =>
@@ -66,6 +69,9 @@ export function Dashboard() {
   )
 
   const profit = income - expenses
+
+  const warehouseProductsCount =
+    products.length
 
   const warehouseQuantity = useMemo(
     () =>
@@ -99,7 +105,10 @@ export function Dashboard() {
 
   function getTransactionLabel(
     type: 'income' | 'expense',
-    category: 'sale' | 'purchase' | 'other',
+    category:
+      | 'sale'
+      | 'purchase'
+      | 'other',
   ) {
     if (
       type === 'income' &&
@@ -168,6 +177,26 @@ export function Dashboard() {
 
           <strong className="dashboard__card-value">
             {formatMoney(profit)}
+          </strong>
+        </article>
+
+        <article className="dashboard__card">
+          <span className="dashboard__card-label">
+            Товарных позиций
+          </span>
+
+          <strong className="dashboard__card-value">
+            {warehouseProductsCount}
+          </strong>
+        </article>
+
+        <article className="dashboard__card">
+          <span className="dashboard__card-label">
+            Единиц на складе
+          </span>
+
+          <strong className="dashboard__card-value">
+            {warehouseQuantity}
           </strong>
         </article>
       </div>
@@ -266,8 +295,17 @@ export function Dashboard() {
         </div>
 
         <p>
+          Товарных позиций:{' '}
+          <strong>
+            {warehouseProductsCount}
+          </strong>
+        </p>
+
+        <p>
           Общее количество единиц товара:{' '}
-          <strong>{warehouseQuantity}</strong>
+          <strong>
+            {warehouseQuantity}
+          </strong>
         </p>
       </section>
     </section>
