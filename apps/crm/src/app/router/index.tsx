@@ -64,10 +64,6 @@ export const router = createBrowserRouter([
         element: <Statistics />,
       },
       {
-        path: 'clients',
-        element: <Clients />,
-      },
-      {
         path: 'clients/:clientId',
         element: <ClientDetails />,
       },
