@@ -1,0 +1,522 @@
+.purchases {
+  width: 100%;
+}
+
+.purchases__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.purchases__header h1 {
+  margin: 0 0 8px;
+}
+
+.purchases__header p {
+  margin: 0;
+  color: #6b7280;
+}
+
+.purchases__add-button {
+  padding: 10px 16px;
+  border: 1px solid #00695c;
+  border-radius: 8px;
+  background: #00695c;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.purchases__add-button:hover {
+  background: #00574d;
+}
+
+.purchases__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.purchases__toolbar select {
+  height: 40px;
+  box-sizing: border-box;
+  min-width: 180px;
+  padding: 0 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
+.purchases__table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.purchases__table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.purchases__table th,
+.purchases__table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.purchases__table th {
+  background: #f9fafb;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.purchases__table td {
+  color: #374151;
+  font-size: 14px;
+}
+
+.purchases__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.purchases__table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.purchases__table td button {
+  padding: 7px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  cursor: pointer;
+}
+
+.purchases__table td button:hover {
+  border-color: #00695c;
+  color: #00695c;
+}
+
+.purchases__empty {
+  padding: 20px 16px;
+  color: #6b7280;
+  text-align: center;
+}
+
+/* Карточка поступления */
+
+.purchases__card {
+  margin-top: 32px;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #dfe5e3;
+  border-radius: 12px;
+}
+
+.purchases__card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.purchases__card-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.purchases__card-header p {
+  margin: 6px 0 0;
+  color: #6b7a78;
+}
+
+.purchases__card-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #dfe5e3;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.purchases__card-close:hover {
+  background: #f5f7f6;
+}
+
+/* Основная информация */
+
+.purchases__details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.purchases__detail {
+  padding: 16px;
+  background: #f7f9f8;
+  border-radius: 8px;
+}
+
+.purchases__detail span {
+  display: block;
+  margin-bottom: 6px;
+  color: #6b7a78;
+  font-size: 14px;
+}
+
+.purchases__detail strong {
+  display: block;
+  color: #17201f;
+  font-size: 16px;
+}
+
+/* Товары */
+
+.purchases__items h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+.purchases__items-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.purchases__items-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.purchases__items-table th,
+.purchases__items-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.purchases__items-table th {
+  background: #f9fafb;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.purchases__items-table td {
+  color: #374151;
+  font-size: 14px;
+}
+
+.purchases__items-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Итог */
+
+.purchases__total {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 24px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.purchases__total span {
+  color: #6b7280;
+  font-size: 15px;
+}
+
+.purchases__total strong {
+  color: #17201f;
+  font-size: 20px;
+}
+
+/* Комментарий */
+
+.purchases__note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 20px;
+  padding: 16px;
+  background: #f7f9f8;
+  border-radius: 8px;
+}
+
+.purchases__note span {
+  color: #6b7a78;
+  font-size: 14px;
+}
+
+.purchases__note strong {
+  color: #17201f;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* Кнопки карточки */
+
+.purchases__card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.purchases__card-actions button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.purchases__card-actions button:first-child {
+  border: 1px solid #d2dbd8;
+  background: #ffffff;
+  color: #17201f;
+}
+
+.purchases__card-actions button:first-child:hover {
+  background: #f5f7f6;
+}
+
+@media (max-width: 900px) {
+  .purchases__details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .purchases__header {
+    flex-direction: column;
+  }
+
+  .purchases__add-button {
+    width: 100%;
+  }
+
+  .purchases__toolbar {
+    width: 100%;
+  }
+
+  .purchases__toolbar select {
+    width: 100%;
+  }
+
+  .purchases__details {
+    grid-template-columns: 1fr;
+  }
+
+  .purchases__card-actions {
+    flex-direction: column;
+  }
+
+  .purchases__card-actions button {
+    width: 100%;
+  }
+
+  .purchases__total {
+    justify-content: space-between;
+  }
+}
+
+.purchases__form-card {
+  margin-top: 32px;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #dfe5e3;
+  border-radius: 12px;
+}
+
+.purchases__form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.purchases__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.purchases__form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.purchases__form-field span {
+  color: #6b7a78;
+  font-size: 14px;
+}
+
+.purchases__form-field input,
+.purchases__form-field select,
+.purchases__form-field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17201f;
+  font: inherit;
+}
+
+.purchases__form-field input,
+.purchases__form-field select {
+  height: 40px;
+}
+
+.purchases__form-field textarea {
+  resize: vertical;
+}
+
+.purchases__form-items {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.purchases__form-items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.purchases__form-items-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.purchases__secondary-button {
+  padding: 9px 14px;
+  border: 1px solid #d2dbd8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17201f;
+  font: inherit;
+  cursor: pointer;
+}
+
+.purchases__secondary-button:hover {
+  border-color: #00695c;
+  color: #00695c;
+}
+
+.purchases__form-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 0.7fr auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px;
+  background: #f7f9f8;
+  border-radius: 8px;
+}
+
+.purchases__form-item-total,
+.purchases__form-unit {
+  display: block;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 10px 0;
+  color: #17201f;
+}
+
+.purchases__remove-button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.purchases__remove-button:hover {
+  border-color: #b91c1c;
+  color: #b91c1c;
+}
+
+.purchases__form-total {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.purchases__form-total span {
+  color: #6b7280;
+}
+
+.purchases__form-total strong {
+  color: #17201f;
+  font-size: 22px;
+}
+
+.purchases__primary-button {
+  padding: 10px 18px;
+  border: 1px solid #00796b;
+  border-radius: 8px;
+  background: #00796b;
+  color: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.purchases__primary-button:hover {
+  background: #00695c;
+}
+
+@media (max-width: 900px) {
+  .purchases__form-item {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .purchases__form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .purchases__form-item {
+    grid-template-columns: 1fr;
+  }
+
+  .purchases__form-items-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .purchases__secondary-button {
+    width: 100%;
+  }
+
+  .purchases__form-total {
+    justify-content: space-between;
+  }
+}
