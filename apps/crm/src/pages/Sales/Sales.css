@@ -494,3 +494,29 @@
     justify-content: space-between;
   }
 }
+
+/* =========================================================
+   Buttons
+   ========================================================= */
+
+.sales-page__cancel-button {
+  padding: 10px 16px;
+  border: 1px solid #00695c;
+  border-radius: 8px;
+  background: #00695c;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sales-page__cancel-button:hover {
+  background: #00574d;
+  border-color: #00574d;
+}
+
+.sales-page__cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
