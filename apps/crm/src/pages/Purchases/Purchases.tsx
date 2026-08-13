@@ -282,7 +282,7 @@ export function Purchases() {
 
         <button
           type="button"
-          className="purchases__add-button"
+          className="btn-primary"
           onClick={openCreateForm}
         >
           Добавить поступление
@@ -495,7 +495,7 @@ export function Purchases() {
               'draft' && (
                 <button
                   type="button"
-                  className="purchases__primary-button"
+                  className="btn-primary"
                   onClick={() => {
                     const result = completePurchase(
                       selectedPurchase.id,
@@ -527,7 +527,7 @@ export function Purchases() {
             {selectedPurchase.status === 'draft' && (
               <button
                 type="button"
-                className="purchases__secondary-button"
+                className="btn-secondary"
                 onClick={() => {
                   if (
                     !window.confirm(
@@ -556,7 +556,7 @@ export function Purchases() {
 
             <button
               type="button"
-              className="purchases__secondary-button"
+              className="btn-secondary"
               onClick={() =>
                 setSelectedPurchase(null)
               }
@@ -629,7 +629,7 @@ export function Purchases() {
 
                   <button
                     type="button"
-                    className="purchases__secondary-button"
+                    className="btn-secondary"
                     onClick={addFormItem}
                   >
                     Добавить товар
@@ -735,7 +735,7 @@ export function Purchases() {
 
                       <button
                         type="button"
-                        className="purchases__remove-button"
+                        className="btn-danger"
                         onClick={() =>
                           removeFormItem(
                             index,
@@ -782,7 +782,7 @@ export function Purchases() {
             <div className="purchases__modal-actions">
               <button
                 type="button"
-                className="purchases__secondary-button"
+                className="btn-secondary"
                 onClick={() =>
                   setIsCreateOpen(false)
                 }
@@ -792,7 +792,7 @@ export function Purchases() {
 
               <button
                 type="button"
-                className="purchases__primary-button"
+                className="btn-primary"
                 onClick={savePurchase}
               >
                 Создать поступление
