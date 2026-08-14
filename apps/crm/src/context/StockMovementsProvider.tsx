@@ -1,4 +1,5 @@
 ﻿import {
+  useCallback,
   useMemo,
   useState,
   type ReactNode,
@@ -46,6 +47,30 @@ function loadMovements(): StockMovement[] {
   )
 }
 
+function hasReference(
+  movement: StockMovement,
+): boolean {
+  return Boolean(movement.referenceId)
+}
+
+function isDuplicateMovement(
+  movements: StockMovement[],
+  movement: StockMovement,
+): boolean {
+  if (!hasReference(movement)) {
+    return false
+  }
+
+  return movements.some(
+    (currentMovement) =>
+      currentMovement.type === movement.type &&
+      currentMovement.productId ===
+        movement.productId &&
+      currentMovement.referenceId ===
+        movement.referenceId,
+  )
+}
+
 export function StockMovementsProvider({
   children,
 }: StockMovementsProviderProps) {
@@ -54,41 +79,51 @@ export function StockMovementsProvider({
       loadMovements,
     )
 
-  function addMovement(
-    movement: StockMovement,
-  ) {
-    setMovements((currentMovements) => {
-      const nextMovements = [
-        ...currentMovements,
-        movement,
-      ]
+  const addMovement = useCallback(
+    (movement: StockMovement) => {
+      setMovements((currentMovements) => {
+        if (
+          isDuplicateMovement(
+            currentMovements,
+            movement,
+          )
+        ) {
+          return currentMovements
+        }
 
-      saveStorage(
-        STORAGE_KEY,
-        nextMovements,
-      )
+        const nextMovements = [
+          ...currentMovements,
+          movement,
+        ]
 
-      return nextMovements
-    })
-  }
+        saveStorage(
+          STORAGE_KEY,
+          nextMovements,
+        )
 
-  function getProductMovements(
-    productId: string,
-  ) {
-    return movements.filter(
-      (movement) =>
-        movement.productId === productId,
-    )
-  }
+        return nextMovements
+      })
+    },
+    [],
+  )
 
-  function getMovementsByType(
-    type: StockMovement['type'],
-  ) {
-    return movements.filter(
-      (movement) =>
-        movement.type === type,
-    )
-  }
+  const getProductMovements = useCallback(
+    (productId: string) =>
+      movements.filter(
+        (movement) =>
+          movement.productId === productId,
+      ),
+    [movements],
+  )
+
+  const getMovementsByType = useCallback(
+    (type: StockMovement['type']) =>
+      movements.filter(
+        (movement) =>
+          movement.type === type,
+      ),
+    [movements],
+  )
 
   const value = useMemo(
     () => ({
@@ -97,7 +132,12 @@ export function StockMovementsProvider({
       getProductMovements,
       getMovementsByType,
     }),
-    [movements],
+    [
+      movements,
+      addMovement,
+      getProductMovements,
+      getMovementsByType,
+    ],
   )
 
   return (
