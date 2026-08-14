@@ -136,7 +136,7 @@ export function SalesProvider({
       if (!sale) {
         return {
           success: false,
-          message: 'РџСЂРѕРґР°Р¶Р° РЅРµ РЅР°Р№РґРµРЅР°.',
+          message: 'Продажа не найдена.',
         }
       }
 
@@ -144,7 +144,7 @@ export function SalesProvider({
         return {
           success: false,
           message:
-            'РњРѕР¶РЅРѕ Р·Р°РІРµСЂС€РёС‚СЊ С‚РѕР»СЊРєРѕ С‡РµСЂРЅРѕРІРёРє РїСЂРѕРґР°Р¶Рё.',
+            'Можно завершить только черновик продажи.',
         }
       }
 
@@ -158,7 +158,7 @@ export function SalesProvider({
           return {
             success: false,
             message:
-              `РўРѕРІР°СЂ РЅРµ РЅР°Р№РґРµРЅ РЅР° СЃРєР»Р°РґРµ: ${item.productId}.`,
+              `Товар не найден на складе: ${item.productId}.`,
           }
         }
       }
@@ -174,7 +174,7 @@ export function SalesProvider({
           item.productId,
           item.quantity,
           sale.id,
-          `РџСЂРѕРґР°Р¶Р° ${sale.saleNumber}`,
+          `Продажа ${sale.saleNumber}`,
         )
 
         if (!result.success) {
@@ -182,7 +182,7 @@ export function SalesProvider({
             success: false,
             message:
               result.message ??
-              'РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ РѕСЃС‚Р°С‚РѕРє С‚РѕРІР°СЂР°.',
+              'Не удалось изменить остаток товара.',
           }
         }
 
@@ -193,7 +193,7 @@ export function SalesProvider({
           return {
             success: false,
             message:
-              'StockService РЅРµ РІРµСЂРЅСѓР» РѕР±РЅРѕРІР»С‘РЅРЅС‹Р№ С‚РѕРІР°СЂ РёР»Рё РґРІРёР¶РµРЅРёРµ.',
+              'StockService не вернул обновлённый товар или движение.',
           }
         }
 
@@ -219,7 +219,7 @@ export function SalesProvider({
         transactionDate: sale.saleDate,
         referenceId: sale.id,
         description:
-          `РџСЂРѕРґР°Р¶Р° ${sale.saleNumber}`,
+          `Продажа ${sale.saleNumber}`,
         status: 'completed',
       })
 
