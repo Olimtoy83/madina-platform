@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useMemo,
   useState,
@@ -15,7 +15,7 @@ import {
 } from '../shared/storage'
 import { useProducts } from './useProducts'
 import { useStockMovements } from './useStockMovements'
-import { issueStock } from '../services/StockService'
+import { issueStock } from '@madina/core'
 import { useTransactions } from './useTransactions'
 import { SalesContext } from './SalesContext'
 

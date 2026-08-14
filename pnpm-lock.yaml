@@ -14,6 +14,9 @@ importers:
 
   apps/crm:
     dependencies:
+      '@madina/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@madina/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -63,6 +66,12 @@ importers:
       vite:
         specifier: ^8.2.0
         version: 8.2.1(@types/node@24.13.3)
+
+  packages/core:
+    dependencies:
+      '@madina/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/shared: {}
 

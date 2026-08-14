@@ -1,12 +1,5 @@
-import type { Product } from '../entities/product'
-import type { StockMovement } from '../entities/stockMovement'
-
-export interface StockServiceResult {
-  success: boolean
-  message?: string
-  product?: Product
-  movement?: StockMovement
-}
+﻿import type { Product } from '../types/product'
+import type { StockMovement } from '../types/stockMovement'
 
 export interface StockServiceStateResult {
   success: boolean
@@ -126,7 +119,8 @@ export function issueStock(
   if (product.quantity < quantity) {
     return {
       success: false,
-      message: `Недостаточно товара на складе. Доступно: ${product.quantity} ${product.unit}.`,
+      message:
+        `Недостаточно товара на складе. Доступно: ${product.quantity} ${product.unit}.`,
       products,
     }
   }
@@ -172,7 +166,8 @@ export function adjustStock(
   if (!Number.isFinite(quantity) || quantity === 0) {
     return {
       success: false,
-      message: 'Количество корректировки не должно быть равно нулю.',
+      message:
+        'Количество корректировки не должно быть равно нулю.',
       products,
     }
   }
@@ -195,7 +190,8 @@ export function adjustStock(
   if (newQuantity < 0) {
     return {
       success: false,
-      message: 'Корректировка не может привести к отрицательному остатку.',
+      message:
+        'Корректировка не может привести к отрицательному остатку.',
       products,
     }
   }

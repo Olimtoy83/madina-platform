@@ -16,7 +16,7 @@ import {
 } from '../shared/storage'
 import { useProducts } from './useProducts'
 import { useStockMovements } from './useStockMovements'
-import { receiveStock } from '../services/StockService'
+import { receiveStock } from '@madina/core'
 import { useTransactions } from './useTransactions'
 import { PurchasesContext } from './PurchasesContext'
 
