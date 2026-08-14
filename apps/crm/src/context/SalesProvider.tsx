@@ -15,6 +15,7 @@ import {
 } from '../shared/storage'
 import { useProducts } from './useProducts'
 import { useStockMovements } from './useStockMovements'
+import { issueStock } from '../services/StockService'
 import { useTransactions } from './useTransactions'
 import { SalesContext } from './SalesContext'
 
@@ -55,7 +56,9 @@ function loadSales(): Sale[] {
     return mockSales
   }
 
-  return storedSales.map(restoreSale)
+  return storedSales.map(
+    restoreSale,
+  )
 }
 
 export function SalesProvider({
@@ -64,8 +67,10 @@ export function SalesProvider({
   const [sales, setSales] =
     useState<Sale[]>(loadSales)
 
-  const { products, decreaseProductQuantity } =
-    useProducts()
+  const {
+    products,
+    replaceProducts,
+  } = useProducts()
 
   const { addMovement } =
     useStockMovements()
@@ -73,46 +78,53 @@ export function SalesProvider({
   const { addTransaction } =
     useTransactions()
 
-  function addSale(sale: Sale) {
-    setSales((currentSales) => {
-      const nextSales = [
-        ...currentSales,
-        sale,
-      ]
+  const addSale = useCallback(
+    (sale: Sale) => {
+      setSales((currentSales) => {
+        const nextSales = [
+          ...currentSales,
+          sale,
+        ]
 
-      saveStorage(
-        STORAGE_KEY,
-        nextSales,
-      )
-
-      return nextSales
-    })
-  }
-
-  function updateSale(
-    saleId: string,
-    updates: Partial<Sale>,
-  ) {
-    setSales((currentSales) => {
-      const nextSales =
-        currentSales.map((sale) =>
-          sale.id === saleId
-            ? {
-              ...sale,
-              ...updates,
-              updatedAt: new Date(),
-            }
-            : sale,
+        saveStorage(
+          STORAGE_KEY,
+          nextSales,
         )
 
-      saveStorage(
-        STORAGE_KEY,
-        nextSales,
-      )
+        return nextSales
+      })
+    },
+    [],
+  )
 
-      return nextSales
-    })
-  }
+  const updateSale = useCallback(
+    (
+      saleId: string,
+      updates: Partial<Sale>,
+    ) => {
+      setSales((currentSales) => {
+        const nextSales =
+          currentSales.map(
+            (sale) =>
+              sale.id === saleId
+                ? {
+                  ...sale,
+                  ...updates,
+                  updatedAt: new Date(),
+                }
+                : sale,
+          )
+
+        saveStorage(
+          STORAGE_KEY,
+          nextSales,
+        )
+
+        return nextSales
+      })
+    },
+    [],
+  )
 
   const completeSale = useCallback(
     (saleId: string) => {
@@ -137,8 +149,8 @@ export function SalesProvider({
 
       for (const item of sale.items) {
         const product = products.find(
-          (itemProduct) =>
-            itemProduct.id === item.productId,
+          (currentProduct) =>
+            currentProduct.id === item.productId,
         )
 
         if (!product) {
@@ -148,53 +160,65 @@ export function SalesProvider({
               `Товар не найден на складе: ${item.productId}.`,
           }
         }
+      }
+
+      const updatedAt = new Date()
+
+      let nextProducts = products
+      const movements = []
+
+      for (const item of sale.items) {
+        const result = issueStock(
+          nextProducts,
+          item.productId,
+          item.quantity,
+          sale.id,
+          `Продажа ${sale.saleNumber}`,
+        )
+
+        if (!result.success) {
+          return {
+            success: false,
+            message:
+              result.message ??
+              'Не удалось изменить остаток товара.',
+          }
+        }
 
         if (
-          product.quantity <
-          item.quantity
+          !result.product ||
+          !result.movement
         ) {
           return {
             success: false,
             message:
-              `Недостаточно товара "${product.name}". ` +
-              `Доступно: ${product.quantity} ${product.unit}, ` +
-              `требуется: ${item.quantity} ${item.unit}.`,
+              'StockService не вернул обновлённый товар или движение.',
           }
         }
+
+        nextProducts = result.products
+
+        movements.push(result.movement)
       }
 
-      for (const item of sale.items) {
-        decreaseProductQuantity(
-          item.productId,
-          item.quantity,
-        )
-      }
+      replaceProducts(nextProducts)
 
-      for (const item of sale.items) {
-        addMovement({
-          id: crypto.randomUUID(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          productId: item.productId,
-          type: 'sale',
-          quantity: item.quantity,
-          unit: item.unit,
-          referenceId: sale.id,
-          note: `Продажа ${sale.saleNumber}`,
-        })
+      for (const movement of movements) {
+        addMovement(movement)
       }
 
       addTransaction({
         id: crypto.randomUUID(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: updatedAt,
+        updatedAt,
         type: 'income',
         category: 'sale',
         amount: sale.totalAmount,
         paymentMethod: sale.paymentMethod,
         transactionDate: sale.saleDate,
         referenceId: sale.id,
-        description: `Продажа ${sale.saleNumber}`,
+        description:
+          `Продажа ${sale.saleNumber}`,
         status: 'completed',
       })
 
@@ -205,8 +229,9 @@ export function SalesProvider({
               currentSale.id === saleId
                 ? {
                   ...currentSale,
-                  status: 'completed' as SaleStatus,
-                  updatedAt: new Date(),
+                  status:
+                    'completed' as SaleStatus,
+                  updatedAt,
                 }
                 : currentSale,
           )
@@ -226,7 +251,7 @@ export function SalesProvider({
     [
       sales,
       products,
-      decreaseProductQuantity,
+      replaceProducts,
       addMovement,
       addTransaction,
     ],
@@ -241,7 +266,8 @@ export function SalesProvider({
               sale.status === 'draft'
               ? {
                 ...sale,
-                status: 'cancelled' as SaleStatus,
+                status:
+                  'cancelled' as SaleStatus,
                 updatedAt: new Date(),
               }
               : sale,
@@ -268,15 +294,15 @@ export function SalesProvider({
     }),
     [
       sales,
+      addSale,
+      updateSale,
       completeSale,
       cancelSale,
     ],
   )
 
   return (
-    <SalesContext.Provider
-      value={value}
-    >
+    <SalesContext.Provider value={value}>
       {children}
     </SalesContext.Provider>
   )

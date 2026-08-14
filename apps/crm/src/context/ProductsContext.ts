@@ -27,6 +27,10 @@ export interface ProductsContextValue {
     productId: string,
     quantity: number,
   ) => void
+
+  replaceProducts: (
+    products: Product[],
+  ) => void
 }
 
 export const ProductsContext =

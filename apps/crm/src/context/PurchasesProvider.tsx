@@ -8,6 +8,7 @@ import type {
   Purchase,
   PurchaseStatus,
 } from '../entities/purchase'
+import type { StockMovement } from '../entities/stockMovement'
 import { mockPurchases } from '../pages/Purchases/mockPurchases'
 import {
   loadStorage,
@@ -15,6 +16,7 @@ import {
 } from '../shared/storage'
 import { useProducts } from './useProducts'
 import { useStockMovements } from './useStockMovements'
+import { receiveStock } from '../services/StockService'
 import { useTransactions } from './useTransactions'
 import { PurchasesContext } from './PurchasesContext'
 
@@ -70,7 +72,7 @@ export function PurchasesProvider({
 
   const {
     products,
-    increaseProductQuantity,
+    replaceProducts,
   } = useProducts()
 
   const { addMovement } =
@@ -165,24 +167,48 @@ export function PurchasesProvider({
 
       const updatedAt = new Date()
 
+      let nextProducts = products
+
+      const movements: StockMovement[] = []
+
       for (const item of purchase.items) {
-        increaseProductQuantity(
+        const result = receiveStock(
+          nextProducts,
           item.productId,
           item.quantity,
+          purchase.id,
+          `Поступление ${purchase.purchaseNumber}`,
         )
 
-        addMovement({
-          id: crypto.randomUUID(),
-          createdAt: updatedAt,
-          updatedAt,
-          productId: item.productId,
-          type: 'purchase',
-          quantity: item.quantity,
-          unit: item.unit,
-          referenceId: purchase.id,
-          note:
-            `Поступление ${purchase.purchaseNumber}`,
-        })
+        if (!result.success) {
+          return {
+            success: false,
+            message:
+              result.message ??
+              'Не удалось изменить остаток товара.',
+          }
+        }
+
+        if (
+          !result.product ||
+          !result.movement
+        ) {
+          return {
+            success: false,
+            message:
+              'StockService не вернул обновлённый товар или движение.',
+          }
+        }
+
+        nextProducts = result.products
+
+        movements.push(result.movement)
+      }
+
+      replaceProducts(nextProducts)
+
+      for (const movement of movements) {
+        addMovement(movement)
       }
 
       addTransaction({
@@ -207,7 +233,8 @@ export function PurchasesProvider({
               currentPurchase.id === purchaseId
                 ? {
                   ...currentPurchase,
-                  status: 'completed' as PurchaseStatus,
+                  status:
+                    'completed' as PurchaseStatus,
                   updatedAt,
                 }
                 : currentPurchase,
@@ -228,7 +255,7 @@ export function PurchasesProvider({
     [
       purchases,
       products,
-      increaseProductQuantity,
+      replaceProducts,
       addMovement,
       addTransaction,
     ],
@@ -243,7 +270,8 @@ export function PurchasesProvider({
               purchase.status === 'draft'
               ? {
                 ...purchase,
-                status: 'cancelled' as PurchaseStatus,
+                status:
+                  'cancelled' as PurchaseStatus,
                 updatedAt: new Date(),
               }
               : purchase,

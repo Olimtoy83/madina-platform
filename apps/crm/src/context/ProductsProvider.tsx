@@ -99,10 +99,10 @@ export function ProductsProvider({
         currentProducts.map((product) =>
           product.id === productId
             ? {
-                ...product,
-                ...updates,
-                updatedAt: new Date(),
-              }
+              ...product,
+              ...updates,
+              updatedAt: new Date(),
+            }
             : product,
         )
 
@@ -124,10 +124,10 @@ export function ProductsProvider({
         currentProducts.map((product) =>
           product.id === productId
             ? {
-                ...product,
-                quantity,
-                updatedAt: new Date(),
-              }
+              ...product,
+              quantity,
+              updatedAt: new Date(),
+            }
             : product,
         )
 
@@ -153,11 +153,11 @@ export function ProductsProvider({
         currentProducts.map((product) =>
           product.id === productId
             ? {
-                ...product,
-                quantity:
-                  product.quantity + quantity,
-                updatedAt: new Date(),
-              }
+              ...product,
+              quantity:
+                product.quantity + quantity,
+              updatedAt: new Date(),
+            }
             : product,
         )
 
@@ -208,6 +208,17 @@ export function ProductsProvider({
     })
   }
 
+  function replaceProducts(
+    nextProducts: Product[],
+  ) {
+    setProducts(nextProducts)
+
+    saveStorage(
+      STORAGE_KEY,
+      nextProducts,
+    )
+  }
+
   const value = useMemo(
     () => ({
       products,
@@ -217,6 +228,7 @@ export function ProductsProvider({
       updateProductQuantity,
       increaseProductQuantity,
       decreaseProductQuantity,
+      replaceProducts,
     }),
     [products],
   )
