@@ -9,7 +9,7 @@ import type {
   PurchaseStatus,
 } from '../entities/purchase'
 import type { StockMovement } from '../entities/stockMovement'
-import { mockPurchases } from '../pages/Purchases/mockPurchases'
+
 import {
   loadStorage,
   saveStorage,
@@ -55,9 +55,6 @@ function loadPurchases(): Purchase[] {
       [],
     )
 
-  if (storedPurchases.length === 0) {
-    return mockPurchases
-  }
 
   return storedPurchases.map(
     restorePurchase,
@@ -311,3 +308,4 @@ export function PurchasesProvider({
     </PurchasesContext.Provider>
   )
 }
+

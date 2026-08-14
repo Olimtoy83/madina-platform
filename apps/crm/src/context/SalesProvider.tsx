@@ -9,7 +9,6 @@ import type {
   SaleStatus,
 } from '../entities/sale'
 import type { StockMovement } from '../entities/stockMovement'
-import { mockSales } from '../pages/Sales/mockSales'
 import {
   loadStorage,
   saveStorage,
@@ -52,10 +51,6 @@ function loadSales(): Sale[] {
       STORAGE_KEY,
       [],
     )
-
-  if (storedSales.length === 0) {
-    return mockSales
-  }
 
   return storedSales.map(
     restoreSale,

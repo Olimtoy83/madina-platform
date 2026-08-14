@@ -4,7 +4,7 @@
   type ReactNode,
 } from 'react'
 import type { Product } from '../entities/product'
-import { mockProducts } from '../pages/Warehouse/mockProducts'
+
 import {
   loadStorage,
   saveStorage,
@@ -42,9 +42,6 @@ function loadProducts(): Product[] {
       [],
     )
 
-  if (storedProducts.length === 0) {
-    return mockProducts
-  }
 
   return storedProducts.map(
     restoreProduct,
@@ -239,3 +236,5 @@ export function ProductsProvider({
     </ProductsContext.Provider>
   )
 }
+
+
