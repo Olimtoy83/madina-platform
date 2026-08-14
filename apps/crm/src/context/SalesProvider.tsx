@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useMemo,
   useState,
@@ -8,6 +8,7 @@ import type {
   Sale,
   SaleStatus,
 } from '../entities/sale'
+import type { StockMovement } from '../entities/stockMovement'
 import { mockSales } from '../pages/Sales/mockSales'
 import {
   loadStorage,
@@ -135,7 +136,7 @@ export function SalesProvider({
       if (!sale) {
         return {
           success: false,
-          message: 'Продажа не найдена.',
+          message: 'РџСЂРѕРґР°Р¶Р° РЅРµ РЅР°Р№РґРµРЅР°.',
         }
       }
 
@@ -143,7 +144,7 @@ export function SalesProvider({
         return {
           success: false,
           message:
-            'Можно завершить только черновик продажи.',
+            'РњРѕР¶РЅРѕ Р·Р°РІРµСЂС€РёС‚СЊ С‚РѕР»СЊРєРѕ С‡РµСЂРЅРѕРІРёРє РїСЂРѕРґР°Р¶Рё.',
         }
       }
 
@@ -157,7 +158,7 @@ export function SalesProvider({
           return {
             success: false,
             message:
-              `Товар не найден на складе: ${item.productId}.`,
+              `РўРѕРІР°СЂ РЅРµ РЅР°Р№РґРµРЅ РЅР° СЃРєР»Р°РґРµ: ${item.productId}.`,
           }
         }
       }
@@ -165,7 +166,7 @@ export function SalesProvider({
       const updatedAt = new Date()
 
       let nextProducts = products
-      const movements = []
+      const movements: StockMovement[] = []
 
       for (const item of sale.items) {
         const result = issueStock(
@@ -173,7 +174,7 @@ export function SalesProvider({
           item.productId,
           item.quantity,
           sale.id,
-          `Продажа ${sale.saleNumber}`,
+          `РџСЂРѕРґР°Р¶Р° ${sale.saleNumber}`,
         )
 
         if (!result.success) {
@@ -181,7 +182,7 @@ export function SalesProvider({
             success: false,
             message:
               result.message ??
-              'Не удалось изменить остаток товара.',
+              'РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ РѕСЃС‚Р°С‚РѕРє С‚РѕРІР°СЂР°.',
           }
         }
 
@@ -192,7 +193,7 @@ export function SalesProvider({
           return {
             success: false,
             message:
-              'StockService не вернул обновлённый товар или движение.',
+              'StockService РЅРµ РІРµСЂРЅСѓР» РѕР±РЅРѕРІР»С‘РЅРЅС‹Р№ С‚РѕРІР°СЂ РёР»Рё РґРІРёР¶РµРЅРёРµ.',
           }
         }
 
@@ -218,7 +219,7 @@ export function SalesProvider({
         transactionDate: sale.saleDate,
         referenceId: sale.id,
         description:
-          `Продажа ${sale.saleNumber}`,
+          `РџСЂРѕРґР°Р¶Р° ${sale.saleNumber}`,
         status: 'completed',
       })
 
