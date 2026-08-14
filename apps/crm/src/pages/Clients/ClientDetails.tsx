@@ -232,5 +232,3 @@ export function ClientDetails() {
     </section>
   )
 }
-
-

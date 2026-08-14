@@ -1,6 +1,6 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTransactions } from '../../context/useTransactions'
-import type { Transaction } from '../../entities/transaction'
+import type { Transaction } from '@madina/core'
 
 import './Accounting.css'
 

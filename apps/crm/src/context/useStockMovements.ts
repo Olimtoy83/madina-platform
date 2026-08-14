@@ -1,4 +1,4 @@
-import { useContext } from 'react'
+﻿import { useContext } from 'react'
 import { StockMovementsContext } from './StockMovementsContext'
 
 export function useStockMovements() {

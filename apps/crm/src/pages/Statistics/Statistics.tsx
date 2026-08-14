@@ -2,8 +2,8 @@
 import { useProducts } from '../../context/useProducts'
 import { useTasks } from '../../context/useTasks'
 import { useTransactions } from '../../context/useTransactions'
-import type { Transaction } from '../../entities/transaction'
-import type { TaskStatus } from '../../entities/task'
+import type { Transaction } from '@madina/core'
+import type { TaskStatus } from '@madina/core'
 
 import './Statistics.css'
 

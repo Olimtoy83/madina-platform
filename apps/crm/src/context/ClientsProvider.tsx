@@ -4,7 +4,7 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Client } from '../entities/client'
+import type { Client } from '@madina/core'
 import {
   loadStorage,
   saveStorage,

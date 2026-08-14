@@ -4,7 +4,7 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { StockMovement } from '../entities/stockMovement'
+import type { StockMovement } from '@madina/core'
 import {
   loadStorage,
   saveStorage,

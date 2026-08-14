@@ -4,7 +4,7 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Task } from '../entities/task'
+import type { Task } from '@madina/core'
 import {
   loadStorage,
   saveStorage,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useStockMovements } from '../../context/useStockMovements'
 import { useProducts } from '../../context/useProducts'
 

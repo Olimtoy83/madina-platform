@@ -1,4 +1,4 @@
-import {
+﻿import {
   useMemo,
   useState,
 } from 'react'
@@ -8,7 +8,7 @@ import type {
   PurchaseItem,
   PurchaseStatus,
   PurchasePaymentMethod,
-} from '../../entities/purchase'
+} from '@madina/core'
 
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'

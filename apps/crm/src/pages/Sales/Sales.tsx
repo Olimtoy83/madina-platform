@@ -14,7 +14,7 @@ import { useSales } from '../../context/useSales'
 import type {
   PaymentMethod,
   SaleItem,
-} from '../../entities/sale'
+} from '@madina/core'
 export function Sales() {
   const navigate = useNavigate()
 
@@ -650,4 +650,3 @@ export function Sales() {
     </section>
   )
 }
-

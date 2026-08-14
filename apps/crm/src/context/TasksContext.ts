@@ -1,5 +1,5 @@
 ﻿import { createContext } from 'react'
-import type { Task } from '../entities/task'
+import type { Task } from '@madina/core'
 
 export interface TasksContextValue {
   tasks: Task[]

@@ -3,7 +3,7 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Product } from '../entities/product'
+import type { Product } from '@madina/core'
 
 import {
   loadStorage,
@@ -236,5 +236,3 @@ export function ProductsProvider({
     </ProductsContext.Provider>
   )
 }
-
-

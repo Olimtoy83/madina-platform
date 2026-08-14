@@ -1,5 +1,5 @@
-import { createContext } from 'react'
-import type { Purchase } from '../entities/purchase'
+﻿import { createContext } from 'react'
+import type { Purchase } from '@madina/core'
 
 export interface PurchasesContextValue {
   purchases: Purchase[]

@@ -5,7 +5,7 @@ import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import type {
   ClientStatus,
-} from '../../entities/client'
+} from '@madina/core'
 
 export function Clients() {
   const {
@@ -395,4 +395,3 @@ export function Clients() {
     </section >
   )
 }
-

@@ -1,4 +1,4 @@
-import type { BaseEntity } from '@madina/shared'
+﻿import type { BaseEntity } from '@madina/shared'
 
 export type TransactionType =
   | 'income'
@@ -14,22 +14,19 @@ export type TransactionStatus =
   | 'completed'
   | 'cancelled'
 
+export type TransactionPaymentMethod =
+  | 'cash'
+  | 'card'
+  | 'bank-transfer'
+  | 'other'
+
 export interface Transaction extends BaseEntity {
   type: TransactionType
   category: TransactionCategory
-
   amount: number
-
-  paymentMethod:
-    | 'cash'
-    | 'card'
-    | 'bank-transfer'
-    | 'other'
-
+  paymentMethod: TransactionPaymentMethod
   transactionDate: Date
-
   referenceId?: string
   description?: string
-
   status: TransactionStatus
 }

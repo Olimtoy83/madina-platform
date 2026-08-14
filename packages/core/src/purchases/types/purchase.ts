@@ -1,5 +1,5 @@
 ﻿import type { BaseEntity } from '@madina/shared'
-import type { ProductUnit } from './product'
+import type { ProductUnit } from '../../inventory/types/product'
 
 export type PurchaseStatus =
   | 'draft'

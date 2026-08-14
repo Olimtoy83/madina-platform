@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { useProducts } from '../../context/useProducts'
 import { useStockMovements } from '../../context/useStockMovements'
 
@@ -6,7 +6,7 @@ import type {
   Product,
   ProductCategory,
   ProductUnit,
-} from '../../entities/product'
+} from '@madina/core'
 
 import './Warehouse.css'
 

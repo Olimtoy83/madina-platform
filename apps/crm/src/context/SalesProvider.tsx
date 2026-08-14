@@ -7,8 +7,8 @@
 import type {
   Sale,
   SaleStatus,
-} from '../entities/sale'
-import type { StockMovement } from '../entities/stockMovement'
+} from '@madina/core'
+import type { StockMovement } from '@madina/core'
 import {
   loadStorage,
   saveStorage,

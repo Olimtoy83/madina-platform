@@ -1,5 +1,5 @@
 ﻿import { createContext } from 'react'
-import type { StockMovement } from '../entities/stockMovement'
+import type { StockMovement } from '@madina/core'
 
 export interface StockMovementsContextValue {
   movements: StockMovement[]

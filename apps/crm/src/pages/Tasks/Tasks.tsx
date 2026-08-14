@@ -3,7 +3,7 @@ import { useTasks } from '../../context/useTasks'
 import type {
   TaskPriority,
   TaskStatus,
-} from '../../entities/task'
+} from '@madina/core'
 import './Tasks.css'
 
 const priorityLabels: Record<TaskPriority, string> = {
@@ -360,4 +360,3 @@ export function Tasks() {
     </section>
   )
 }
-

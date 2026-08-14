@@ -1,5 +1,5 @@
-import { createContext } from 'react'
-import type { Product } from '../entities/product'
+﻿import { createContext } from 'react'
+import type { Product } from '@madina/core'
 
 export interface ProductsContextValue {
   products: Product[]

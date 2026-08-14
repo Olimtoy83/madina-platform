@@ -4,7 +4,7 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Transaction } from '../entities/transaction'
+import type { Transaction } from '@madina/core'
 import { loadStorage, saveStorage } from '../shared/storage'
 import { TransactionsContext } from './TransactionsContext'
 

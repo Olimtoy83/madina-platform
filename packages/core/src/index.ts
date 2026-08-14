@@ -1,1 +1,6 @@
 ﻿export * from './inventory'
+export * from './clients'
+export * from './purchases'
+export * from './sales'
+export * from './transactions'
+export * from './tasks'

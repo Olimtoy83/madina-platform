@@ -7,8 +7,8 @@
 import type {
   Purchase,
   PurchaseStatus,
-} from '../entities/purchase'
-import type { StockMovement } from '../entities/stockMovement'
+} from '@madina/core'
+import type { StockMovement } from '@madina/core'
 
 import {
   loadStorage,
@@ -308,4 +308,3 @@ export function PurchasesProvider({
     </PurchasesContext.Provider>
   )
 }
-

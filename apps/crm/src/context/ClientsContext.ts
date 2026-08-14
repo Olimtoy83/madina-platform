@@ -1,5 +1,5 @@
 ﻿import { createContext } from 'react'
-import type { Client } from '../entities/client'
+import type { Client } from '@madina/core'
 
 export interface ClientsContextValue {
   clients: Client[]
