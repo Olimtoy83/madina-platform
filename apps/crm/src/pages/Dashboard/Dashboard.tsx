@@ -1,5 +1,6 @@
 ﻿import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getTransactionTotals } from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
@@ -20,56 +21,18 @@ export function Dashboard() {
     [sales],
   )
 
-  const completedTransactions = useMemo(
-    () =>
-      transactions.filter(
-        (transaction) =>
-          transaction.status === 'completed',
-      ),
+  const transactionTotals = useMemo(
+    () => getTransactionTotals(transactions),
     [transactions],
   )
 
-  const incomeTransactions = useMemo(
-    () =>
-      completedTransactions.filter(
-        (transaction) =>
-          transaction.type === 'income',
-      ),
-    [completedTransactions],
-  )
-
-  const expenseTransactions = useMemo(
-    () =>
-      completedTransactions.filter(
-        (transaction) =>
-          transaction.type === 'expense',
-      ),
-    [completedTransactions],
-  )
+  const {
+    income,
+    expense: expenses,
+    balance: profit,
+  } = transactionTotals
 
   const salesCount = completedSales.length
-
-  const income = useMemo(
-    () =>
-      incomeTransactions.reduce(
-        (sum, transaction) =>
-          sum + transaction.amount,
-        0,
-      ),
-    [incomeTransactions],
-  )
-
-  const expenses = useMemo(
-    () =>
-      expenseTransactions.reduce(
-        (sum, transaction) =>
-          sum + transaction.amount,
-        0,
-      ),
-    [expenseTransactions],
-  )
-
-  const profit = income - expenses
 
   const warehouseProductsCount =
     products.length
@@ -84,13 +47,22 @@ export function Dashboard() {
     [products],
   )
 
+  const completedTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          transaction.status === 'completed',
+      ),
+    [transactions],
+  )
+
   const recentTransactions = useMemo(
     () =>
       [...completedTransactions]
         .sort(
-          (a, b) =>
-            b.transactionDate.getTime() -
-            a.transactionDate.getTime(),
+          (first, second) =>
+            second.transactionDate.getTime() -
+            first.transactionDate.getTime(),
         )
         .slice(0, 5),
     [completedTransactions],
