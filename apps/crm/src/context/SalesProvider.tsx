@@ -4,18 +4,19 @@
   useState,
   type ReactNode,
 } from 'react'
-import type {
-  Sale,
-  SaleStatus,
+
+import {
+  completeSale as completeSaleCore,
+  type Sale,
+  type SaleStatus,
 } from '@madina/core'
-import type { StockMovement } from '@madina/core'
+
 import {
   loadStorage,
   saveStorage,
 } from '../shared/storage'
 import { useProducts } from './useProducts'
 import { useStockMovements } from './useStockMovements'
-import { issueStock } from '@madina/core'
 import { useTransactions } from './useTransactions'
 import { SalesContext } from './SalesContext'
 
@@ -135,100 +136,34 @@ export function SalesProvider({
         }
       }
 
-      if (sale.status !== 'draft') {
+      const result = completeSaleCore(
+        sale,
+        products,
+      )
+
+      if (!result.success) {
         return {
           success: false,
-          message:
-            'Можно завершить только черновик продажи.',
+          message: result.message,
         }
       }
 
-      for (const item of sale.items) {
-        const product = products.find(
-          (currentProduct) =>
-            currentProduct.id === item.productId,
-        )
+      replaceProducts(result.products)
 
-        if (!product) {
-          return {
-            success: false,
-            message:
-              `Товар не найден на складе: ${item.productId}.`,
-          }
-        }
-      }
-
-      const updatedAt = new Date()
-
-      let nextProducts = products
-      const movements: StockMovement[] = []
-
-      for (const item of sale.items) {
-        const result = issueStock(
-          nextProducts,
-          item.productId,
-          item.quantity,
-          sale.id,
-          `Продажа ${sale.saleNumber}`,
-        )
-
-        if (!result.success) {
-          return {
-            success: false,
-            message:
-              result.message ??
-              'Не удалось изменить остаток товара.',
-          }
-        }
-
-        if (
-          !result.product ||
-          !result.movement
-        ) {
-          return {
-            success: false,
-            message:
-              'StockService не вернул обновлённый товар или движение.',
-          }
-        }
-
-        nextProducts = result.products
-
-        movements.push(result.movement)
-      }
-
-      replaceProducts(nextProducts)
-
-      for (const movement of movements) {
+      for (const movement of result.movements) {
         addMovement(movement)
       }
 
-      addTransaction({
-        id: crypto.randomUUID(),
-        createdAt: updatedAt,
-        updatedAt,
-        type: 'income',
-        category: 'sale',
-        amount: sale.totalAmount,
-        paymentMethod: sale.paymentMethod,
-        transactionDate: sale.saleDate,
-        referenceId: sale.id,
-        description:
-          `Продажа ${sale.saleNumber}`,
-        status: 'completed',
-      })
+      if (result.transaction) {
+        addTransaction(result.transaction)
+      }
 
       setSales((currentSales) => {
         const nextSales =
           currentSales.map(
             (currentSale) =>
               currentSale.id === saleId
-                ? {
-                  ...currentSale,
-                  status:
-                    'completed' as SaleStatus,
-                  updatedAt,
-                }
+                ? result.sale!
                 : currentSale,
           )
 
