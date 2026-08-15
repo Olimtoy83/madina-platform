@@ -113,11 +113,11 @@ function isWithinPeriod(
   if (period === 'today') {
     return (
       transactionDate.getFullYear() ===
-        now.getFullYear() &&
+      now.getFullYear() &&
       transactionDate.getMonth() ===
-        now.getMonth() &&
+      now.getMonth() &&
       transactionDate.getDate() ===
-        now.getDate()
+      now.getDate()
     )
   }
 
@@ -141,11 +141,97 @@ function isWithinPeriod(
   if (period === 'month') {
     return (
       transactionDate.getFullYear() ===
-        now.getFullYear() &&
+      now.getFullYear() &&
       transactionDate.getMonth() ===
-        now.getMonth()
+      now.getMonth()
     )
   }
 
   return true
+}
+
+export interface TransactionFilters {
+  period?: TransactionPeriod
+  type?: Transaction['type']
+  status?: Transaction['status']
+}
+
+export function filterTransactions(
+  transactions: Transaction[],
+  filters: TransactionFilters = {},
+  now = new Date(),
+): Transaction[] {
+  const {
+    period = 'all',
+    type,
+    status,
+  } = filters
+
+  let result = transactions
+
+  if (status) {
+    result = result.filter(
+      (transaction) =>
+        transaction.status === status,
+    )
+  }
+
+  if (type) {
+    result = result.filter(
+      (transaction) =>
+        transaction.type === type,
+    )
+  }
+
+  if (period !== 'all') {
+    result = getTransactionsByPeriod(
+      result,
+      period,
+      now,
+    )
+  }
+
+  return result
+}
+
+export type TransactionCategoryTotals =
+  Record<Transaction['category'], number>
+
+export function calculateCategoryTotals(
+  transactions: Transaction[],
+): TransactionCategoryTotals {
+  return {
+    sale: transactions
+      .filter(
+        (transaction) =>
+          transaction.category === 'sale',
+      )
+      .reduce(
+        (total, transaction) =>
+          total + transaction.amount,
+        0,
+      ),
+
+    purchase: transactions
+      .filter(
+        (transaction) =>
+          transaction.category === 'purchase',
+      )
+      .reduce(
+        (total, transaction) =>
+          total + transaction.amount,
+        0,
+      ),
+
+    other: transactions
+      .filter(
+        (transaction) =>
+          transaction.category === 'other',
+      )
+      .reduce(
+        (total, transaction) =>
+          total + transaction.amount,
+        0,
+      ),
+  }
 }

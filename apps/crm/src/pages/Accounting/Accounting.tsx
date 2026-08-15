@@ -1,6 +1,11 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTransactions } from '../../context/useTransactions'
-import type { Transaction } from '@madina/core'
+import {
+  calculateCategoryTotals,
+  filterTransactions,
+  getTransactionTotals,
+  type Transaction,
+} from '@madina/core'
 
 import './Accounting.css'
 
@@ -41,48 +46,6 @@ function formatDate(date: Date) {
   }).format(new Date(date))
 }
 
-function isWithinPeriod(
-  date: Date,
-  period: Period,
-) {
-  if (period === 'all') {
-    return true
-  }
-
-  const transactionDate = new Date(date)
-  const now = new Date()
-
-  if (period === 'today') {
-    return (
-      transactionDate.getFullYear() ===
-        now.getFullYear() &&
-      transactionDate.getMonth() ===
-        now.getMonth() &&
-      transactionDate.getDate() ===
-        now.getDate()
-    )
-  }
-
-  if (period === '7days') {
-    const start = new Date(now)
-    start.setDate(now.getDate() - 6)
-    start.setHours(0, 0, 0, 0)
-
-    return transactionDate >= start
-  }
-
-  if (period === 'month') {
-    return (
-      transactionDate.getFullYear() ===
-        now.getFullYear() &&
-      transactionDate.getMonth() ===
-        now.getMonth()
-    )
-  }
-
-  return true
-}
-
 export function Accounting() {
   const { transactions } = useTransactions()
 
@@ -94,88 +57,39 @@ export function Accounting() {
 
   const filteredTransactions = useMemo(
     () =>
-      transactions.filter(
-        (transaction) =>
-          transaction.status === 'completed' &&
-          isWithinPeriod(
-            transaction.transactionDate,
-            period,
-          ) &&
-          (typeFilter === 'all' ||
-            transaction.type === typeFilter),
+      filterTransactions(
+        transactions,
+        {
+          period,
+          type:
+            typeFilter === 'all'
+              ? undefined
+              : typeFilter,
+          status: 'completed',
+        },
       ),
     [transactions, period, typeFilter],
   )
 
-  const totalIncome = useMemo(
+  const {
+    income: totalIncome,
+    expense: totalExpense,
+    balance,
+  } = useMemo(
     () =>
-      filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.type === 'income',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
+      getTransactionTotals(
+        filteredTransactions,
+      ),
     [filteredTransactions],
   )
 
-  const totalExpense = useMemo(
+  const categoryTotals = useMemo(
     () =>
-      filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.type === 'expense',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
+      calculateCategoryTotals(
+        filteredTransactions,
+      ),
     [filteredTransactions],
   )
-
-  const balance =
-    totalIncome - totalExpense
-
-  const categoryTotals = useMemo(() => {
-    return {
-      sale: filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.category === 'sale',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-
-      purchase: filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.category === 'purchase',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-
-      other: filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.category === 'other',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-    }
-  }, [filteredTransactions])
 
   return (
     <section className="accounting-page">
@@ -376,7 +290,7 @@ export function Accounting() {
                         <td>
                           {
                             categoryLabels[
-                              transaction.category
+                            transaction.category
                             ]
                           }
                         </td>
@@ -389,7 +303,7 @@ export function Accounting() {
                         <td>
                           {
                             paymentMethodLabels[
-                              transaction.paymentMethod
+                            transaction.paymentMethod
                             ]
                           }
                         </td>

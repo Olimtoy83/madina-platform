@@ -6,8 +6,10 @@ import {
 import type { Transaction } from '../types/transaction'
 import {
   calculateBalance,
+  calculateCategoryTotals,
   calculateExpenses,
   calculateIncome,
+  filterTransactions,
   getCompletedTransactions,
   getTransactionTotals,
   getTransactionsByPeriod,
@@ -56,6 +58,154 @@ describe('TransactionService', () => {
       expect(result[0]?.status).toBe(
         'completed',
       )
+    })
+  })
+
+  describe('filterTransactions', () => {
+    const now = new Date(
+      2026,
+      7,
+      16,
+      12,
+      0,
+      0,
+    )
+
+    it('filters completed transactions by type', () => {
+      const transactions = [
+        createTransaction({
+          type: 'income',
+          status: 'completed',
+        }),
+        createTransaction({
+          type: 'expense',
+          status: 'completed',
+        }),
+        createTransaction({
+          type: 'income',
+          status: 'pending',
+        }),
+      ]
+
+      const result = filterTransactions(
+        transactions,
+        {
+          type: 'income',
+          status: 'completed',
+        },
+        now,
+      )
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.type).toBe('income')
+      expect(result[0]?.status).toBe('completed')
+    })
+
+    it('filters transactions by period', () => {
+      const transactions = [
+        createTransaction({
+          transactionDate: new Date(
+            2026,
+            7,
+            16,
+          ),
+        }),
+        createTransaction({
+          transactionDate: new Date(
+            2026,
+            7,
+            10,
+          ),
+        }),
+        createTransaction({
+          transactionDate: new Date(
+            2026,
+            7,
+            9,
+          ),
+        }),
+      ]
+
+      const result = filterTransactions(
+        transactions,
+        {
+          period: '7days',
+        },
+        now,
+      )
+
+      expect(result).toHaveLength(2)
+    })
+
+    it('returns all transactions when no filters are provided', () => {
+      const transactions = [
+        createTransaction({
+          status: 'completed',
+        }),
+        createTransaction({
+          status: 'pending',
+        }),
+      ]
+
+      const result = filterTransactions(
+        transactions,
+        {},
+        now,
+      )
+
+      expect(result).toHaveLength(2)
+    })
+  })
+
+  describe('calculateCategoryTotals', () => {
+    it('calculates totals for all categories', () => {
+      const transactions = [
+        createTransaction({
+          category: 'sale',
+          amount: 1000,
+        }),
+        createTransaction({
+          category: 'sale',
+          amount: 500,
+        }),
+        createTransaction({
+          category: 'purchase',
+          amount: 700,
+        }),
+        createTransaction({
+          category: 'other',
+          amount: 200,
+        }),
+      ]
+
+      expect(
+        calculateCategoryTotals(
+          transactions,
+        ),
+      ).toEqual({
+        sale: 1500,
+        purchase: 700,
+        other: 200,
+      })
+    })
+
+    it('returns zero for categories without transactions', () => {
+      const transactions = [
+        createTransaction({
+          category: 'sale',
+          amount: 1000,
+        }),
+      ]
+
+      expect(
+        calculateCategoryTotals(
+          transactions,
+        ),
+      ).toEqual({
+        sale: 1000,
+        purchase: 0,
+        other: 0,
+      })
     })
   })
 
