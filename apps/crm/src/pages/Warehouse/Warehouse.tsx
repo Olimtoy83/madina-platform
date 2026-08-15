@@ -2,10 +2,11 @@
 import { useProducts } from '../../context/useProducts'
 import { useStockMovements } from '../../context/useStockMovements'
 
-import type {
-  Product,
-  ProductCategory,
-  ProductUnit,
+import {
+  adjustStock,
+  type Product,
+  type ProductCategory,
+  type ProductUnit,
 } from '@madina/core'
 
 import './Warehouse.css'
@@ -138,38 +139,32 @@ export function Warehouse() {
         ? quantity
         : -quantity
 
-    const newQuantity =
-      selectedProduct.quantity + signedQuantity
+    const result = adjustStock(
+      products,
+      selectedProduct.id,
+      signedQuantity,
+      undefined,
+      adjustmentNote.trim() ||
+      'Корректировка остатка',
+    )
 
-    if (newQuantity < 0) {
+    if (!result.success || !result.product || !result.movement) {
       return
     }
 
-    const now = new Date()
+    const updatedProduct = result.product
 
+    // Обновляем Product через текущий Provider.
+    // Пока ProductsProvider не умеет принимать
+    // результат domain-service целиком.
     updateProductQuantity(
-      selectedProduct.id,
-      newQuantity,
+      updatedProduct.id,
+      updatedProduct.quantity,
     )
 
-    addMovement({
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-      productId: selectedProduct.id,
-      type: 'adjustment',
-      quantity: signedQuantity,
-      unit: selectedProduct.unit,
-      note:
-        adjustmentNote.trim() ||
-        'Корректировка остатка',
-    })
+    addMovement(result.movement)
 
-    setSelectedProduct({
-      ...selectedProduct,
-      quantity: newQuantity,
-      updatedAt: now,
-    })
+    setSelectedProduct(updatedProduct)
 
     cancelAdjustment()
   }
