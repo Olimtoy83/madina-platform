@@ -32,7 +32,7 @@ export function Warehouse() {
     addProduct,
     removeProduct,
     updateProduct,
-    updateProductQuantity,
+    replaceProducts,
   } = useProducts()
 
   const { addMovement } =
@@ -154,14 +154,7 @@ export function Warehouse() {
 
     const updatedProduct = result.product
 
-    // Обновляем Product через текущий Provider.
-    // Пока ProductsProvider не умеет принимать
-    // результат domain-service целиком.
-    updateProductQuantity(
-      updatedProduct.id,
-      updatedProduct.quantity,
-    )
-
+    replaceProducts(result.products)
     addMovement(result.movement)
 
     setSelectedProduct(updatedProduct)

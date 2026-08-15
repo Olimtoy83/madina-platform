@@ -13,21 +13,6 @@ export interface ProductsContextValue {
     updates: Partial<Product>,
   ) => void
 
-  updateProductQuantity: (
-    productId: string,
-    quantity: number,
-  ) => void
-
-  increaseProductQuantity: (
-    productId: string,
-    quantity: number,
-  ) => void
-
-  decreaseProductQuantity: (
-    productId: string,
-    quantity: number,
-  ) => void
-
   replaceProducts: (
     products: Product[],
   ) => void

@@ -42,7 +42,6 @@ function loadProducts(): Product[] {
       [],
     )
 
-
   return storedProducts.map(
     restoreProduct,
   )
@@ -112,99 +111,6 @@ export function ProductsProvider({
     })
   }
 
-  function updateProductQuantity(
-    productId: string,
-    quantity: number,
-  ) {
-    setProducts((currentProducts) => {
-      const nextProducts =
-        currentProducts.map((product) =>
-          product.id === productId
-            ? {
-              ...product,
-              quantity,
-              updatedAt: new Date(),
-            }
-            : product,
-        )
-
-      saveStorage(
-        STORAGE_KEY,
-        nextProducts,
-      )
-
-      return nextProducts
-    })
-  }
-
-  function increaseProductQuantity(
-    productId: string,
-    quantity: number,
-  ) {
-    if (quantity <= 0) {
-      return
-    }
-
-    setProducts((currentProducts) => {
-      const nextProducts =
-        currentProducts.map((product) =>
-          product.id === productId
-            ? {
-              ...product,
-              quantity:
-                product.quantity + quantity,
-              updatedAt: new Date(),
-            }
-            : product,
-        )
-
-      saveStorage(
-        STORAGE_KEY,
-        nextProducts,
-      )
-
-      return nextProducts
-    })
-  }
-
-  function decreaseProductQuantity(
-    productId: string,
-    quantity: number,
-  ) {
-    if (quantity <= 0) {
-      return
-    }
-
-    setProducts((currentProducts) => {
-      const nextProducts =
-        currentProducts.map((product) => {
-          if (product.id !== productId) {
-            return product
-          }
-
-          const newQuantity =
-            product.quantity - quantity
-
-          if (newQuantity < 0) {
-            return product
-          }
-
-          return {
-            ...product,
-            quantity: newQuantity,
-            updatedAt: new Date(),
-          }
-        })
-
-      saveStorage(
-        STORAGE_KEY,
-        nextProducts,
-      )
-
-      return nextProducts
-    })
-  }
-
   function replaceProducts(
     nextProducts: Product[],
   ) {
@@ -222,9 +128,6 @@ export function ProductsProvider({
       addProduct,
       removeProduct,
       updateProduct,
-      updateProductQuantity,
-      increaseProductQuantity,
-      decreaseProductQuantity,
       replaceProducts,
     }),
     [products],
