@@ -1,16 +1,16 @@
-.app-layout {
+﻿.app-layout {
   display: flex;
   min-height: 100vh;
-  background: #f5f7f9;
+  background: var(--color-background);
 }
 
 .sidebar {
   width: 240px;
   min-width: 240px;
   min-height: 100vh;
-  padding: 20px 14px;
-  background: #ffffff;
-  border-right: 1px solid #e5e7eb;
+  padding: var(--space-5) var(--space-3);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
 }
@@ -18,60 +18,60 @@
 .sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 10px 24px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-6);
 }
 
 .sidebar__logo {
   width: 38px;
   height: 38px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #00695c;
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 700;
+  background: var(--color-primary);
+  color: var(--color-surface);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
   letter-spacing: 0.5px;
 }
 
 .sidebar__brand-name {
-  color: #111827;
+  color: var(--color-text);
   font-size: 17px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .sidebar__nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .sidebar__item {
   display: flex;
   align-items: center;
   min-height: 42px;
-  padding: 0 12px;
-  border-radius: 8px;
-  color: #4b5563;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
   transition:
     background-color 0.15s ease,
     color 0.15s ease;
 }
 
 .sidebar__item:hover {
-  background: #f0f4f3;
-  color: #00695c;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 .sidebar__item--active {
-  background: #e6f2f0;
-  color: #00695c;
-  font-weight: 600;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
 .app-layout__main {
@@ -83,7 +83,7 @@
 
 .app-layout__content {
   flex: 1;
-  padding: 24px;
+  padding: var(--space-6);
 }
 
 @media (max-width: 768px) {
@@ -93,19 +93,19 @@
   }
 
   .sidebar__brand-name {
-    font-size: 15px;
+    font-size: var(--font-size-body);
   }
 
   .app-layout__content {
-    padding: 16px;
+    padding: var(--space-4);
   }
 }
 
 .app-header {
   min-height: 64px;
-  padding: 0 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 0 var(--space-6);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -113,9 +113,9 @@
 
 .app-header__title h1 {
   margin: 0;
-  color: #111827;
-  font-size: 20px;
-  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
   letter-spacing: -0.2px;
 }
 
@@ -125,26 +125,25 @@
 }
 
 .app-header__brand {
-  color: #6b7280;
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
 }
 
 @media (max-width: 768px) {
   .app-header {
     min-height: 56px;
-    padding: 0 16px;
+    padding: 0 var(--space-4);
   }
 
   .app-header__title h1 {
-    font-size: 18px;
+    font-size: var(--font-size-body-lg);
   }
 
   .app-header__brand {
     display: none;
   }
 }
-
 .dashboard {
   max-width: 1400px;
   margin: 0 auto;
@@ -324,7 +323,7 @@
 }
 
 /* =========================================================
-   Madina CRM — Base Controls
+   Madina CRM вЂ” Base Controls
    Fallback styles for controls without component classes
    ========================================================= */
 
@@ -392,7 +391,7 @@ textarea:not([class]):focus {
 }
 
 /* =========================================================
-   Madina CRM — Button System
+   Madina CRM вЂ” Button System
    ========================================================= */
 
 .btn-primary,
