@@ -1,59 +1,16 @@
 ﻿import { useMemo, useState } from 'react'
+import {
+  filterTransactions,
+  getTransactionTotals,
+  type TaskStatus,
+  type Transaction,
+  type TransactionPeriod,
+} from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useTasks } from '../../context/useTasks'
 import { useTransactions } from '../../context/useTransactions'
-import type { Transaction } from '@madina/core'
-import type { TaskStatus } from '@madina/core'
 
 import './Statistics.css'
-
-type Period =
-  | 'all'
-  | 'today'
-  | '7days'
-  | 'month'
-
-function isWithinPeriod(
-  date: Date,
-  period: Period,
-) {
-  if (period === 'all') {
-    return true
-  }
-
-  const transactionDate = new Date(date)
-  const now = new Date()
-
-  if (period === 'today') {
-    return (
-      transactionDate.getFullYear() ===
-        now.getFullYear() &&
-      transactionDate.getMonth() ===
-        now.getMonth() &&
-      transactionDate.getDate() ===
-        now.getDate()
-    )
-  }
-
-  if (period === '7days') {
-    const start = new Date(now)
-    start.setDate(now.getDate() - 6)
-    start.setHours(0, 0, 0, 0)
-
-    return transactionDate >= start
-  }
-
-  if (period === 'month') {
-    return (
-      transactionDate.getFullYear() ===
-        now.getFullYear() &&
-      transactionDate.getMonth() ===
-        now.getMonth()
-    )
-  }
-
-  return true
-}
 
 function formatAmount(amount: number) {
   return new Intl.NumberFormat('ru-RU', {
@@ -77,59 +34,40 @@ export function Statistics() {
   const { tasks } = useTasks()
 
   const [period, setPeriod] =
-    useState<Period>('all')
+    useState<TransactionPeriod>('all')
 
   const filteredTransactions = useMemo(
     () =>
-      transactions.filter(
-        (transaction) =>
-          transaction.status === 'completed' &&
-          isWithinPeriod(
-            transaction.transactionDate,
-            period,
-          ),
+      filterTransactions(
+        transactions,
+        {
+          status: 'completed',
+          period,
+        },
       ),
     [transactions, period],
   )
 
-  const totalIncome = useMemo(
+  const transactionTotals = useMemo(
     () =>
-      filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.type === 'income',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
+      getTransactionTotals(
+        filteredTransactions,
+      ),
     [filteredTransactions],
   )
 
-  const totalExpense = useMemo(
-    () =>
-      filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.type === 'expense',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-    [filteredTransactions],
-  )
+  const {
+    income: totalIncome,
+    expense: totalExpense,
+    balance: profit,
+  } = transactionTotals
 
-  const profit =
-    totalIncome - totalExpense
-
-  const salesCount = filteredTransactions.filter(
-    (transaction) =>
-      transaction.type === 'income' &&
-      transaction.category === 'sale',
-  ).length
+  const salesCount =
+    filteredTransactions.filter(
+      (transaction) =>
+        transaction.type === 'income' &&
+        transaction.category === 'sale',
+    ).length
 
   const purchasesCount =
     filteredTransactions.filter(
@@ -224,7 +162,7 @@ export function Statistics() {
           value={period}
           onChange={(event) =>
             setPeriod(
-              event.target.value as Period,
+              event.target.value as TransactionPeriod,
             )
           }
         >
@@ -414,7 +352,7 @@ export function Statistics() {
 
                       <td>
                         {transaction.type ===
-                        'income'
+                          'income'
                           ? 'Доход'
                           : 'Расход'}
                       </td>
@@ -422,7 +360,7 @@ export function Statistics() {
                       <td>
                         {
                           categoryLabels[
-                            transaction.category
+                          transaction.category
                           ]
                         }
                       </td>
