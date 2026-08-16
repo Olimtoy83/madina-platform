@@ -4,6 +4,10 @@ import {
   useNavigate,
   useParams,
 } from 'react-router-dom'
+import {
+  getClientSalesStats,
+  getCompletedSalesForClient,
+} from '@madina/core'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import './ClientDetails.css'
@@ -21,33 +25,32 @@ export function ClientDetails() {
 
   const completedSales = useMemo(
     () =>
-      sales
-        .filter(
-          (sale) =>
-            sale.status === 'completed' &&
-            (
-              sale.clientId === clientId ||
-              (
-                !sale.clientId &&
-                client &&
-                sale.clientName.trim().toLowerCase() ===
-                client.name.trim().toLowerCase()
-              )
-            ),
+      client
+        ? getCompletedSalesForClient(
+          client,
+          sales,
         )
-        .sort(
-          (a, b) =>
-            b.saleDate.getTime() -
-            a.saleDate.getTime(),
-        ),
-    [sales, clientId, client],
+        : [],
+    [sales, client],
   )
 
-  const totalAmount = completedSales.reduce(
-    (sum, sale) =>
-      sum + sale.totalAmount,
-    0,
+  const clientStats = useMemo(
+    () =>
+      client
+        ? getClientSalesStats(
+          client,
+          sales,
+        )
+        : {
+          salesCount: 0,
+          totalAmount: 0,
+          lastSaleDate: undefined,
+        },
+    [client, sales],
   )
+
+  const totalAmount =
+    clientStats.totalAmount
 
   const lastSale =
     completedSales[0]
@@ -112,7 +115,7 @@ export function ClientDetails() {
         <article>
           <span>Продажи</span>
           <strong>
-            {completedSales.length}
+            {clientStats.salesCount}
           </strong>
         </article>
 
