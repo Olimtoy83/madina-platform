@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from 'react'
+import { getStockMovementTotals } from '@madina/core'
 import { useStockMovements } from '../../context/useStockMovements'
 import { useProducts } from '../../context/useProducts'
 
@@ -82,27 +83,13 @@ export function StockMovements() {
     dateTo,
   ])
 
-  const totalPurchases = movements
-    .filter(
-      (movement) =>
-        movement.type === 'purchase',
-    )
-    .reduce(
-      (total, movement) =>
-        total + movement.quantity,
-      0,
-    )
-
-  const totalSales = movements
-    .filter(
-      (movement) =>
-        movement.type === 'sale',
-    )
-    .reduce(
-      (total, movement) =>
-        total + movement.quantity,
-      0,
-    )
+  const {
+    totalPurchases,
+    totalSales,
+  } = useMemo(
+    () => getStockMovementTotals(movements),
+    [movements],
+  )
 
   function getMovementType(
     type: string,
