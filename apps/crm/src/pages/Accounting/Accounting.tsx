@@ -5,11 +5,11 @@ import {
   filterTransactions,
   getTransactionTotals,
   type Transaction,
+  type TransactionPeriod,
 } from '@madina/core'
 
 import './Accounting.css'
 
-type Period = 'all' | 'today' | '7days' | 'month'
 type TypeFilter = 'all' | Transaction['type']
 
 const categoryLabels: Record<
@@ -50,7 +50,7 @@ export function Accounting() {
   const { transactions } = useTransactions()
 
   const [period, setPeriod] =
-    useState<Period>('all')
+    useState<TransactionPeriod>('all')
 
   const [typeFilter, setTypeFilter] =
     useState<TypeFilter>('all')
@@ -107,7 +107,7 @@ export function Accounting() {
             value={period}
             onChange={(event) =>
               setPeriod(
-                event.target.value as Period,
+                event.target.value as TransactionPeriod
               )
             }
           >
