@@ -1,6 +1,9 @@
 ﻿import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getTransactionTotals } from '@madina/core'
+import {
+  getCompletedTransactions,
+  getTransactionTotals,
+} from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
@@ -48,11 +51,7 @@ export function Dashboard() {
   )
 
   const completedTransactions = useMemo(
-    () =>
-      transactions.filter(
-        (transaction) =>
-          transaction.status === 'completed',
-      ),
+    () => getCompletedTransactions(transactions),
     [transactions],
   )
 
