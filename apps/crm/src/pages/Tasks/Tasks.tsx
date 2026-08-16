@@ -1,8 +1,9 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTasks } from '../../context/useTasks'
-import type {
-  TaskPriority,
-  TaskStatus,
+import {
+  getTaskStats,
+  type TaskPriority,
+  type TaskStatus,
 } from '@madina/core'
 import './Tasks.css'
 
@@ -39,6 +40,11 @@ export function Tasks() {
           b.createdAt.getTime() -
           a.createdAt.getTime(),
       ),
+    [tasks],
+  )
+
+  const taskStats = useMemo(
+    () => getTaskStats(tasks),
     [tasks],
   )
 
@@ -233,31 +239,17 @@ export function Tasks() {
       <div className="tasks-page__summary">
         <article className="tasks-page__card">
           <span>Всего задач</span>
-          <strong>{tasks.length}</strong>
+          <strong>{taskStats.total}</strong>
         </article>
 
         <article className="tasks-page__card">
           <span>В работе</span>
-          <strong>
-            {
-              tasks.filter(
-                (task) =>
-                  task.status === 'in-progress',
-              ).length
-            }
-          </strong>
+          <strong>{taskStats.inProgress}</strong>
         </article>
 
         <article className="tasks-page__card">
           <span>Завершено</span>
-          <strong>
-            {
-              tasks.filter(
-                (task) =>
-                  task.status === 'completed',
-              ).length
-            }
-          </strong>
+          <strong>{taskStats.completed}</strong>
         </article>
       </div>
 
