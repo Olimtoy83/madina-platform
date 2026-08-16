@@ -3,11 +3,13 @@
   useState,
 } from 'react'
 
-import type {
-  Purchase,
-  PurchaseItem,
-  PurchaseStatus,
-  PurchasePaymentMethod,
+import {
+  getNextPurchaseNumber,
+  getPurchaseItemTotal,
+  type Purchase,
+  type PurchaseItem,
+  type PurchasePaymentMethod,
+  type PurchaseStatus,
 } from '@madina/core'
 
 import { useProducts } from '../../context/useProducts'
@@ -78,7 +80,10 @@ export function Purchases() {
       formItems.reduce(
         (total, item) =>
           total +
-          item.quantity * item.unitCost,
+          getPurchaseItemTotal(
+            item.quantity,
+            item.unitCost,
+          ),
         0,
       ),
     [formItems],
@@ -90,12 +95,6 @@ export function Purchases() {
         (product) => product.id === productId,
       )?.name ?? 'Неизвестный товар'
     )
-  }
-
-  function getPurchaseItemTotal(
-    item: PurchaseItem,
-  ) {
-    return item.quantity * item.unitCost
   }
 
   function addFormItem() {
@@ -168,22 +167,8 @@ export function Purchases() {
       return
     }
 
-    const lastPurchaseNumber = purchases.reduce(
-      (max, purchase) => {
-        const number = Number(
-          purchase.purchaseNumber.replace(
-            'PUR-',
-            '',
-          ),
-        )
-
-        return Math.max(max, number)
-      },
-      0,
-    )
-
-    const nextNumber =
-      lastPurchaseNumber + 1
+    const purchaseNumber =
+      getNextPurchaseNumber(purchases)
 
     const now = new Date()
 
@@ -206,7 +191,10 @@ export function Purchases() {
           unit: product.unit,
           unitCost: item.unitCost,
           totalCost:
-            item.quantity * item.unitCost,
+            getPurchaseItemTotal(
+              item.quantity,
+              item.unitCost,
+            ),
         }
       })
 
@@ -214,9 +202,7 @@ export function Purchases() {
       id: `purchase-${crypto.randomUUID()}`,
       createdAt: now,
       updatedAt: now,
-      purchaseNumber: `PUR-${String(
-        nextNumber,
-      ).padStart(4, '0')}`,
+      purchaseNumber,
       purchaseDate: new Date(
         `${purchaseDate}T00:00:00`,
       ),
@@ -477,9 +463,9 @@ export function Purchases() {
                         <td>
                           {
                             getPurchaseItemTotal(
-                              item,
-                            )
-                          }{' '}
+                              item.quantity,
+                              item.unitCost,
+                            )}{' '}
                           SAR
                         </td>
                       </tr>
