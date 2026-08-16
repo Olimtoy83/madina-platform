@@ -21,6 +21,32 @@ export function getCompletedSales(
   )
 }
 
+export interface SaleStats {
+  totalCount: number
+  draftCount: number
+  completedCount: number
+  totalAmount: number
+}
+
+export function getSaleStats(
+  sales: Sale[],
+): SaleStats {
+  return {
+    totalCount: sales.length,
+    draftCount: sales.filter(
+      (sale) => sale.status === 'draft',
+    ).length,
+    completedCount: sales.filter(
+      (sale) => sale.status === 'completed',
+    ).length,
+    totalAmount: sales.reduce(
+      (sum, sale) =>
+        sum + sale.totalAmount,
+      0,
+    ),
+  }
+}
+
 export function completeSale(
   sale: Sale,
   products: Product[],

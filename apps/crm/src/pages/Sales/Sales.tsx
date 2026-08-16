@@ -11,10 +11,12 @@ import './Sales.css'
 import { useProducts } from '../../context/useProducts'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
-import type {
-  PaymentMethod,
-  SaleItem,
+import {
+  getSaleStats,
+  type PaymentMethod,
+  type SaleItem,
 } from '@madina/core'
+
 export function Sales() {
   const navigate = useNavigate()
 
@@ -195,17 +197,13 @@ export function Sales() {
     closeModal()
   }
 
-  const draftCount = sales.filter(
-    (sale) => sale.status === 'draft',
-  ).length
-
-  const completedCount = sales.filter(
-    (sale) => sale.status === 'completed',
-  ).length
-
-  const totalAmount = sales.reduce(
-    (sum, sale) => sum + sale.totalAmount,
-    0,
+  const {
+    draftCount,
+    completedCount,
+    totalAmount,
+  } = useMemo(
+    () => getSaleStats(sales),
+    [sales],
   )
 
   const calculatedTotal = useMemo(

@@ -4,6 +4,7 @@ import type { Sale } from '../types/sale'
 import {
   completeSale,
   getCompletedSales,
+  getSaleStats,
 } from './SaleService'
 
 function createProduct(
@@ -213,6 +214,56 @@ describe('getCompletedSales', () => {
 
     expect(result).toHaveLength(1)
     expect(result[0]?.status).toBe('completed')
+  })
+
+  describe('getSaleStats', () => {
+    it('returns correct sales statistics', () => {
+      const completedSale = createSale('completed')
+      const draftSale = createSale('draft')
+      const cancelledSale = createSale('cancelled')
+
+      draftSale.totalAmount = 500
+      completedSale.totalAmount = 1000
+      cancelledSale.totalAmount = 250
+
+      const result = getSaleStats([
+        completedSale,
+        draftSale,
+        cancelledSale,
+      ])
+
+      expect(result).toEqual({
+        totalCount: 3,
+        draftCount: 1,
+        completedCount: 1,
+        totalAmount: 1750,
+      })
+    })
+
+    it('returns zero statistics for an empty array', () => {
+      expect(getSaleStats([])).toEqual({
+        totalCount: 0,
+        draftCount: 0,
+        completedCount: 0,
+        totalAmount: 0,
+      })
+    })
+
+    it('counts cancelled sales in total but not in draft or completed', () => {
+      const sales = [
+        createSale('cancelled'),
+        createSale('cancelled'),
+      ]
+
+      const result = getSaleStats(sales)
+
+      expect(result).toEqual({
+        totalCount: 2,
+        draftCount: 0,
+        completedCount: 0,
+        totalAmount: 1500,
+      })
+    })
   })
 
   it('returns an empty array when there are no completed sales', () => {
