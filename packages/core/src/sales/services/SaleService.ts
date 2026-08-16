@@ -13,6 +13,14 @@ export interface CompleteSaleResult {
   transaction?: Transaction
 }
 
+export function getCompletedSales(
+  sales: Sale[],
+): Sale[] {
+  return sales.filter(
+    (sale) => sale.status === 'completed',
+  )
+}
+
 export function completeSale(
   sale: Sale,
   products: Product[],

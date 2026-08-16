@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Product } from '../../inventory/types/product'
 import type { Sale } from '../types/sale'
-import { completeSale } from './SaleService'
+import {
+  completeSale,
+  getCompletedSales,
+} from './SaleService'
 
 function createProduct(
   id = 'product-001',
@@ -195,5 +198,33 @@ describe('completeSale', () => {
     expect(result.movements).toHaveLength(0)
     expect(result.transaction).toBeUndefined()
     expect(result.products[0]?.quantity).toBe(3)
+  })
+})
+
+describe('getCompletedSales', () => {
+  it('returns only completed sales', () => {
+    const sales = [
+      createSale('completed'),
+      createSale('draft'),
+      createSale('cancelled'),
+    ]
+
+    const result = getCompletedSales(sales)
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.status).toBe('completed')
+  })
+
+  it('returns an empty array when there are no completed sales', () => {
+    const sales = [
+      createSale('draft'),
+      createSale('cancelled'),
+    ]
+
+    expect(getCompletedSales(sales)).toEqual([])
+  })
+
+  it('returns an empty array for an empty input', () => {
+    expect(getCompletedSales([])).toEqual([])
   })
 })
