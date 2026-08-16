@@ -1,6 +1,10 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTransactions } from '../../context/useTransactions'
-import type { Transaction } from '@madina/core'
+import {
+  filterTransactions,
+  getTransactionTotals,
+  type Transaction,
+} from '@madina/core'
 
 import './Income.css'
 
@@ -47,47 +51,25 @@ export function Income() {
 
   const filteredTransactions = useMemo(
     () =>
-      transactions.filter((transaction) =>
-        filter === 'all'
-          ? true
-          : transaction.type === filter,
-      ),
+      filterTransactions(transactions, {
+        type:
+          filter === 'all'
+            ? undefined
+            : filter,
+      }),
     [transactions, filter],
   )
 
-  const totalIncome = useMemo(
-    () =>
-      transactions
-        .filter(
-          (transaction) =>
-            transaction.type === 'income' &&
-            transaction.status === 'completed',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
+  const transactionTotals = useMemo(
+    () => getTransactionTotals(transactions),
     [transactions],
   )
 
-  const totalExpense = useMemo(
-    () =>
-      transactions
-        .filter(
-          (transaction) =>
-            transaction.type === 'expense' &&
-            transaction.status === 'completed',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-    [transactions],
-  )
-
-  const balance = totalIncome - totalExpense
+  const {
+    income: totalIncome,
+    expense: totalExpense,
+    balance,
+  } = transactionTotals
 
   function formatAmount(amount: number) {
     return new Intl.NumberFormat('ru-RU', {
@@ -224,7 +206,7 @@ export function Income() {
                     <td>
                       {
                         categoryLabels[
-                          transaction.category
+                        transaction.category
                         ]
                       }
                     </td>
@@ -236,7 +218,7 @@ export function Income() {
                     <td>
                       {
                         paymentMethodLabels[
-                          transaction.paymentMethod
+                        transaction.paymentMethod
                         ]
                       }
                     </td>
@@ -251,7 +233,7 @@ export function Income() {
                     <td>
                       {
                         statusLabels[
-                          transaction.status
+                        transaction.status
                         ]
                       }
                     </td>
