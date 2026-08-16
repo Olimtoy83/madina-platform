@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from 'react'
 import {
+  calculateCategoryTotals,
   filterTransactions,
   getTransactionTotals,
   type TaskStatus,
@@ -83,40 +84,10 @@ export function Statistics() {
   )
 
   const categoryTotals = useMemo(
-    () => ({
-      sale: filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.category === 'sale',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-
-      purchase: filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.category === 'purchase',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-
-      other: filteredTransactions
-        .filter(
-          (transaction) =>
-            transaction.category === 'other',
-        )
-        .reduce(
-          (total, transaction) =>
-            total + transaction.amount,
-          0,
-        ),
-    }),
+    () =>
+      calculateCategoryTotals(
+        filteredTransactions,
+      ),
     [filteredTransactions],
   )
 
