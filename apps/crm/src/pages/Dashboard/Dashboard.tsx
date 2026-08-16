@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import {
   getCompletedTransactions,
   getCompletedSales,
+  getTotalStockQuantity,
   getTransactionTotals,
 } from '@madina/core'
+
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
@@ -38,15 +40,9 @@ export function Dashboard() {
   const warehouseProductsCount =
     products.length
 
-  const warehouseQuantity = useMemo(
-    () =>
-      products.reduce(
-        (sum, product) =>
-          sum + product.quantity,
-        0,
-      ),
-    [products],
-  )
+
+  const warehouseQuantity =
+    getTotalStockQuantity(products)
 
   const completedTransactions = useMemo(
     () => getCompletedTransactions(transactions),

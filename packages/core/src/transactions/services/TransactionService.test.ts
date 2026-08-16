@@ -5,6 +5,7 @@ import {
 } from 'vitest'
 import type { Transaction } from '../types/transaction'
 import {
+  calculateCategoryCounts,
   calculateBalance,
   calculateCategoryTotals,
   calculateExpenses,
@@ -436,6 +437,74 @@ describe('TransactionService', () => {
       expect(result).toHaveLength(1)
     })
   })
+
+  describe('calculateCategoryCounts', () => {
+    it('counts sales and purchases', () => {
+      const transactions = [
+        createTransaction({
+          type: 'income',
+          category: 'sale',
+        }),
+        createTransaction({
+          type: 'income',
+          category: 'sale',
+        }),
+        createTransaction({
+          type: 'expense',
+          category: 'purchase',
+        }),
+        createTransaction({
+          type: 'expense',
+          category: 'purchase',
+        }),
+        createTransaction({
+          type: 'income',
+          category: 'other',
+        }),
+      ]
+
+      expect(
+        calculateCategoryCounts(
+          transactions,
+        ),
+      ).toEqual({
+        sales: 2,
+        purchases: 2,
+      })
+    })
+
+    it('returns zero counts for an empty array', () => {
+      expect(
+        calculateCategoryCounts([]),
+      ).toEqual({
+        sales: 0,
+        purchases: 0,
+      })
+    })
+
+    it('does not count transactions with the wrong type', () => {
+      const transactions = [
+        createTransaction({
+          type: 'expense',
+          category: 'sale',
+        }),
+        createTransaction({
+          type: 'income',
+          category: 'purchase',
+        }),
+      ]
+
+      expect(
+        calculateCategoryCounts(
+          transactions,
+        ),
+      ).toEqual({
+        sales: 0,
+        purchases: 0,
+      })
+    })
+  })
+
 
   describe('isDuplicateTransaction', () => {
     it('returns false when transaction has no referenceId', () => {

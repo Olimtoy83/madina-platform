@@ -1,12 +1,15 @@
 ﻿import { useMemo, useState } from 'react'
 import {
+  calculateCategoryCounts,
   calculateCategoryTotals,
   filterTransactions,
+  getTaskStats,
+  getTotalStockQuantity,
   getTransactionTotals,
-  type TaskStatus,
   type Transaction,
   type TransactionPeriod,
 } from '@madina/core'
+
 import { useProducts } from '../../context/useProducts'
 import { useTasks } from '../../context/useTasks'
 import { useTransactions } from '../../context/useTransactions'
@@ -63,25 +66,16 @@ export function Statistics() {
     balance: profit,
   } = transactionTotals
 
-  const salesCount =
-    filteredTransactions.filter(
-      (transaction) =>
-        transaction.type === 'income' &&
-        transaction.category === 'sale',
-    ).length
+  const {
+    sales: salesCount,
+    purchases: purchasesCount,
+  } =
+    calculateCategoryCounts(
+      filteredTransactions,
+    )
 
-  const purchasesCount =
-    filteredTransactions.filter(
-      (transaction) =>
-        transaction.type === 'expense' &&
-        transaction.category === 'purchase',
-    ).length
-
-  const warehouseQuantity = products.reduce(
-    (total, product) =>
-      total + product.quantity,
-    0,
-  )
+  const warehouseQuantity =
+    getTotalStockQuantity(products)
 
   const categoryTotals = useMemo(
     () =>
@@ -92,27 +86,7 @@ export function Statistics() {
   )
 
   const taskStats = useMemo(
-    () => ({
-      total: tasks.length,
-
-      todo: tasks.filter(
-        (task) =>
-          task.status ===
-          ('todo' as TaskStatus),
-      ).length,
-
-      inProgress: tasks.filter(
-        (task) =>
-          task.status ===
-          ('in-progress' as TaskStatus),
-      ).length,
-
-      completed: tasks.filter(
-        (task) =>
-          task.status ===
-          ('completed' as TaskStatus),
-      ).length,
-    }),
+    () => getTaskStats(tasks),
     [tasks],
   )
 

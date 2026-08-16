@@ -13,6 +13,7 @@ import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import {
   getSaleStats,
+  getSaleItemsTotal,
   type PaymentMethod,
   type SaleItem,
 } from '@madina/core'
@@ -172,10 +173,8 @@ export function Sales() {
 
     const now = new Date()
 
-    const totalAmount = saleItems.reduce(
-      (sum, item) => sum + item.totalAmount,
-      0,
-    )
+    const totalAmount =
+      getSaleItemsTotal(saleItems)
 
     const sale: Parameters<typeof addSale>[0] = {
       id: `sale-${Date.now()}`,
@@ -207,11 +206,7 @@ export function Sales() {
   )
 
   const calculatedTotal = useMemo(
-    () =>
-      saleItems.reduce(
-        (sum, item) => sum + item.totalAmount,
-        0,
-      ),
+    () => getSaleItemsTotal(saleItems),
     [saleItems],
   )
 

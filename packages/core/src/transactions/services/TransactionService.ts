@@ -236,6 +236,29 @@ export function calculateCategoryTotals(
   }
 }
 
+export interface TransactionCategoryCounts {
+  sales: number
+  purchases: number
+}
+
+export function calculateCategoryCounts(
+  transactions: Transaction[],
+): TransactionCategoryCounts {
+  return {
+    sales: transactions.filter(
+      (transaction) =>
+        transaction.type === 'income' &&
+        transaction.category === 'sale',
+    ).length,
+
+    purchases: transactions.filter(
+      (transaction) =>
+        transaction.type === 'expense' &&
+        transaction.category === 'purchase',
+    ).length,
+  }
+}
+
 export function isDuplicateTransaction(
   transactions: Transaction[],
   transaction: Transaction,
