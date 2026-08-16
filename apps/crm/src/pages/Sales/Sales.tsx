@@ -13,6 +13,7 @@ import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import {
   getSaleStats,
+  getSaleItemTotal,
   getSaleItemsTotal,
   type PaymentMethod,
   type SaleItem,
@@ -102,49 +103,67 @@ export function Sales() {
       return
     }
 
-    if (parsedQuantity > selectedProduct.quantity) {
+    if (
+      parsedQuantity >
+      selectedProduct.quantity
+    ) {
       return
     }
 
     const existingItem = saleItems.find(
-      (item) => item.productId === selectedProduct.id,
+      (item) =>
+        item.productId ===
+        selectedProduct.id,
     )
 
     if (existingItem) {
       const newQuantity =
-        existingItem.quantity + parsedQuantity
+        existingItem.quantity +
+        parsedQuantity
 
-      if (newQuantity > selectedProduct.quantity) {
+      if (
+        newQuantity >
+        selectedProduct.quantity
+      ) {
         return
       }
 
       setSaleItems((currentItems) =>
         currentItems.map((item) =>
-          item.productId === selectedProduct.id
+          item.productId ===
+            selectedProduct.id
             ? {
               ...item,
               quantity: newQuantity,
               unitPrice: parsedUnitPrice,
               totalAmount:
-                newQuantity * parsedUnitPrice,
+                getSaleItemTotal(
+                  newQuantity,
+                  parsedUnitPrice,),
             }
             : item,
         ),
       )
     } else {
       const item: SaleItem = {
-        productId: selectedProduct.id,
+        productId:
+          selectedProduct.id,
         quantity: parsedQuantity,
-        unit: selectedProduct.unit,
+        unit:
+          selectedProduct.unit,
         unitPrice: parsedUnitPrice,
         totalAmount:
-          parsedQuantity * parsedUnitPrice,
+          getSaleItemTotal(
+            parsedQuantity,
+            parsedUnitPrice,),
       }
 
-      setSaleItems((currentItems) => [
-        ...currentItems,
-        item,
-      ])
+      setSaleItems(
+        (currentItems) => [
+          ...currentItems,
+          item,
+        ],
+      )
     }
 
     setProductId('')

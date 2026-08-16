@@ -14,6 +14,7 @@ import {
   getCompletedTransactions,
   getTransactionTotals,
   getTransactionsByPeriod,
+  getRecentTransactions,
   isDuplicateTransaction,
 } from './TransactionService'
 
@@ -59,6 +60,97 @@ describe('TransactionService', () => {
       expect(result).toHaveLength(1)
       expect(result[0]?.status).toBe(
         'completed',
+      )
+    })
+  })
+
+  describe('getRecentTransactions', () => {
+    it('returns transactions sorted by newest date first', () => {
+      const older = createTransaction({
+        transactionDate: new Date(
+          '2026-08-10T12:00:00',
+        ),
+      })
+
+      const newer = createTransaction({
+        transactionDate: new Date(
+          '2026-08-15T12:00:00',
+        ),
+      })
+
+      const newest = createTransaction({
+        transactionDate: new Date(
+          '2026-08-16T12:00:00',
+        ),
+      })
+
+      const result =
+        getRecentTransactions(
+          [older, newer, newest],
+          3,
+        )
+
+      expect(result[0]?.id).toBe(newest.id)
+      expect(result[1]?.id).toBe(newer.id)
+      expect(result[2]?.id).toBe(older.id)
+    })
+
+    it('limits the number of returned transactions', () => {
+      const transactions = [
+        createTransaction({
+          transactionDate: new Date(
+            '2026-08-10T12:00:00',
+          ),
+        }),
+        createTransaction({
+          transactionDate: new Date(
+            '2026-08-15T12:00:00',
+          ),
+        }),
+        createTransaction({
+          transactionDate: new Date(
+            '2026-08-16T12:00:00',
+          ),
+        }),
+      ]
+
+      const result =
+        getRecentTransactions(
+          transactions,
+          2,
+        )
+
+      expect(result).toHaveLength(2)
+    })
+
+    it('does not mutate the original array', () => {
+      const older = createTransaction({
+        transactionDate: new Date(
+          '2026-08-10T12:00:00',
+        ),
+      })
+
+      const newer = createTransaction({
+        transactionDate: new Date(
+          '2026-08-15T12:00:00',
+        ),
+      })
+
+      const transactions = [
+        older,
+        newer,
+      ]
+
+      getRecentTransactions(
+        transactions,
+        2,
+      )
+
+      expect(transactions[0]?.id).toBe(
+        older.id,
+      )
+      expect(transactions[1]?.id).toBe(
+        newer.id,
       )
     })
   })

@@ -21,6 +21,19 @@ export function getCompletedTransactions(
   )
 }
 
+export function getRecentTransactions(
+  transactions: Transaction[],
+  limit: number,
+): Transaction[] {
+  return [...transactions]
+    .sort(
+      (first, second) =>
+        second.transactionDate.getTime() -
+        first.transactionDate.getTime(),
+    )
+    .slice(0, limit)
+}
+
 export function getTransactionsByPeriod(
   transactions: Transaction[],
   period: TransactionPeriod,

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   getCompletedTransactions,
   getCompletedSales,
+  getRecentTransactions,
   getTotalStockQuantity,
   getTransactionTotals,
 } from '@madina/core'
@@ -51,13 +52,10 @@ export function Dashboard() {
 
   const recentTransactions = useMemo(
     () =>
-      [...completedTransactions]
-        .sort(
-          (first, second) =>
-            second.transactionDate.getTime() -
-            first.transactionDate.getTime(),
-        )
-        .slice(0, 5),
+      getRecentTransactions(
+        completedTransactions,
+        5,
+      ),
     [completedTransactions],
   )
 
