@@ -1,4 +1,4 @@
-import './tokens/index.css'
+﻿import './tokens/index.css'
 
 export {
   Button,
@@ -9,3 +9,12 @@ export type {
   ButtonSize,
   ButtonVariant,
 } from './components/Button/Button'
+
+export {
+  Input,
+} from './components/Input/Input'
+
+export type {
+  InputProps,
+  InputSize,
+} from './components/Input/Input'
