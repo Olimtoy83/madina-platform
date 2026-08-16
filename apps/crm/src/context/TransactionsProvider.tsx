@@ -4,7 +4,10 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Transaction } from '@madina/core'
+import {
+  isDuplicateTransaction,
+  type Transaction,
+} from '@madina/core'
 import { loadStorage, saveStorage } from '../shared/storage'
 import { TransactionsContext } from './TransactionsContext'
 
@@ -45,29 +48,6 @@ function loadTransactions(): Transaction[] {
 
   return storedTransactions.map(
     restoreTransaction,
-  )
-}
-
-function hasReference(
-  transaction: Transaction,
-): boolean {
-  return Boolean(transaction.referenceId)
-}
-
-function isDuplicateTransaction(
-  transactions: Transaction[],
-  transaction: Transaction,
-): boolean {
-  if (!hasReference(transaction)) {
-    return false
-  }
-
-  return transactions.some(
-    (currentTransaction) =>
-      currentTransaction.category ===
-      transaction.category &&
-      currentTransaction.referenceId ===
-      transaction.referenceId,
   )
 }
 

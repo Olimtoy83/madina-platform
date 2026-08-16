@@ -235,3 +235,20 @@ export function calculateCategoryTotals(
       ),
   }
 }
+
+export function isDuplicateTransaction(
+  transactions: Transaction[],
+  transaction: Transaction,
+): boolean {
+  if (!transaction.referenceId) {
+    return false
+  }
+
+  return transactions.some(
+    (currentTransaction) =>
+      currentTransaction.category ===
+      transaction.category &&
+      currentTransaction.referenceId ===
+      transaction.referenceId,
+  )
+}

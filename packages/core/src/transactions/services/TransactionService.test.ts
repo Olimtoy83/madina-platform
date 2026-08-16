@@ -13,6 +13,7 @@ import {
   getCompletedTransactions,
   getTransactionTotals,
   getTransactionsByPeriod,
+  isDuplicateTransaction,
 } from './TransactionService'
 
 function createTransaction(
@@ -433,6 +434,77 @@ describe('TransactionService', () => {
         )
 
       expect(result).toHaveLength(1)
+    })
+  })
+
+  describe('isDuplicateTransaction', () => {
+    it('returns false when transaction has no referenceId', () => {
+      const transactions = [
+        createTransaction({
+          referenceId: undefined,
+        }),
+      ]
+
+      const transaction = createTransaction({
+        referenceId: undefined,
+      })
+
+      expect(
+        isDuplicateTransaction(
+          transactions,
+          transaction,
+        ),
+      ).toBe(false)
+    })
+
+    it('returns true for the same category and referenceId', () => {
+      const transactions = [
+        createTransaction({
+          category: 'sale',
+          referenceId: 'sale-001',
+        }),
+      ]
+
+      const transaction = createTransaction({
+        category: 'sale',
+        referenceId: 'sale-001',
+      })
+
+      expect(
+        isDuplicateTransaction(
+          transactions,
+          transaction,
+        ),
+      ).toBe(true)
+    })
+
+    it('returns false for a different category or referenceId', () => {
+      const transactions = [
+        createTransaction({
+          category: 'sale',
+          referenceId: 'sale-001',
+        }),
+      ]
+
+      expect(
+        isDuplicateTransaction(
+          transactions,
+          createTransaction({
+            category: 'purchase',
+            referenceId: 'sale-001',
+          }),
+        ),
+      ).toBe(false)
+
+      expect(
+        isDuplicateTransaction(
+          transactions,
+          createTransaction({
+            category: 'sale',
+            referenceId: 'sale-002',
+          }),
+        ),
+      ).toBe(false)
     })
   })
 })
