@@ -116,42 +116,16 @@ export function TransactionsProvider({
     [],
   )
 
-  const getTransactionsByType = useCallback(
-    (type: Transaction['type']) =>
-      transactions.filter(
-        (transaction) =>
-          transaction.type === type,
-      ),
-    [transactions],
-  )
-
-  const getTransactionsByCategory =
-    useCallback(
-      (
-        category: Transaction['category'],
-      ) =>
-        transactions.filter(
-          (transaction) =>
-            transaction.category ===
-            category,
-        ),
-      [transactions],
-    )
-
   const value = useMemo(
     () => ({
       transactions,
       addTransaction,
       updateTransaction,
-      getTransactionsByType,
-      getTransactionsByCategory,
     }),
     [
       transactions,
       addTransaction,
       updateTransaction,
-      getTransactionsByType,
-      getTransactionsByCategory,
     ],
   )
 

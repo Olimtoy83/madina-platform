@@ -1,4 +1,4 @@
-﻿import { createContext } from 'react'
+import { createContext } from 'react'
 import type { Transaction } from '@madina/core'
 
 export interface TransactionsContextValue {
@@ -12,14 +12,6 @@ export interface TransactionsContextValue {
     transactionId: string,
     updates: Partial<Transaction>,
   ) => void
-
-  getTransactionsByType: (
-    type: Transaction['type'],
-  ) => Transaction[]
-
-  getTransactionsByCategory: (
-    category: Transaction['category'],
-  ) => Transaction[]
 }
 
 export const TransactionsContext =
