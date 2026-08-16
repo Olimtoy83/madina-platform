@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
-import type {
-  ClientStatus,
+import {
+  getClientSalesStats,
+  type ClientStatus,
 } from '@madina/core'
 
 export function Clients() {
@@ -76,53 +77,17 @@ export function Clients() {
   const clientStats = useMemo(() => {
     return clients.reduce(
       (stats, client) => {
-        const completedSales = sales.filter(
-          (sale) =>
-            sale.status === 'completed' &&
-            (
-              sale.clientId === client.id ||
-              (
-                !sale.clientId &&
-                sale.clientName.trim().toLowerCase() ===
-                client.name.trim().toLowerCase()
-              )
-            ),
-        )
-
-        const totalAmount = completedSales.reduce(
-          (sum, sale) =>
-            sum + sale.totalAmount,
-          0,
-        )
-
-        const lastSale = completedSales.reduce<
-          (typeof completedSales)[number] | undefined
-        >(
-          (latest, sale) =>
-            !latest ||
-              sale.saleDate.getTime() >
-              latest.saleDate.getTime()
-              ? sale
-              : latest,
-          undefined,
-        )
-
-        stats[client.id] = {
-          salesCount: completedSales.length,
-          totalAmount,
-          lastSaleDate:
-            lastSale?.saleDate,
-        }
+        stats[client.id] =
+          getClientSalesStats(
+            client,
+            sales,
+          )
 
         return stats
       },
       {} as Record<
         string,
-        {
-          salesCount: number
-          totalAmount: number
-          lastSaleDate?: Date
-        }
+        ReturnType<typeof getClientSalesStats>
       >,
     )
   }, [clients, sales])
