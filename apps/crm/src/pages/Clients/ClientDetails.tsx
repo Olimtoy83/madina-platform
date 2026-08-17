@@ -11,7 +11,7 @@ import {
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import './ClientDetails.css'
-
+import { Button } from '@madina/ui'
 export function ClientDetails() {
   const { clientId } = useParams()
   const navigate = useNavigate()
@@ -58,14 +58,15 @@ export function ClientDetails() {
   if (!client) {
     return (
       <section className="client-details-page">
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={() =>
             navigate('/clients')
           }
         >
           ← Назад к клиентам
-        </button>
+        </Button>
 
         <h1>Клиент не найден</h1>
 
@@ -91,9 +92,9 @@ export function ClientDetails() {
             ← Назад к клиентам
           </button>
 
-          <button
+          <Button
             type="button"
-            className="btn-primary"
+            variant="primary"
             onClick={() =>
               navigate(
                 `/sales?clientId=${encodeURIComponent(
@@ -103,7 +104,7 @@ export function ClientDetails() {
             }
           >
             Новая продажа
-          </button>
+          </Button>
 
           <h1>{client.name}</h1>
 

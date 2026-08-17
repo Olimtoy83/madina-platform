@@ -8,18 +8,6 @@
 
 .client-details-page__header button {
   margin-bottom: 18px;
-  padding: 9px 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  cursor: pointer;
-}
-
-.client-details-page__header button:hover {
-  border-color: #00695c;
-  color: #00695c;
 }
 
 .client-details-page__header h1 {
@@ -79,7 +67,7 @@
   font-size: 20px;
 }
 
-.client-details-page__info > div {
+.client-details-page__info>div {
   display: grid;
   grid-template-columns: 180px 1fr;
   gap: 16px;
@@ -87,7 +75,7 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
-.client-details-page__info > div:last-child {
+.client-details-page__info>div:last-child {
   border-bottom: none;
 }
 
@@ -122,7 +110,7 @@
   font-size: 14px;
 }
 
-.client-details-page__sales > p {
+.client-details-page__sales>p {
   margin: 0;
   padding: 24px;
   color: #64748b;
@@ -169,7 +157,7 @@
 }
 
 @media (max-width: 600px) {
-  .client-details-page__info > div {
+  .client-details-page__info>div {
     grid-template-columns: 1fr;
     gap: 6px;
   }
