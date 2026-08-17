@@ -11,7 +11,12 @@ import {
   type PurchasePaymentMethod,
   type PurchaseStatus,
 } from '@madina/core'
-import { Button } from '@madina/ui'
+import {
+  Button,
+  Input,
+  Select,
+  Textarea,
+} from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
 
@@ -575,7 +580,7 @@ export function Purchases() {
               <label>
                 <span>Дата поступления</span>
 
-                <input
+                <Input
                   type="date"
                   value={purchaseDate}
                   onChange={(event) =>
@@ -589,7 +594,7 @@ export function Purchases() {
               <label>
                 <span>Поставщик</span>
 
-                <input
+                <Input
                   type="text"
                   value={supplierName}
                   onChange={(event) =>
@@ -623,7 +628,7 @@ export function Purchases() {
                       <label>
                         <span>Товар</span>
 
-                        <select
+                        <Select
                           value={item.productId}
                           onChange={(event) =>
                             updateFormItem(
@@ -652,7 +657,7 @@ export function Purchases() {
                               </option>
                             ),
                           )}
-                        </select>
+                        </Select>
                       </label>
 
                       <label>
@@ -660,7 +665,7 @@ export function Purchases() {
                           Количество
                         </span>
 
-                        <input
+                        <Input
                           type="number"
                           min="0"
                           step="0.01"
@@ -688,7 +693,7 @@ export function Purchases() {
                           Цена закупки
                         </span>
 
-                        <input
+                        <Input
                           type="number"
                           min="0"
                           step="0.01"
@@ -734,7 +739,7 @@ export function Purchases() {
               <label>
                 <span>Примечание</span>
 
-                <textarea
+                <Textarea
                   value={note}
                   onChange={(event) =>
                     setNote(
