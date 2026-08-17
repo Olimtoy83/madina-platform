@@ -1,0 +1,142 @@
+﻿.mb-checkbox {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2);
+}
+
+.mb-checkbox__label {
+  display: inline-flex;
+  align-items: center;
+
+  gap: var(--space-2);
+
+  width: fit-content;
+
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+
+  cursor: pointer;
+}
+
+.mb-checkbox__input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+.mb-checkbox__control {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 18px;
+  height: 18px;
+
+  flex: 0 0 18px;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+
+  background: var(--color-surface);
+
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.mb-checkbox__input:checked
+  + .mb-checkbox__control {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.mb-checkbox__input:checked
+  + .mb-checkbox__control::after {
+  content: '';
+
+  width: 5px;
+  height: 9px;
+
+  border-right: 2px solid var(--color-surface);
+  border-bottom: 2px solid var(--color-surface);
+
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.mb-checkbox__input:focus-visible
+  + .mb-checkbox__control {
+  outline: none;
+
+  box-shadow:
+    0 0 0 3px var(--color-primary-soft);
+}
+
+.mb-checkbox__input:indeterminate
+  + .mb-checkbox__control {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.mb-checkbox__input:indeterminate
+  + .mb-checkbox__control::after {
+  content: '';
+
+  width: 8px;
+  height: 2px;
+
+  border: 0;
+
+  background: var(--color-surface);
+
+  transform: none;
+}
+
+.mb-checkbox__text {
+  user-select: none;
+}
+
+.mb-checkbox--disabled
+  .mb-checkbox__label {
+  cursor: not-allowed;
+
+  color: var(--color-text-muted);
+}
+
+.mb-checkbox--disabled
+  .mb-checkbox__control {
+  background: var(--color-background);
+}
+
+.mb-checkbox--error
+  .mb-checkbox__control {
+  border-color: var(--color-danger);
+}
+
+.mb-checkbox__error {
+  color: var(--color-danger);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+@media (max-width: 768px) {
+  .mb-checkbox__control {
+    width: 20px;
+    height: 20px;
+
+    flex-basis: 20px;
+  }
+}

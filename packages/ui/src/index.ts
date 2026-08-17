@@ -240,3 +240,11 @@ export {
 export type {
   FileUploadProps,
 } from './components/FileUpload/FileUpload'
+
+export {
+  Checkbox,
+} from './components/Checkbox/Checkbox'
+
+export type {
+  CheckboxProps,
+} from './components/Checkbox/Checkbox'
