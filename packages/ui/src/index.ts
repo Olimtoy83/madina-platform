@@ -55,3 +55,12 @@ export type {
   BadgeSize,
   BadgeVariant,
 } from './components/Badge/Badge'
+
+export {
+  Modal,
+} from './components/Modal/Modal'
+
+export type {
+  ModalProps,
+  ModalSize,
+} from './components/Modal/Modal'
