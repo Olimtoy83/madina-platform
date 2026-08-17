@@ -181,3 +181,12 @@ export type {
   AccordionContentProps,
   AccordionMode,
 } from './components/Accordion/Accordion'
+
+export {
+  ConfirmDialog,
+} from './components/ConfirmDialog/ConfirmDialog'
+
+export type {
+  ConfirmDialogProps,
+  ConfirmDialogVariant,
+} from './components/ConfirmDialog/ConfirmDialog'
