@@ -18,3 +18,12 @@ export type {
   InputProps,
   InputSize,
 } from './components/Input/Input'
+
+export {
+  Select,
+} from './components/Select/Select'
+
+export type {
+  SelectProps,
+  SelectSize,
+} from './components/Select/Select'

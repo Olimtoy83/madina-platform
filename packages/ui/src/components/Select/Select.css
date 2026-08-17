@@ -1,0 +1,63 @@
+﻿.mb-select {
+  box-sizing: border-box;
+  width: auto;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  background: var(--color-surface);
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-regular);
+
+  outline: none;
+  cursor: pointer;
+
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.mb-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.mb-select--sm {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-small);
+}
+
+.mb-select--md {
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-body);
+}
+
+.mb-select--lg {
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  font-size: var(--font-size-body-lg);
+}
+
+.mb-select--error {
+  border-color: var(--color-danger);
+}
+
+.mb-select--error:focus {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 3px var(--color-danger-soft);
+}
+
+.mb-select:disabled {
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.mb-select--full-width {
+  width: 100%;
+}
