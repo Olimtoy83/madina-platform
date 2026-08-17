@@ -458,7 +458,7 @@
     flex-direction: column;
   }
 
-  .purchases__header .btn-primary {
+  .purchases__header .mb-button {
     width: 100%;
   }
 
@@ -490,7 +490,7 @@
     flex-direction: column;
   }
 
-  .purchases__form-items-header .btn-secondary {
+  .purchases__form-items-header .mb-button {
     width: 100%;
   }
 

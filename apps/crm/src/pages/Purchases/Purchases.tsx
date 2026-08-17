@@ -11,7 +11,7 @@ import {
   type PurchasePaymentMethod,
   type PurchaseStatus,
 } from '@madina/core'
-
+import { Button } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
 
@@ -266,13 +266,13 @@ export function Purchases() {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
-          className="btn-primary"
+          variant="primary"
           onClick={openCreateForm}
         >
           Добавить поступление
-        </button>
+        </Button>
       </div>
 
       <div className="purchases__table-wrapper">
@@ -479,9 +479,9 @@ export function Purchases() {
           <div className="purchases__purchase-card-actions">
             {selectedPurchase.status ===
               'draft' && (
-                <button
+                <Button
                   type="button"
-                  className="btn-primary"
+                  variant="primary"
                   onClick={() => {
                     const result = completePurchase(
                       selectedPurchase.id,
@@ -507,13 +507,13 @@ export function Purchases() {
                   }}
                 >
                   Завершить поступление
-                </button>
+                </Button>
               )}
 
             {selectedPurchase.status === 'draft' && (
-              <button
+              <Button
                 type="button"
-                className="btn-secondary"
+                variant="secondary"
                 onClick={() => {
                   if (
                     !window.confirm(
@@ -525,30 +525,22 @@ export function Purchases() {
 
                   cancelPurchase(selectedPurchase.id)
 
-                  setSelectedPurchase((currentPurchase) =>
-                    currentPurchase
-                      ? {
-                        ...currentPurchase,
-                        status: 'cancelled',
-                        updatedAt: new Date(),
-                      }
-                      : currentPurchase,
-                  )
+                  // существующий код
                 }}
               >
                 Отменить поступление
-              </button>
+              </Button>
             )}
 
-            <button
+            <Button
               type="button"
-              className="btn-secondary"
+              variant="secondary"
               onClick={() =>
                 setSelectedPurchase(null)
               }
             >
               Закрыть
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -613,13 +605,13 @@ export function Purchases() {
                 <div className="purchases__form-items-header">
                   <h3>Товары</h3>
 
-                  <button
+                  <Button
                     type="button"
-                    className="btn-secondary"
+                    variant="secondary"
                     onClick={addFormItem}
                   >
                     Добавить товар
-                  </button>
+                  </Button>
                 </div>
 
                 {formItems.map(
@@ -719,9 +711,9 @@ export function Purchases() {
                         />
                       </label>
 
-                      <button
+                      <Button
                         type="button"
-                        className="btn-danger"
+                        variant="danger"
                         onClick={() =>
                           removeFormItem(
                             index,
@@ -733,7 +725,7 @@ export function Purchases() {
                         }
                       >
                         Удалить
-                      </button>
+                      </Button>
                     </div>
                   ),
                 )}
@@ -766,23 +758,23 @@ export function Purchases() {
             </div>
 
             <div className="purchases__modal-actions">
-              <button
+              <Button
                 type="button"
-                className="btn-secondary"
+                variant="secondary"
                 onClick={() =>
                   setIsCreateOpen(false)
                 }
               >
                 Отмена
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
-                className="btn-primary"
+                variant="primary"
                 onClick={savePurchase}
               >
                 Создать поступление
-              </button>
+              </Button>
             </div>
           </div>
         </div>
