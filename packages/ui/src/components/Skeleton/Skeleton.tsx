@@ -43,8 +43,12 @@ export function Skeleton({
 
   const skeletonStyle = {
     ...style,
-    width: toCssSize(width),
-    height: toCssSize(height),
+    ...(width !== undefined
+      ? { width: toCssSize(width) }
+      : {}),
+    ...(height !== undefined
+      ? { height: toCssSize(height) }
+      : {}),
   }
 
   if (variant === 'text' && lines > 1) {
@@ -63,11 +67,11 @@ export function Skeleton({
               style={
                 index === lines - 1
                   ? {
-                      ...skeletonStyle,
-                      width:
-                        toCssSize(width) ??
-                        '70%',
-                    }
+                    ...skeletonStyle,
+                    width:
+                      toCssSize(width) ??
+                      '70%',
+                  }
                   : skeletonStyle
               }
             />
