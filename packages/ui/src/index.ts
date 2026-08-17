@@ -281,3 +281,12 @@ export type {
   DividerProps,
   DividerOrientation,
 } from './components/Divider/Divider'
+
+export {
+  Avatar,
+} from './components/Avatar/Avatar'
+
+export type {
+  AvatarProps,
+  AvatarSize,
+} from './components/Avatar/Avatar'

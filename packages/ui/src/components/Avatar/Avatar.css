@@ -1,0 +1,48 @@
+﻿.mb-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 auto;
+
+  overflow: hidden;
+
+  border-radius: 50%;
+
+  background: var(--color-background);
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-medium);
+
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+.mb-avatar--sm {
+  width: 32px;
+  height: 32px;
+
+  font-size: var(--font-size-small);
+}
+
+.mb-avatar--md {
+  width: 40px;
+  height: 40px;
+
+  font-size: var(--font-size-body);
+}
+
+.mb-avatar--lg {
+  width: 48px;
+  height: 48px;
+
+  font-size: var(--font-size-body);
+}
+
+.mb-avatar--xl {
+  width: 64px;
+  height: 64px;
+
+  font-size: var(--font-size-heading-3);
+}
