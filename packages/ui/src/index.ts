@@ -99,3 +99,12 @@ export type {
   SpinnerProps,
   SpinnerSize,
 } from './components/Spinner/Spinner'
+
+export {
+  Alert,
+} from './components/Alert/Alert'
+
+export type {
+  AlertProps,
+  AlertVariant,
+} from './components/Alert/Alert'
