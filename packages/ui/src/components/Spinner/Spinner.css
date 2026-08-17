@@ -11,7 +11,8 @@
 
   border: 2px solid var(--color-border);
   border-top-color: var(--color-primary);
-  border-radius: var(--radius-pill);
+
+  border-radius: 50%;
 
   animation: mb-spinner-rotate 700ms linear infinite;
 }
@@ -19,16 +20,22 @@
 .mb-spinner--sm .mb-spinner__circle {
   width: 16px;
   height: 16px;
+
+  border-width: 2px;
 }
 
 .mb-spinner--md .mb-spinner__circle {
   width: 24px;
   height: 24px;
+
+  border-width: 2px;
 }
 
 .mb-spinner--lg .mb-spinner__circle {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+
+  border-width: 3px;
 }
 
 @keyframes mb-spinner-rotate {

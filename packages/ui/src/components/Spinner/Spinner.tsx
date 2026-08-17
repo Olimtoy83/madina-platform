@@ -1,13 +1,10 @@
 ﻿import type { HTMLAttributes } from 'react'
 import './Spinner.css'
 
-export type SpinnerSize =
-  | 'sm'
-  | 'md'
-  | 'lg'
+export type SpinnerSize = 'sm' | 'md' | 'lg'
 
 export interface SpinnerProps
-  extends HTMLAttributes<HTMLDivElement> {
+  extends HTMLAttributes<HTMLSpanElement> {
   size?: SpinnerSize
   label?: string
 }
@@ -27,16 +24,16 @@ export function Spinner({
     .join(' ')
 
   return (
-    <div
+    <span
+      {...props}
       className={classes}
       role="status"
       aria-label={label}
-      {...props}
     >
       <span
         className="mb-spinner__circle"
         aria-hidden="true"
       />
-    </div>
+    </span>
   )
 }
