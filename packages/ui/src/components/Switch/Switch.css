@@ -1,0 +1,156 @@
+﻿.mb-switch {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2);
+}
+
+.mb-switch__label {
+  display: inline-flex;
+  align-items: center;
+
+  gap: var(--space-3);
+
+  width: fit-content;
+
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+
+  cursor: pointer;
+}
+
+.mb-switch__input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+.mb-switch__control {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+
+  width: 40px;
+  height: 22px;
+
+  flex: 0 0 40px;
+
+  padding: 2px;
+
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+
+  background: var(--color-background);
+
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.mb-switch__thumb {
+  width: 16px;
+  height: 16px;
+
+  border-radius: 50%;
+
+  background: var(--color-surface);
+
+  box-shadow: var(--shadow-sm);
+
+  transform: translateX(0);
+
+  transition: transform 150ms ease;
+}
+
+.mb-switch__input:checked
+  + .mb-switch__control {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.mb-switch__input:checked
+  + .mb-switch__control
+  .mb-switch__thumb {
+  transform: translateX(18px);
+}
+
+.mb-switch__input:focus-visible
+  + .mb-switch__control {
+  outline: none;
+
+  box-shadow:
+    0 0 0 3px var(--color-primary-soft);
+}
+
+.mb-switch__content {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-1);
+}
+
+.mb-switch__text {
+  color: var(--color-text);
+
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+}
+
+.mb-switch__description {
+  color: var(--color-text-muted);
+
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.mb-switch--disabled
+  .mb-switch__label {
+  cursor: not-allowed;
+}
+
+.mb-switch--disabled
+  .mb-switch__control {
+  opacity: 0.6;
+}
+
+.mb-switch--error
+  .mb-switch__control {
+  border-color: var(--color-danger);
+}
+
+.mb-switch__error {
+  color: var(--color-danger);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+@media (max-width: 768px) {
+  .mb-switch__control {
+    width: 44px;
+    height: 24px;
+
+    flex-basis: 44px;
+  }
+
+  .mb-switch__thumb {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mb-switch__input:checked
+    + .mb-switch__control
+    .mb-switch__thumb {
+    transform: translateX(20px);
+  }
+}
