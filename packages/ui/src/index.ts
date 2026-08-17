@@ -207,3 +207,12 @@ export type {
   SkeletonProps,
   SkeletonVariant,
 } from './components/Skeleton/Skeleton'
+
+export {
+  Popover,
+} from './components/Popover/Popover'
+
+export type {
+  PopoverProps,
+  PopoverPlacement,
+} from './components/Popover/Popover'
