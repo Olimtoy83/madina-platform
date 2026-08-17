@@ -2,26 +2,27 @@
 import './Badge.css'
 
 export type BadgeVariant =
-  | 'neutral'
+  | 'default'
   | 'success'
   | 'warning'
   | 'danger'
   | 'info'
 
-export type BadgeSize =
-  | 'sm'
-  | 'md'
+export type BadgeSize = 'sm' | 'md'
 
 export interface BadgeProps
   extends HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant
   size?: BadgeSize
+  dot?: boolean
 }
 
 export function Badge({
-  variant = 'neutral',
+  variant = 'default',
   size = 'md',
+  dot = false,
   className = '',
+  children,
   ...props
 }: BadgeProps) {
   const classes = [
@@ -35,8 +36,19 @@ export function Badge({
 
   return (
     <span
-      className={classes}
       {...props}
-    />
+      className={classes}
+    >
+      {dot && (
+        <span
+          className="mb-badge__dot"
+          aria-hidden="true"
+        />
+      )}
+
+      <span className="mb-badge__content">
+        {children}
+      </span>
+    </span>
   )
 }
