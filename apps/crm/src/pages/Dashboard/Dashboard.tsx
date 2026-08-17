@@ -8,6 +8,7 @@ import {
   getTransactionTotals,
 } from '@madina/core'
 
+import { Button } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
@@ -223,32 +224,35 @@ export function Dashboard() {
           </div>
 
           <div className="dashboard__quick-actions">
-            <button
+            <Button
               type="button"
-              onClick={() =>
-                navigate('/sales')
-              }
+              variant="secondary"
+              fullWidth
+              className="dashboard__quick-action"
+              onClick={() => navigate('/sales')}
             >
               Новая продажа
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
-              onClick={() =>
-                navigate('/purchases')
-              }
+              variant="secondary"
+              fullWidth
+              className="dashboard__quick-action"
+              onClick={() => navigate('/purchases')}
             >
               Добавить поступление
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
-              onClick={() =>
-                navigate('/warehouse')
-              }
+              variant="secondary"
+              fullWidth
+              className="dashboard__quick-action"
+              onClick={() => navigate('/warehouse')}
             >
               Открыть склад
-            </button>
+            </Button>
           </div>
         </section>
       </div>
