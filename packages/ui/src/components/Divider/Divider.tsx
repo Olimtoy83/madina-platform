@@ -30,6 +30,7 @@ export function Divider({
         className={classes}
         role="separator"
         aria-label={label}
+        aria-orientation="horizontal"
         {...props}
       >
         <span className="mb-divider__line" />
