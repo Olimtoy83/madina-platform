@@ -108,3 +108,14 @@ export type {
   AlertProps,
   AlertVariant,
 } from './components/Alert/Alert'
+
+export {
+  DropdownMenu,
+} from './components/DropdownMenu/DropdownMenu'
+
+export type {
+  DropdownMenuItem,
+  DropdownMenuProps,
+  DropdownMenuAlign,
+  DropdownMenuSize,
+} from './components/DropdownMenu/DropdownMenu'
