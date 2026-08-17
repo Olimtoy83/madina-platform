@@ -64,3 +64,21 @@ export type {
   ModalProps,
   ModalSize,
 } from './components/Modal/Modal'
+
+export {
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableHeader,
+  TableCell,
+} from './components/Table/Table'
+
+export type {
+  TableProps,
+  TableHeadProps,
+  TableBodyProps,
+  TableRowProps,
+  TableHeaderProps,
+  TableCellProps,
+} from './components/Table/Table'
