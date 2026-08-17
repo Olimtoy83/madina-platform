@@ -216,3 +216,11 @@ export type {
   PopoverProps,
   PopoverPlacement,
 } from './components/Popover/Popover'
+
+export {
+  DatePicker,
+} from './components/DatePicker/DatePicker'
+
+export type {
+  DatePickerProps,
+} from './components/DatePicker/DatePicker'

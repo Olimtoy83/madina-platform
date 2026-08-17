@@ -1,0 +1,77 @@
+﻿.mb-date-picker {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2);
+
+  width: 100%;
+}
+
+.mb-date-picker__label {
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-small);
+}
+
+.mb-date-picker__input {
+  width: 100%;
+  min-height: 40px;
+
+  padding: var(--space-2) var(--space-3);
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+
+  background: var(--color-surface);
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.mb-date-picker__input:hover {
+  border-color: var(--color-text-muted);
+}
+
+.mb-date-picker__input:focus {
+  outline: none;
+
+  border-color: var(--color-primary);
+
+  box-shadow:
+    0 0 0 3px var(--color-primary-soft);
+}
+
+.mb-date-picker__input:disabled {
+  cursor: not-allowed;
+
+  background: var(--color-background);
+  color: var(--color-text-muted);
+}
+
+.mb-date-picker--error
+  .mb-date-picker__input {
+  border-color: var(--color-danger);
+}
+
+.mb-date-picker__error {
+  color: var(--color-danger);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+@media (max-width: 768px) {
+  .mb-date-picker__input {
+    min-height: 44px;
+  }
+}
