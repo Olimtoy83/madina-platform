@@ -7,7 +7,12 @@ import {
   getClientSalesStats,
   type ClientStatus,
 } from '@madina/core'
-import { Button } from '@madina/ui'
+import {
+  Button,
+  Input,
+  Textarea,
+  Select,
+} from '@madina/ui'
 
 export function Clients() {
   const {
@@ -123,7 +128,7 @@ export function Clients() {
 
           <label>
             Имя
-            <input
+            <Input
               type="text"
               value={name}
               onChange={(event) =>
@@ -135,7 +140,7 @@ export function Clients() {
 
           <label>
             Телефон
-            <input
+            <Input
               type="text"
               value={phone}
               onChange={(event) =>
@@ -147,7 +152,7 @@ export function Clients() {
 
           <label>
             Email
-            <input
+            <Input
               type="email"
               value={email}
               onChange={(event) =>
@@ -159,7 +164,7 @@ export function Clients() {
 
           <label>
             Компания
-            <input
+            <Input
               type="text"
               value={company}
               onChange={(event) =>
@@ -171,7 +176,7 @@ export function Clients() {
 
           <label>
             Примечание
-            <textarea
+            <Textarea
               value={note}
               onChange={(event) =>
                 setNote(event.target.value)
@@ -182,7 +187,7 @@ export function Clients() {
 
           <label>
             Статус
-            <select
+            <Select
               value={status}
               onChange={(event) =>
                 setStatus(
@@ -193,11 +198,10 @@ export function Clients() {
               <option value="active">
                 Активен
               </option>
-
               <option value="inactive">
                 Неактивен
               </option>
-            </select>
+            </Select>
           </label>
 
           <div className="clients-page__form-actions">
@@ -319,7 +323,7 @@ export function Clients() {
                     </td>
 
                     <td>
-                      <select
+                      <Select
                         value={client.status}
                         onChange={(event) =>
                           updateClient(
@@ -338,7 +342,7 @@ export function Clients() {
                         <option value="inactive">
                           Неактивен
                         </option>
-                      </select>
+                      </Select>
                     </td>
 
                     <td>
