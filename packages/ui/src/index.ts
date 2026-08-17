@@ -166,3 +166,18 @@ export type {
   DrawerSize,
   DrawerPlacement,
 } from './components/Drawer/Drawer'
+
+export {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from './components/Accordion/Accordion'
+
+export type {
+  AccordionProps,
+  AccordionItemProps,
+  AccordionTriggerProps,
+  AccordionContentProps,
+  AccordionMode,
+} from './components/Accordion/Accordion'

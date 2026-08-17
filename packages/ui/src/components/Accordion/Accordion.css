@@ -1,0 +1,120 @@
+﻿.mb-accordion {
+  width: 100%;
+
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  font-family: var(--font-family-base);
+  color: var(--color-text);
+
+  overflow: hidden;
+}
+
+.mb-accordion__item {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mb-accordion__item:last-child {
+  border-bottom: 0;
+}
+
+.mb-accordion__item--disabled {
+  opacity: 0.6;
+}
+
+.mb-accordion__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+
+  width: 100%;
+
+  min-height: 52px;
+
+  padding: var(--space-3) var(--space-4);
+
+  border: 0;
+
+  background: var(--color-surface);
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-body);
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.mb-accordion__trigger:hover:not(:disabled) {
+  background: var(--color-background);
+}
+
+.mb-accordion__trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.mb-accordion__trigger:disabled {
+  cursor: not-allowed;
+}
+
+.mb-accordion__trigger-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.mb-accordion__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 auto;
+
+  width: 24px;
+  height: 24px;
+
+  color: var(--color-text-muted);
+
+  font-size: 20px;
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
+
+  transition: transform 150ms ease;
+}
+
+.mb-accordion__icon--open {
+  transform: rotate(45deg);
+}
+
+.mb-accordion__content {
+  background: var(--color-surface);
+}
+
+.mb-accordion__content-inner {
+  padding: 0 var(--space-4) var(--space-4);
+
+  color: var(--color-text);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+@media (max-width: 768px) {
+  .mb-accordion__trigger {
+    min-height: 48px;
+    padding: var(--space-3);
+  }
+
+  .mb-accordion__content-inner {
+    padding: 0 var(--space-3) var(--space-3);
+  }
+}
