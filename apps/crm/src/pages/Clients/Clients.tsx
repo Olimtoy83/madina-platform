@@ -7,6 +7,7 @@ import {
   getClientSalesStats,
   type ClientStatus,
 } from '@madina/core'
+import { Button } from '@madina/ui'
 
 export function Clients() {
   const {
@@ -103,8 +104,9 @@ export function Clients() {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="primary"
           onClick={() =>
             setIsFormOpen((current) => !current)
           }
@@ -112,7 +114,7 @@ export function Clients() {
           {isFormOpen
             ? 'Закрыть'
             : 'Новый клиент'}
-        </button>
+        </Button>
       </div>
 
       {isFormOpen && (
@@ -199,25 +201,25 @@ export function Clients() {
           </label>
 
           <div className="clients-page__form-actions">
-            <button
+            <Button
               type="button"
-              className="btn-primary"
+              variant="primary"
               onClick={handleCreateClient}
               disabled={!name.trim()}
             >
               Создать клиента
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
-              className="btn-secondary"
+              variant="secondary"
               onClick={() => {
                 resetForm()
                 setIsFormOpen(false)
               }}
             >
               Отмена
-            </button>
+            </Button>
           </div>
         </section>
       )}
@@ -340,15 +342,13 @@ export function Clients() {
                     </td>
 
                     <td>
-                      <button
+                      <Button
                         type="button"
-                        className="btn-danger"
-                        onClick={() =>
-                          deleteClient(client.id)
-                        }
+                        variant="danger"
+                        onClick={() => deleteClient(client.id)}
                       >
                         Удалить
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 )
