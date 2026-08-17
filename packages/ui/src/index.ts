@@ -27,3 +27,12 @@ export type {
   SelectProps,
   SelectSize,
 } from './components/Select/Select'
+
+export {
+  Textarea,
+} from './components/Textarea/Textarea'
+
+export type {
+  TextareaProps,
+  TextareaSize,
+} from './components/Textarea/Textarea'
