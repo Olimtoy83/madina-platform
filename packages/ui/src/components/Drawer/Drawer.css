@@ -1,0 +1,134 @@
+﻿.mb-drawer__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  background: rgb(15 23 42 / 0.45);
+
+  overflow: hidden;
+}
+
+.mb-drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+
+  font-family: var(--font-family-base);
+  color: var(--color-text);
+
+  overflow: hidden;
+}
+
+.mb-drawer--right {
+  right: 0;
+}
+
+.mb-drawer--left {
+  left: 0;
+}
+
+.mb-drawer--sm {
+  width: min(360px, 100%);
+}
+
+.mb-drawer--md {
+  width: min(480px, 100%);
+}
+
+.mb-drawer--lg {
+  width: min(640px, 100%);
+}
+
+.mb-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+
+  flex: 0 0 auto;
+
+  min-height: 64px;
+  padding: 0 var(--space-5);
+
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mb-drawer__title {
+  margin: 0;
+
+  color: var(--color-text);
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+}
+
+.mb-drawer__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 auto;
+
+  width: 36px;
+  height: 36px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: var(--radius-md);
+
+  background: transparent;
+  color: var(--color-text-muted);
+
+  font-family: var(--font-family-base);
+  font-size: 24px;
+  line-height: 1;
+
+  cursor: pointer;
+
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.mb-drawer__close:hover {
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.mb-drawer__close:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.mb-drawer__body {
+  min-height: 0;
+  flex: 1;
+
+  padding: var(--space-5);
+
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .mb-drawer--sm,
+  .mb-drawer--md,
+  .mb-drawer--lg {
+    width: 100%;
+  }
+
+  .mb-drawer__header {
+    min-height: 56px;
+    padding: 0 var(--space-4);
+  }
+
+  .mb-drawer__body {
+    padding: var(--space-4);
+  }
+}

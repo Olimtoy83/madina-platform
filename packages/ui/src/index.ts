@@ -156,3 +156,13 @@ export type {
   TooltipPlacement,
   TooltipSize,
 } from './components/Tooltip/Tooltip'
+
+export {
+  Drawer,
+} from './components/Drawer/Drawer'
+
+export type {
+  DrawerProps,
+  DrawerSize,
+  DrawerPlacement,
+} from './components/Drawer/Drawer'
