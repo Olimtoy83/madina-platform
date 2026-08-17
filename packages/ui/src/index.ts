@@ -136,3 +136,13 @@ export type {
   TabItem,
   TabsProps,
 } from './components/Tabs/Tabs'
+
+export {
+  Toast,
+} from './components/Toast/Toast'
+
+export type {
+  ToastProps,
+  ToastSize,
+  ToastVariant,
+} from './components/Toast/Toast'
