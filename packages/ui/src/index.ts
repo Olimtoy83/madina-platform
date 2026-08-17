@@ -264,3 +264,11 @@ export {
 export type {
   SwitchProps,
 } from './components/Switch/Switch'
+
+export {
+  Progress,
+} from './components/Progress/Progress'
+
+export type {
+  ProgressProps,
+} from './components/Progress/Progress'
