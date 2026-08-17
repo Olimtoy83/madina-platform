@@ -146,3 +146,13 @@ export type {
   ToastSize,
   ToastVariant,
 } from './components/Toast/Toast'
+
+export {
+  Tooltip,
+} from './components/Tooltip/Tooltip'
+
+export type {
+  TooltipProps,
+  TooltipPlacement,
+  TooltipSize,
+} from './components/Tooltip/Tooltip'
