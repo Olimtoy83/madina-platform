@@ -1,0 +1,119 @@
+﻿.mb-file-upload {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2);
+
+  width: 100%;
+}
+
+.mb-file-upload__label {
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-small);
+}
+
+.mb-file-upload__dropzone {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  gap: var(--space-2);
+
+  min-height: 140px;
+
+  padding: var(--space-6);
+
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+
+  background: var(--color-surface);
+
+  text-align: center;
+
+  cursor: pointer;
+
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.mb-file-upload__dropzone:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.mb-file-upload__title {
+  color: var(--color-text);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.mb-file-upload__description {
+  color: var(--color-text-muted);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.mb-file-upload__hint {
+  color: var(--color-text-muted);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+}
+
+.mb-file-upload__input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+.mb-file-upload--error
+  .mb-file-upload__dropzone {
+  border-color: var(--color-danger);
+}
+
+.mb-file-upload--disabled
+  .mb-file-upload__dropzone {
+  cursor: not-allowed;
+
+  background: var(--color-background);
+  opacity: 0.6;
+}
+
+.mb-file-upload--disabled
+  .mb-file-upload__dropzone:hover {
+  border-color: var(--color-border);
+  background: var(--color-background);
+}
+
+.mb-file-upload__error {
+  color: var(--color-danger);
+
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+@media (max-width: 768px) {
+  .mb-file-upload__dropzone {
+    min-height: 120px;
+
+    padding: var(--space-4);
+  }
+}

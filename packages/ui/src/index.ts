@@ -232,3 +232,11 @@ export {
 export type {
   TimePickerProps,
 } from './components/TimePicker/TimePicker'
+
+export {
+  FileUpload,
+} from './components/FileUpload/FileUpload'
+
+export type {
+  FileUploadProps,
+} from './components/FileUpload/FileUpload'
