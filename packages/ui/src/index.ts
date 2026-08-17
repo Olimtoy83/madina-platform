@@ -272,3 +272,12 @@ export {
 export type {
   ProgressProps,
 } from './components/Progress/Progress'
+
+export {
+  Divider,
+} from './components/Divider/Divider'
+
+export type {
+  DividerProps,
+  DividerOrientation,
+} from './components/Divider/Divider'
