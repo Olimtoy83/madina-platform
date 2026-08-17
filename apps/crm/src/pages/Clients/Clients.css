@@ -210,8 +210,7 @@
   }
 
 
-  .clients-page__header .btn-primary,
-  .clients-page__header .btn-secondary {
+  .clients-page__header .mb-button {
     width: 100%;
   }
 
