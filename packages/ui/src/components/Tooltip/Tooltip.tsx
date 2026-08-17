@@ -1,125 +1,95 @@
 ﻿import {
-  cloneElement,
-  useEffect,
-  useId,
   useState,
-  type ReactElement,
-  type ReactNode,
   type HTMLAttributes,
+  type ReactNode,
 } from 'react'
 import './Tooltip.css'
 
 export type TooltipPlacement =
   | 'top'
-  | 'right'
   | 'bottom'
   | 'left'
+  | 'right'
 
 export type TooltipSize =
   | 'sm'
   | 'md'
 
-type TooltipChildProps =
-  HTMLAttributes<HTMLElement>
-
-export interface TooltipProps {
+export interface TooltipProps
+  extends Omit<
+    HTMLAttributes<HTMLSpanElement>,
+    'content'
+  > {
   content: ReactNode
-  children: ReactElement<TooltipChildProps>
   placement?: TooltipPlacement
   size?: TooltipSize
-  delay?: number
+  children: ReactNode
   disabled?: boolean
 }
 
 export function Tooltip({
   content,
-  children,
   placement = 'top',
   size = 'md',
-  delay = 300,
+  children,
   disabled = false,
+  className = '',
+  ...props
 }: TooltipProps) {
   const [open, setOpen] = useState(false)
-  const [visible, setVisible] = useState(false)
-  const tooltipId = useId()
-
-  useEffect(() => {
-    if (disabled) {
-      setOpen(false)
-      setVisible(false)
-      return
-    }
-
-    if (!open) {
-      setVisible(false)
-      return
-    }
-
-    if (delay <= 0) {
-      setVisible(true)
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setVisible(true)
-    }, delay)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [open, delay, disabled])
-
-  useEffect(() => {
-    if (!visible) {
-      return
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [visible])
-
-  if (disabled) {
-    return children
-  }
 
   const classes = [
-    'mb-tooltip__content',
-    `mb-tooltip__content--${placement}`,
-    `mb-tooltip__content--${size}`,
-  ].join(' ')
+    'mb-tooltip',
+    `mb-tooltip--${placement}`,
+    `mb-tooltip--${size}`,
+    open ? 'mb-tooltip--open' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
-  const child = cloneElement(children, {
-    'aria-describedby': visible
-      ? tooltipId
-      : undefined,
-    onMouseEnter: () => setOpen(true),
-    onMouseLeave: () => setOpen(false),
-    onFocus: () => setOpen(true),
-    onBlur: () => setOpen(false),
-  })
+  if (disabled) {
+    return (
+      <span
+        {...props}
+        className={className}
+      >
+        {children}
+      </span>
+    )
+  }
 
   return (
-    <span className="mb-tooltip">
-      {child}
+    <span
+      {...props}
+      className={classes}
+      onMouseEnter={(event) => {
+        setOpen(true)
+        props.onMouseEnter?.(event)
+      }}
+      onMouseLeave={(event) => {
+        setOpen(false)
+        props.onMouseLeave?.(event)
+      }}
+      onFocus={(event) => {
+        setOpen(true)
+        props.onFocus?.(event)
+      }}
+      onBlur={(event) => {
+        setOpen(false)
+        props.onBlur?.(event)
+      }}
+    >
+      <span className="mb-tooltip__trigger">
+        {children}
+      </span>
 
-      {visible && (
-        <span
-          id={tooltipId}
-          className={classes}
-          role="tooltip"
-        >
-          {content}
-        </span>
-      )}
+      <span
+        className="mb-tooltip__content"
+        role="tooltip"
+      >
+        {content}
+      </span>
     </span>
   )
 }
