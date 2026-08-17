@@ -36,3 +36,12 @@ export type {
   TextareaProps,
   TextareaSize,
 } from './components/Textarea/Textarea'
+
+export {
+  Card,
+} from './components/Card/Card'
+
+export type {
+  CardProps,
+  CardVariant,
+} from './components/Card/Card'
