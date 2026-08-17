@@ -198,3 +198,12 @@ export {
 export type {
   EmptyStateProps,
 } from './components/EmptyState/EmptyState'
+
+export {
+  Skeleton,
+} from './components/Skeleton/Skeleton'
+
+export type {
+  SkeletonProps,
+  SkeletonVariant,
+} from './components/Skeleton/Skeleton'

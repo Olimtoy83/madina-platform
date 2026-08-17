@@ -1,0 +1,64 @@
+﻿.mb-skeleton {
+  display: block;
+
+  min-width: 0;
+
+  border-radius: var(--radius-md);
+
+  background:
+    linear-gradient(
+      90deg,
+      var(--color-background) 25%,
+      var(--color-border) 50%,
+      var(--color-background) 75%
+    );
+
+  background-size: 200% 100%;
+
+  animation: mb-skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.mb-skeleton--text {
+  width: 100%;
+  height: 16px;
+}
+
+.mb-skeleton--rect {
+  min-height: 48px;
+}
+
+.mb-skeleton--circle {
+  width: 40px;
+  height: 40px;
+
+  border-radius: var(--radius-pill);
+}
+
+.mb-skeleton__group {
+  display: flex;
+  flex-direction: column;
+
+  gap: var(--space-2);
+
+  width: 100%;
+}
+
+.mb-skeleton__group .mb-skeleton {
+  width: 100%;
+}
+
+@keyframes mb-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-skeleton {
+    animation: none;
+  }
+}
