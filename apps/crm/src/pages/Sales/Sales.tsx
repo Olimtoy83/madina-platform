@@ -18,6 +18,7 @@ import {
   type PaymentMethod,
   type SaleItem,
 } from '@madina/core'
+import { Button } from '@madina/ui'
 
 export function Sales() {
   const navigate = useNavigate()
@@ -552,9 +553,9 @@ export function Sales() {
                 </label>
               </div>
 
-              <button
+              <Button
                 type="button"
-                className="btn-secondary"
+                variant="secondary"
                 onClick={handleAddItem}
                 disabled={
                   !selectedProduct ||
@@ -563,7 +564,7 @@ export function Sales() {
                 }
               >
                 Добавить товар
-              </button>
+              </Button>
 
               {saleItems.length > 0 && (
                 <div className="sales-modal__items">
@@ -605,9 +606,9 @@ export function Sales() {
                             SAR
                           </strong>
 
-                          <button
+                          <Button
                             type="button"
-                            className="btn-danger"
+                            variant="danger"
                             onClick={() =>
                               handleRemoveItem(
                                 item.productId,
@@ -615,7 +616,7 @@ export function Sales() {
                             }
                           >
                             Удалить
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     )
@@ -636,17 +637,17 @@ export function Sales() {
             </div>
 
             <div className="sales-modal__footer">
-              <button
+              <Button
                 type="button"
-                className="btn-secondary"
+                variant="secondary"
                 onClick={closeModal}
               >
                 Отмена
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
-                className="btn-secondary"
+                variant="secondary"
                 onClick={handleSaveDraft}
                 disabled={
                   !clientId ||
@@ -654,7 +655,7 @@ export function Sales() {
                 }
               >
                 Сохранить черновик
-              </button>
+              </Button>
             </div>
           </div>
         </div>

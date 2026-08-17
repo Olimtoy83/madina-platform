@@ -439,7 +439,7 @@
     align-items: stretch;
   }
 
-  .sales-page__header .btn-primary {
+  .sales-page__header .mb-button {
     width: 100%;
   }
 
@@ -485,8 +485,7 @@
     padding: 16px 18px;
   }
 
-  .sales-modal__footer .btn-primary,
-  .sales-modal__footer .btn-secondary {
+  .sales-modal__footer .mb-button {
     width: 100%;
   }
 
