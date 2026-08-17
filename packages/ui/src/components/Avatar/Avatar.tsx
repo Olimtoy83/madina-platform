@@ -1,4 +1,5 @@
 ﻿import {
+  useEffect,
   useState,
   type ImgHTMLAttributes,
 } from 'react'
@@ -22,9 +23,14 @@ export function Avatar({
   size = 'md',
   src,
   className = '',
+  onError,
   ...props
 }: AvatarProps) {
   const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    setHasError(false)
+  }, [src])
 
   const classes = [
     'mb-avatar',
@@ -62,7 +68,10 @@ export function Avatar({
       src={src}
       alt={alt}
       className={classes}
-      onError={() => setHasError(true)}
+      onError={(event) => {
+        setHasError(true)
+        onError?.(event)
+      }}
     />
   )
 }
