@@ -1,0 +1,40 @@
+﻿.mb-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+
+  font-family: var(--font-family-base);
+}
+
+.mb-form-field__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+
+  color: var(--color-text);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-body);
+
+  cursor: pointer;
+}
+
+.mb-form-field__required {
+  color: var(--color-danger);
+}
+
+.mb-form-field__description {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.mb-form-field__control {
+  min-width: 0;
+}
+
+.mb-form-field__error {
+  color: var(--color-danger);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}

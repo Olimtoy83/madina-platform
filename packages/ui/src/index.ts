@@ -82,3 +82,11 @@ export type {
   TableHeaderProps,
   TableCellProps,
 } from './components/Table/Table'
+
+export {
+  FormField,
+} from './components/FormField/FormField'
+
+export type {
+  FormFieldProps,
+} from './components/FormField/FormField'
