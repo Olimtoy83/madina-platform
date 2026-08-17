@@ -5,6 +5,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '@madina/core'
+import { Button } from '@madina/ui'
 import './Tasks.css'
 
 const priorityLabels: Record<TaskPriority, string> = {
@@ -213,25 +214,25 @@ export function Tasks() {
           </div>
 
           <div>
-            <button
+            <Button
               type="button"
-              className="btn-primary"
+              variant="primary"
               onClick={handleCreateTask}
               disabled={!title.trim()}
             >
               Создать задачу
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
-              className="btn-secondary"
+              variant="secondary"
               onClick={() => {
                 resetForm()
                 setIsFormOpen(false)
               }}
             >
               Отмена
-            </button>
+            </Button>
           </div>
         </section>
       )}
@@ -333,15 +334,15 @@ export function Tasks() {
                   </td>
 
                   <td>
-                    <button
+                    <Button
                       type="button"
-                      className="btn-danger"
+                      variant="danger"
                       onClick={() =>
                         deleteTask(task.id)
                       }
                     >
                       Удалить
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))
