@@ -190,3 +190,11 @@ export type {
   ConfirmDialogProps,
   ConfirmDialogVariant,
 } from './components/ConfirmDialog/ConfirmDialog'
+
+export {
+  EmptyState,
+} from './components/EmptyState/EmptyState'
+
+export type {
+  EmptyStateProps,
+} from './components/EmptyState/EmptyState'
