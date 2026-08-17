@@ -127,3 +127,12 @@ export {
 export type {
   PaginationProps,
 } from './components/Pagination/Pagination'
+
+export {
+  Tabs,
+} from './components/Tabs/Tabs'
+
+export type {
+  TabItem,
+  TabsProps,
+} from './components/Tabs/Tabs'
