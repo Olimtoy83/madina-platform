@@ -45,3 +45,13 @@ export type {
   CardProps,
   CardVariant,
 } from './components/Card/Card'
+
+export {
+  Badge,
+} from './components/Badge/Badge'
+
+export type {
+  BadgeProps,
+  BadgeSize,
+  BadgeVariant,
+} from './components/Badge/Badge'
