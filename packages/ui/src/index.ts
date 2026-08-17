@@ -224,3 +224,11 @@ export {
 export type {
   DatePickerProps,
 } from './components/DatePicker/DatePicker'
+
+export {
+  TimePicker,
+} from './components/TimePicker/TimePicker'
+
+export type {
+  TimePickerProps,
+} from './components/TimePicker/TimePicker'
