@@ -90,3 +90,12 @@ export {
 export type {
   FormFieldProps,
 } from './components/FormField/FormField'
+
+export {
+  Spinner,
+} from './components/Spinner/Spinner'
+
+export type {
+  SpinnerProps,
+  SpinnerSize,
+} from './components/Spinner/Spinner'

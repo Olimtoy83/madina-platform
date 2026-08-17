@@ -1,0 +1,44 @@
+﻿.mb-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: 0 0 auto;
+}
+
+.mb-spinner__circle {
+  display: block;
+
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-pill);
+
+  animation: mb-spinner-rotate 700ms linear infinite;
+}
+
+.mb-spinner--sm .mb-spinner__circle {
+  width: 16px;
+  height: 16px;
+}
+
+.mb-spinner--md .mb-spinner__circle {
+  width: 24px;
+  height: 24px;
+}
+
+.mb-spinner--lg .mb-spinner__circle {
+  width: 32px;
+  height: 32px;
+}
+
+@keyframes mb-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-spinner__circle {
+    animation-duration: 1.5s;
+  }
+}
