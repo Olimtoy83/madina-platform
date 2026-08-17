@@ -7,6 +7,7 @@ import {
   type Transaction,
   type TransactionPeriod,
 } from '@madina/core'
+import { Select } from '@madina/ui'
 
 import './Accounting.css'
 
@@ -103,7 +104,7 @@ export function Accounting() {
         </div>
 
         <div className="accounting-filters">
-          <select
+          <Select
             value={period}
             onChange={(event) =>
               setPeriod(
@@ -123,9 +124,9 @@ export function Accounting() {
             <option value="month">
               Текущий месяц
             </option>
-          </select>
+          </Select>
 
-          <select
+          <Select
             value={typeFilter}
             onChange={(event) =>
               setTypeFilter(
@@ -142,7 +143,7 @@ export function Accounting() {
             <option value="expense">
               Только расходы
             </option>
-          </select>
+          </Select>
         </div>
       </header>
 
