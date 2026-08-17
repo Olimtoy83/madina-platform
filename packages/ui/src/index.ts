@@ -248,3 +248,11 @@ export {
 export type {
   CheckboxProps,
 } from './components/Checkbox/Checkbox'
+
+export {
+  Radio,
+} from './components/Radio/Radio'
+
+export type {
+  RadioProps,
+} from './components/Radio/Radio'
