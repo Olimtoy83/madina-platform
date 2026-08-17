@@ -6,6 +6,7 @@
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type ReactNode,
+  type MouseEvent,
 } from 'react'
 import './Accordion.css'
 
@@ -50,6 +51,7 @@ const AccordionItemContext =
   createContext<{
     value: string
     disabled: boolean
+    contentId: string
   } | null>(null)
 
 function useAccordionContext() {
@@ -150,6 +152,8 @@ export function AccordionItem({
   children,
   ...props
 }: AccordionItemProps) {
+  const contentId = useId()
+
   const classes = [
     'mb-accordion__item',
     disabled ? 'mb-accordion__item--disabled' : '',
@@ -163,6 +167,7 @@ export function AccordionItem({
       value={{
         value,
         disabled,
+        contentId,
       }}
     >
       <div
@@ -179,6 +184,8 @@ export function AccordionTrigger({
   className = '',
   children,
   type = 'button',
+  onClick,
+  disabled: _disabled,
   ...props
 }: AccordionTriggerProps) {
   const {
@@ -189,10 +196,9 @@ export function AccordionTrigger({
   const {
     value,
     disabled,
+    contentId,
   } = useAccordionItemContext()
 
-  const triggerId = useId()
-  const contentId = `${triggerId}-content`
   const isOpen = openItems.includes(value)
 
   const classes = [
@@ -202,6 +208,13 @@ export function AccordionTrigger({
     .filter(Boolean)
     .join(' ')
 
+  const handleClick = (
+    event: MouseEvent<HTMLButtonElement>,
+  ) => {
+    toggleItem(value)
+    onClick?.(event)
+  }
+
   return (
     <button
       type={type}
@@ -209,7 +222,7 @@ export function AccordionTrigger({
       disabled={disabled}
       aria-expanded={isOpen}
       aria-controls={contentId}
-      onClick={() => toggleItem(value)}
+      onClick={handleClick}
       {...props}
     >
       <span className="mb-accordion__trigger-content">
@@ -244,9 +257,9 @@ export function AccordionContent({
 
   const {
     value,
+    contentId,
   } = useAccordionItemContext()
 
-  const contentId = useId()
   const isOpen = openItems.includes(value)
 
   const classes = [
