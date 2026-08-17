@@ -18,7 +18,11 @@ import {
   type PaymentMethod,
   type SaleItem,
 } from '@madina/core'
-import { Button } from '@madina/ui'
+import {
+  Button,
+  Input,
+  Select,
+} from '@madina/ui'
 
 export function Sales() {
   const navigate = useNavigate()
@@ -417,7 +421,7 @@ export function Sales() {
               <label className="sales-modal__field">
                 <span>Клиент</span>
 
-                <select
+                <Select
                   value={clientId}
                   onChange={(event) =>
                     setClientId(event.target.value)
@@ -443,13 +447,13 @@ export function Sales() {
                           : ''}
                       </option>
                     ))}
-                </select>
+                </Select>
               </label>
 
               <label className="sales-modal__field">
                 <span>Способ оплаты</span>
 
-                <select
+                <Select
                   value={paymentMethod}
                   onChange={(event) =>
                     setPaymentMethod(
@@ -472,13 +476,13 @@ export function Sales() {
                   <option value="other">
                     Другое
                   </option>
-                </select>
+                </Select>
               </label>
 
               <label className="sales-modal__field">
                 <span>Товар</span>
 
-                <select
+                <Select
                   value={productId}
                   onChange={(event) =>
                     handleProductChange(
@@ -505,7 +509,7 @@ export function Sales() {
                         {product.unit}
                       </option>
                     ))}
-                </select>
+                </Select>
               </label>
 
               {selectedProduct && (
@@ -525,7 +529,7 @@ export function Sales() {
                     {selectedProduct?.unit || 'ед.'})
                   </span>
 
-                  <input
+                  <Input
                     type="number"
                     min="0"
                     step="0.01"
@@ -540,7 +544,7 @@ export function Sales() {
                 <label className="sales-modal__field">
                   <span>Цена за единицу</span>
 
-                  <input
+                  <Input
                     type="number"
                     min="0"
                     step="0.01"
