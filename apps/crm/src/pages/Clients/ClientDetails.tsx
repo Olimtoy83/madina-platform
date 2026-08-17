@@ -82,15 +82,15 @@ export function ClientDetails() {
     <section className="client-details-page">
       <div className="client-details-page__header">
         <div>
-          <button
+          <Button
             type="button"
-            className="btn-secondary"
+            variant="secondary"
             onClick={() =>
               navigate('/clients')
             }
           >
             ← Назад к клиентам
-          </button>
+          </Button>
 
           <Button
             type="button"

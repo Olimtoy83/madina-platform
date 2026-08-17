@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Button } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 
@@ -27,13 +28,13 @@ export function SaleDetails() {
       <section>
         <h1>Продажа не найдена</h1>
 
-        <button
+        <Button
           type="button"
-          className="btn-secondary"
+          variant="secondary"
           onClick={() => navigate('/sales')}
         >
           ← Назад к продажам
-        </button>
+        </Button>
       </section>
     )
   }
@@ -68,13 +69,13 @@ export function SaleDetails() {
 
   return (
     <section>
-      <button
+      <Button
         type="button"
-        className="btn-secondary"
+        variant="secondary"
         onClick={() => navigate('/sales')}
       >
         ← Назад к продажам
-      </button>
+      </Button>
 
       <h1>Продажа {sale.saleNumber}</h1>
 
@@ -107,21 +108,21 @@ export function SaleDetails() {
 
       {isDraft && (
         <div>
-          <button
+          <Button
             type="button"
-            className="btn-primary"
+            variant="primary"
             onClick={handleComplete}
           >
             Завершить продажу
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
-            className="btn-danger"
+            variant="danger"
             onClick={handleCancel}
           >
             Отменить продажу
-          </button>
+          </Button>
         </div>
       )}
 
