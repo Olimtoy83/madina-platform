@@ -1,11 +1,11 @@
 ﻿import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  getCompletedTransactions,
   getCurrentStockByUnit,
   getFinancialKpis,
   getInventoryProductSummary,
   getRecentTransactions,
+  getReportingEligibleTransactions,
   getSalesReportingSummary,
 } from '@madina/core'
 
@@ -50,18 +50,18 @@ export function Dashboard() {
     [products],
   )
 
-  const completedTransactions = useMemo(
-    () => getCompletedTransactions(transactions),
+  const eligibleTransactions = useMemo(
+    () => getReportingEligibleTransactions(transactions, 'all'),
     [transactions],
   )
 
   const recentTransactions = useMemo(
     () =>
       getRecentTransactions(
-        completedTransactions,
+        eligibleTransactions,
         5,
       ),
-    [completedTransactions],
+    [eligibleTransactions],
   )
 
   function formatMoney(value: number) {
