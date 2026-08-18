@@ -15,10 +15,12 @@ import {
   getSaleStats,
   getSaleItemTotal,
   getSaleItemsTotal,
+  SaleValidationError,
   type PaymentMethod,
   type SaleItem,
 } from '@madina/core'
 import {
+  Alert,
   Button,
   Input,
   Select,
@@ -44,6 +46,9 @@ export function Sales() {
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>('cash')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [error, setError] = useState<string | null>(
+    null,
+  )
 
   const [saleItems, setSaleItems] = useState<SaleItem[]>([])
 
@@ -58,6 +63,7 @@ export function Sales() {
   function openModal(
     initialClientId = '',
   ) {
+    setError(null)
     setClientId(initialClientId)
     setPaymentMethod('cash')
     setSaleItems([])
@@ -76,6 +82,7 @@ export function Sales() {
   }, [searchParams])
 
   function closeModal() {
+    setError(null)
     setIsModalOpen(false)
   }
 
@@ -97,6 +104,8 @@ export function Sales() {
     if (!selectedProduct) {
       return
     }
+
+    setError(null)
 
     const parsedQuantity = Number(quantity)
     const parsedUnitPrice = Number(unitPrice)
@@ -126,6 +135,9 @@ export function Sales() {
         existingItem.unitPrice !==
         parsedUnitPrice
       ) {
+        setError(
+          'Этот товар уже добавлен с другой ценой. Добавьте его с той же ценой или удалите текущую позицию.',
+        )
         return
       }
 
@@ -189,6 +201,29 @@ export function Sales() {
       ),
     )
   }
+
+  function handleCompleteSale(saleId: string) {
+    setError(null)
+
+    try {
+      const result = completeSale(saleId)
+
+      if (!result.success) {
+        setError(
+          result.message ??
+            'Не удалось завершить продажу.',
+        )
+      }
+    } catch (error) {
+      if (error instanceof SaleValidationError) {
+        setError(error.message)
+        return
+      }
+
+      throw error
+    }
+  }
+
   function handleSaveDraft() {
     const selectedClient = clients.find(
       (client) => client.id === clientId,
@@ -256,6 +291,17 @@ export function Sales() {
           Новая продажа
         </Button>
       </div>
+
+      {error && !isModalOpen && (
+        <Alert
+          variant="danger"
+          title="Ошибка"
+          dismissible
+          onDismiss={() => setError(null)}
+        >
+          {error}
+        </Alert>
+      )}
 
       <div className="sales-page__summary">
         <div className="sales-page__summary-card">
@@ -352,7 +398,7 @@ export function Sales() {
                             type="button"
                             className="sales-page__cancel-button"
                             onClick={() =>
-                              completeSale(sale.id)
+                              handleCompleteSale(sale.id)
                             }
                           >
                             Завершить
@@ -424,6 +470,17 @@ export function Sales() {
             </div>
 
             <div className="sales-modal__body">
+              {error && (
+                <Alert
+                  variant="danger"
+                  title="Ошибка"
+                  dismissible
+                  onDismiss={() => setError(null)}
+                >
+                  {error}
+                </Alert>
+              )}
+
               <label className="sales-modal__field">
                 <span>Клиент</span>
 
