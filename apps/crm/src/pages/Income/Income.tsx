@@ -1,8 +1,8 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTransactions } from '../../context/useTransactions'
 import {
-  filterTransactions,
-  getTransactionTotals,
+  getFinancialKpis,
+  getReportingEligibleTransactions,
   type Transaction,
 } from '@madina/core'
 
@@ -51,27 +51,29 @@ export function Income() {
   const [filter, setFilter] =
     useState<Filter>('all')
 
-  const filteredTransactions = useMemo(
-    () =>
-      filterTransactions(transactions, {
-        type:
-          filter === 'all'
-            ? undefined
-            : filter,
-      }),
-    [transactions, filter],
-  )
-
-  const transactionTotals = useMemo(
-    () => getTransactionTotals(transactions),
+  const eligibleTransactions = useMemo(
+    () => getReportingEligibleTransactions(transactions, 'all'),
     [transactions],
   )
 
+  const filteredTransactions = useMemo(
+    () =>
+      filter === 'all'
+        ? eligibleTransactions
+        : eligibleTransactions.filter(
+          (transaction) => transaction.type === filter,
+        ),
+    [eligibleTransactions, filter],
+  )
+
   const {
-    income: totalIncome,
-    expense: totalExpense,
-    balance,
-  } = transactionTotals
+    totalIncome,
+    totalExpense,
+    financialBalance,
+  } = useMemo(
+    () => getFinancialKpis(transactions, 'all'),
+    [transactions],
+  )
 
   function formatAmount(amount: number) {
     return new Intl.NumberFormat('ru-RU', {
@@ -120,11 +122,11 @@ export function Income() {
 
         <article className="income-card">
           <span className="income-card__label">
-            Баланс
+            Финансовый результат
           </span>
 
           <strong className="income-card__value">
-            {formatAmount(balance)} SAR
+            {formatAmount(financialBalance)} SAR
           </strong>
         </article>
       </div>
