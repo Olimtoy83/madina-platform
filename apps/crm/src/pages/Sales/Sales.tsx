@@ -242,13 +242,13 @@ export function Sales() {
           <p>Управление продажами и заказами</p>
         </div>
 
-        <button
+        <Button
           type="button"
           className="sales-page__cancel-button"
           onClick={() => openModal()}
         >
           Новая продажа
-        </button>
+        </Button>
       </div>
 
       <div className="sales-page__summary">
@@ -303,13 +303,13 @@ export function Sales() {
                   <tr key={sale.id}>
 
                     <td>
-                      <button
+                      <Button
                         type="button"
                         className="sales-page__sale-link"
                         onClick={() => navigate(`/sales/${sale.id}`)}
                       >
                         {sale.saleNumber}
-                      </button>
+                      </Button>
                     </td>
 
                     <td>
@@ -342,7 +342,7 @@ export function Sales() {
                     <td>
                       {sale.status === 'draft' && (
                         <div className="sales-page__actions">
-                          <button
+                          <Button
                             type="button"
                             className="sales-page__cancel-button"
                             onClick={() =>
@@ -350,9 +350,9 @@ export function Sales() {
                             }
                           >
                             Завершить
-                          </button>
+                          </Button>
 
-                          <button
+                          <Button
                             type="button"
                             className="sales-page__cancel-button"
                             onClick={() => {
@@ -366,7 +366,7 @@ export function Sales() {
                             }}
                           >
                             Отменить
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </td>
@@ -407,14 +407,14 @@ export function Sales() {
                 </p>
               </div>
 
-              <button
+              <Button
                 type="button"
                 className="sales-modal__close"
                 onClick={closeModal}
                 aria-label="Закрыть"
               >
                 ×
-              </button>
+              </Button>
             </div>
 
             <div className="sales-modal__body">
