@@ -2,6 +2,10 @@
 import { getStockMovementTotals } from '@madina/core'
 import { useStockMovements } from '../../context/useStockMovements'
 import { useProducts } from '../../context/useProducts'
+import {
+  Input,
+  Select,
+} from '@madina/ui'
 
 import './StockMovements.css'
 
@@ -168,7 +172,7 @@ export function StockMovements() {
             Тип движения
           </label>
 
-          <select
+          <Select
             id="movement-type"
             value={typeFilter}
             onChange={(event) =>
@@ -192,7 +196,7 @@ export function StockMovements() {
                 {label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="stock-movements__filter">
@@ -200,7 +204,7 @@ export function StockMovements() {
             Товар
           </label>
 
-          <select
+          <Select
             id="movement-product"
             value={productFilter}
             onChange={(event) =>
@@ -221,7 +225,7 @@ export function StockMovements() {
                 {product.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <div className="stock-movements__filter">
@@ -229,7 +233,7 @@ export function StockMovements() {
             Дата от
           </label>
 
-          <input
+          <Input
             id="movement-date-from"
             type="date"
             value={dateFrom}
@@ -246,7 +250,7 @@ export function StockMovements() {
             Дата до
           </label>
 
-          <input
+          <Input
             id="movement-date-to"
             type="date"
             value={dateTo}
