@@ -107,11 +107,11 @@ export function SalesProvider({
           currentSales.map(
             (sale) =>
               sale.id === saleId
-                ? {
+                ? normalizeSale({
                   ...sale,
                   ...updates,
                   updatedAt: new Date(),
-                }
+                })
                 : sale,
           )
 

@@ -149,15 +149,39 @@ export function Purchases() {
   ) {
     setError(null)
 
-    setFormItems((currentItems) => {
-      const currentItem = currentItems[index]
+    const currentItem = formItems[index]
 
-      if (!currentItem) {
+    if (!currentItem) {
+      return
+    }
+
+    const duplicateItem = updates.productId
+      ? formItems.find(
+        (item, itemIndex) =>
+          itemIndex !== index &&
+          item.productId === updates.productId,
+      )
+      : undefined
+
+    if (
+      duplicateItem &&
+      duplicateItem.unitCost !== currentItem.unitCost
+    ) {
+      setError(
+        'Этот товар уже добавлен с другой ценой закупки. Добавьте его с той же ценой или удалите текущую позицию.',
+      )
+      return
+    }
+
+    setFormItems((currentItems) => {
+      const itemToUpdate = currentItems[index]
+
+      if (!itemToUpdate) {
         return currentItems
       }
 
       const nextItem = {
-        ...currentItem,
+        ...itemToUpdate,
         ...updates,
       }
 
@@ -182,7 +206,7 @@ export function Purchases() {
                 ...item,
                 quantity:
                   item.quantity +
-                  currentItem.quantity,
+                  itemToUpdate.quantity,
               }
               : item,
           )

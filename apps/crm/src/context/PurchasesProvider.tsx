@@ -112,11 +112,11 @@ export function PurchasesProvider({
           currentPurchases.map(
             (purchase) =>
               purchase.id === purchaseId
-                ? {
+                ? normalizePurchase({
                   ...purchase,
                   ...updates,
                   updatedAt: new Date(),
-                }
+                })
                 : purchase,
           )
 
