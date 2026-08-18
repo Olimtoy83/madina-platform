@@ -17,15 +17,9 @@ export function TransactionsProvider({ children }: TransactionsProviderProps) {
     }))
   }, [commit, snapshot, transactions])
 
-  const updateTransaction = useCallback((transactionId: string, updates: Partial<Transaction>) => {
-    const nextTransactions = transactions.map((transaction) =>
-      transaction.id === transactionId
-        ? { ...transaction, ...updates, updatedAt: new Date() }
-        : transaction,
-    )
-    commit(getNextSnapshot(snapshot, { transactions: nextTransactions }))
-  }, [commit, snapshot, transactions])
-
-  const value = useMemo(() => ({ transactions, addTransaction, updateTransaction }), [transactions, addTransaction, updateTransaction])
+  const value = useMemo(() => ({ transactions, addTransaction }), [
+    transactions,
+    addTransaction,
+  ])
   return <TransactionsContext.Provider value={value}>{children}</TransactionsContext.Provider>
 }

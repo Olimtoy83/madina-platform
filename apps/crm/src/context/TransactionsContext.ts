@@ -7,11 +7,6 @@ export interface TransactionsContextValue {
   addTransaction: (
     transaction: Transaction,
   ) => void
-
-  updateTransaction: (
-    transactionId: string,
-    updates: Partial<Transaction>,
-  ) => void
 }
 
 export const TransactionsContext =

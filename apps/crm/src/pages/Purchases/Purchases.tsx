@@ -48,6 +48,10 @@ export function Purchases() {
 
   const { products } = useProducts()
 
+  const activeProducts = products.filter(
+    (product) => product.status === 'active',
+  )
+
   const {
     purchases,
     addPurchase,
@@ -87,7 +91,7 @@ export function Purchases() {
   const [formItems, setFormItems] =
     useState<FormItem[]>([
       {
-        productId: 'product-001',
+        productId: activeProducts[0]?.id ?? '',
         quantity: 1,
         unitCost: 0,
       },
@@ -118,7 +122,7 @@ export function Purchases() {
   function addFormItem() {
     setError(null)
 
-    const firstProduct = products.find(
+    const firstProduct = activeProducts.find(
       (product) =>
         !formItems.some(
           (item) =>
@@ -317,7 +321,7 @@ export function Purchases() {
     setFormItems([
       {
         productId:
-          products[0]?.id ?? 'product-001',
+          activeProducts[0]?.id ?? '',
         quantity: 1,
         unitCost: 0,
       },
@@ -325,7 +329,7 @@ export function Purchases() {
   }
 
   function openCreateForm() {
-    const firstProduct = products[0]
+    const firstProduct = activeProducts[0]
 
     setError(null)
     setPurchaseDate('')
@@ -336,8 +340,7 @@ export function Purchases() {
     setFormItems([
       {
         productId:
-          firstProduct?.id ??
-          'product-001',
+          firstProduct?.id ?? '',
         quantity: 1,
         unitCost: 0,
       },
@@ -758,7 +761,7 @@ export function Purchases() {
                             )
                           }
                         >
-                          {products.map(
+                          {activeProducts.map(
                             (product) => (
                               <option
                                 key={
