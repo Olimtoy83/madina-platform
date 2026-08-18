@@ -2,10 +2,11 @@
 import { useNavigate } from 'react-router-dom'
 import {
   getCompletedTransactions,
-  getCompletedSales,
+  getCurrentStockByUnit,
+  getFinancialKpis,
+  getInventoryProductSummary,
   getRecentTransactions,
-  getTotalStockQuantity,
-  getTransactionTotals,
+  getSalesReportingSummary,
 } from '@madina/core'
 
 import { Button } from '@madina/ui'
@@ -21,30 +22,33 @@ export function Dashboard() {
   const { sales } = useSales()
   const { transactions } = useTransactions()
 
-  const completedSales = useMemo(
-    () => getCompletedSales(sales),
+  const salesSummary = useMemo(
+    () => getSalesReportingSummary(sales, 'all'),
     [sales],
   )
 
-  const transactionTotals = useMemo(
-    () => getTransactionTotals(transactions),
+  const financialKpis = useMemo(
+    () => getFinancialKpis(transactions, 'all'),
     [transactions],
   )
 
   const {
-    income,
-    expense: expenses,
-    balance: profit,
-  } = transactionTotals
+    totalIncome,
+    totalExpense,
+    financialBalance,
+  } = financialKpis
 
-  const salesCount = completedSales.length
+  const { completedCount: salesCount } = salesSummary
 
-  const warehouseProductsCount =
-    products.length
+  const { productCount: warehouseProductsCount } = useMemo(
+    () => getInventoryProductSummary(products),
+    [products],
+  )
 
-
-  const warehouseQuantity =
-    getTotalStockQuantity(products)
+  const stockByUnit = useMemo(
+    () => getCurrentStockByUnit(products),
+    [products],
+  )
 
   const completedTransactions = useMemo(
     () => getCompletedTransactions(transactions),
@@ -66,6 +70,18 @@ export function Dashboard() {
 
   function formatDate(date: Date) {
     return date.toLocaleDateString('ru-RU')
+  }
+
+  function formatStockByUnit() {
+    if (stockByUnit.length === 0) {
+      return 'Нет остатков'
+    }
+
+    return stockByUnit
+      .map(({ quantity, unit }) =>
+        `${quantity.toLocaleString('ru-RU')} ${unit}`,
+      )
+      .join(', ')
   }
 
   function getTransactionLabel(
@@ -107,7 +123,7 @@ export function Dashboard() {
       <div className="dashboard__kpi-grid">
         <article className="dashboard__card">
           <span className="dashboard__card-label">
-            Продажи
+            Завершённые продажи
           </span>
 
           <strong className="dashboard__card-value">
@@ -117,31 +133,31 @@ export function Dashboard() {
 
         <article className="dashboard__card">
           <span className="dashboard__card-label">
-            Доход
+            Общий доход
           </span>
 
           <strong className="dashboard__card-value">
-            {formatMoney(income)}
+            {formatMoney(totalIncome)}
           </strong>
         </article>
 
         <article className="dashboard__card">
           <span className="dashboard__card-label">
-            Расходы
+            Общие расходы
           </span>
 
           <strong className="dashboard__card-value">
-            {formatMoney(expenses)}
+            {formatMoney(totalExpense)}
           </strong>
         </article>
 
         <article className="dashboard__card">
           <span className="dashboard__card-label">
-            Прибыль
+            Финансовый результат
           </span>
 
           <strong className="dashboard__card-value">
-            {formatMoney(profit)}
+            {formatMoney(financialBalance)}
           </strong>
         </article>
 
@@ -157,11 +173,11 @@ export function Dashboard() {
 
         <article className="dashboard__card">
           <span className="dashboard__card-label">
-            Единиц на складе
+            Остатки на складе
           </span>
 
           <strong className="dashboard__card-value">
-            {warehouseQuantity}
+            {formatStockByUnit()}
           </strong>
         </article>
       </div>
@@ -270,9 +286,9 @@ export function Dashboard() {
         </p>
 
         <p>
-          Общее количество единиц товара:{' '}
+          Остатки по единицам:{' '}
           <strong>
-            {warehouseQuantity}
+            {formatStockByUnit()}
           </strong>
         </p>
       </section>
