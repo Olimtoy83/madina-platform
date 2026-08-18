@@ -13,7 +13,7 @@ export interface ClientsContextValue {
     updates: Partial<Client>,
   ) => void
 
-  deleteClient: (
+  deactivateClient: (
     clientId: string,
   ) => void
 

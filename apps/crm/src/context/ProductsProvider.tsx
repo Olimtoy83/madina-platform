@@ -3,7 +3,13 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Product } from '@madina/core'
+import {
+  deactivateProduct as deactivateProductCore,
+  updateProduct as updateProductCore,
+  type Product,
+  type Purchase,
+  type Sale,
+} from '@madina/core'
 
 import {
   loadStorage,
@@ -69,46 +75,65 @@ export function ProductsProvider({
     })
   }
 
-  function removeProduct(productId: string) {
-    setProducts((currentProducts) => {
-      const nextProducts =
-        currentProducts.filter(
-          (product) =>
-            product.id !== productId,
-        )
+  function deactivateProduct(productId: string) {
+    const product = products.find(
+      (currentProduct) =>
+        currentProduct.id === productId,
+    )
 
-      saveStorage(
-        STORAGE_KEY,
-        nextProducts,
-      )
+    if (!product) {
+      return undefined
+    }
 
-      return nextProducts
-    })
+    const deactivatedProduct =
+      deactivateProductCore(product)
+
+    const nextProducts = products.map(
+      (currentProduct) =>
+        currentProduct.id === productId
+          ? deactivatedProduct
+          : currentProduct,
+    )
+
+    setProducts(nextProducts)
+    saveStorage(STORAGE_KEY, nextProducts)
+
+    return deactivatedProduct
   }
 
   function updateProduct(
     productId: string,
     updates: Partial<Product>,
+    sales: Sale[],
+    purchases: Purchase[],
   ) {
-    setProducts((currentProducts) => {
-      const nextProducts =
-        currentProducts.map((product) =>
-          product.id === productId
-            ? {
-              ...product,
-              ...updates,
-              updatedAt: new Date(),
-            }
-            : product,
-        )
+    const product = products.find(
+      (currentProduct) =>
+        currentProduct.id === productId,
+    )
 
-      saveStorage(
-        STORAGE_KEY,
-        nextProducts,
-      )
+    if (!product) {
+      return undefined
+    }
 
-      return nextProducts
-    })
+    const updatedProduct = updateProductCore(
+      product,
+      updates,
+      sales,
+      purchases,
+    )
+
+    const nextProducts = products.map(
+      (currentProduct) =>
+        currentProduct.id === productId
+          ? updatedProduct
+          : currentProduct,
+    )
+
+    setProducts(nextProducts)
+    saveStorage(STORAGE_KEY, nextProducts)
+
+    return updatedProduct
   }
 
   function replaceProducts(
@@ -126,7 +151,7 @@ export function ProductsProvider({
     () => ({
       products,
       addProduct,
-      removeProduct,
+      deactivateProduct,
       updateProduct,
       replaceProducts,
     }),

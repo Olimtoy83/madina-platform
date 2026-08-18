@@ -1,6 +1,16 @@
 import type { Client } from '../types/client'
 import type { Sale } from '../../sales/types/sale'
 
+export function deactivateClient(
+  client: Client,
+): Client {
+  return {
+    ...client,
+    status: 'inactive',
+    updatedAt: new Date(),
+  }
+}
+
 export interface ClientSalesStats {
   salesCount: number
   totalAmount: number

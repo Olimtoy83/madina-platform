@@ -19,7 +19,7 @@ export function Clients() {
     clients,
     addClient,
     updateClient,
-    deleteClient,
+    deactivateClient,
   } = useClients()
 
   const { sales } = useSales()
@@ -348,10 +348,10 @@ export function Clients() {
                     <td>
                       <Button
                         type="button"
-                        variant="danger"
-                        onClick={() => deleteClient(client.id)}
+                        variant="secondary"
+                        onClick={() => deactivateClient(client.id)}
                       >
-                        Удалить
+                        Деактивировать
                       </Button>
                     </td>
                   </tr>

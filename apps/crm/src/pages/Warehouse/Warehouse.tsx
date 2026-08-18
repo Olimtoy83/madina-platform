@@ -1,15 +1,19 @@
 ﻿import { useState } from 'react'
 import { useProducts } from '../../context/useProducts'
+import { usePurchases } from '../../context/usePurchases'
+import { useSales } from '../../context/useSales'
 import { useStockMovements } from '../../context/useStockMovements'
 
 import {
   adjustStock,
+  ProductValidationError,
   type Product,
   type ProductCategory,
   type ProductUnit,
 } from '@madina/core'
 
 import {
+  Alert,
   Button,
   Input,
   Select,
@@ -36,13 +40,16 @@ export function Warehouse() {
   const {
     products,
     addProduct,
-    removeProduct,
+    deactivateProduct,
     updateProduct,
     replaceProducts,
   } = useProducts()
 
   const { addMovement } =
     useStockMovements()
+
+  const { sales } = useSales()
+  const { purchases } = usePurchases()
 
   const [search, setSearch] = useState('')
   const [category, setCategory] =
@@ -57,8 +64,11 @@ export function Warehouse() {
   const [isAdding, setIsAdding] =
     useState(false)
 
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] =
+  const [isDeactivateConfirmOpen, setIsDeactivateConfirmOpen] =
     useState(false)
+
+  const [validationError, setValidationError] =
+    useState<string | null>(null)
 
   const [isAdjustmentOpen, setIsAdjustmentOpen] =
     useState(false)
@@ -107,13 +117,13 @@ export function Warehouse() {
     setSelectedProduct(product)
     setIsEditing(false)
     setIsAdding(false)
-    setIsDeleteConfirmOpen(false)
+    setIsDeactivateConfirmOpen(false)
   }
 
   function closeProduct() {
     setSelectedProduct(null)
     setIsEditing(false)
-    setIsDeleteConfirmOpen(false)
+    setIsDeactivateConfirmOpen(false)
   }
 
   function startAdjustment() {
@@ -201,23 +211,42 @@ export function Warehouse() {
       return
     }
 
-    updateProduct(updatedProduct.id, {
-      name: updatedProduct.name,
-      category: updatedProduct.category,
-      unit: updatedProduct.unit,
-      costPrice: updatedProduct.costPrice,
-      salePrice: updatedProduct.salePrice,
-      status: updatedProduct.status,
-    })
+    try {
+      const savedProduct = updateProduct(
+        updatedProduct.id,
+        {
+          name: updatedProduct.name,
+          category: updatedProduct.category,
+          unit: updatedProduct.unit,
+          costPrice: updatedProduct.costPrice,
+          salePrice: updatedProduct.salePrice,
+          status: updatedProduct.status,
+        },
+        sales,
+        purchases,
+      )
 
-    setSelectedProduct(updatedProduct)
-    setIsEditing(false)
+      if (!savedProduct) {
+        return
+      }
+
+      setSelectedProduct(savedProduct)
+      setValidationError(null)
+      setIsEditing(false)
+    } catch (error) {
+      if (error instanceof ProductValidationError) {
+        setValidationError(error.message)
+        return
+      }
+
+      throw error
+    }
   }
 
   function startAdding() {
     setSelectedProduct(null)
     setIsEditing(false)
-    setIsDeleteConfirmOpen(false)
+    setIsDeactivateConfirmOpen(false)
     setIsAdding(true)
 
     setAddForm({
@@ -262,22 +291,27 @@ export function Warehouse() {
     setIsAdding(false)
   }
 
-  function startDelete() {
-    setIsDeleteConfirmOpen(true)
+  function startDeactivation() {
+    setIsDeactivateConfirmOpen(true)
   }
 
-  function cancelDelete() {
-    setIsDeleteConfirmOpen(false)
+  function cancelDeactivation() {
+    setIsDeactivateConfirmOpen(false)
   }
 
-  function confirmDelete() {
+  function confirmDeactivation() {
     if (!selectedProduct) return
 
-    removeProduct(selectedProduct.id)
+    const deactivatedProduct = deactivateProduct(
+      selectedProduct.id,
+    )
 
-    setSelectedProduct(null)
-    setIsEditing(false)
-    setIsDeleteConfirmOpen(false)
+    if (!deactivatedProduct) {
+      return
+    }
+
+    setSelectedProduct(deactivatedProduct)
+    setIsDeactivateConfirmOpen(false)
   }
 
   return (
@@ -299,6 +333,17 @@ export function Warehouse() {
           Добавить товар
         </Button>
       </div>
+
+      {validationError && (
+        <Alert
+          variant="danger"
+          title="Нельзя изменить единицу товара"
+          dismissible
+          onDismiss={() => setValidationError(null)}
+        >
+          {validationError}
+        </Alert>
+      )}
 
       <div className="warehouse__toolbar">
         <Input
@@ -742,9 +787,9 @@ export function Warehouse() {
                 <Button
                   type="button"
                   className="warehouse__secondary-button"
-                  onClick={startDelete}
+                  onClick={startDeactivation}
                 >
-                  Удалить
+                  Деактивировать
                 </Button>
 
                 <Button
@@ -849,20 +894,20 @@ export function Warehouse() {
                 </div>
               )}
 
-              {isDeleteConfirmOpen && (
+              {isDeactivateConfirmOpen && (
                 <div className="warehouse__delete-confirm">
-                  <h3>Удалить товар?</h3>
+                  <h3>Деактивировать товар?</h3>
 
                   <p>
-                    Вы действительно хотите удалить
-                    «{selectedProduct.name}»?
+                    Товар «{selectedProduct.name}» останется
+                    доступным в истории, но станет неактивным.
                   </p>
 
                   <div className="warehouse__product-card-actions">
                     <Button
                       type="button"
                       className="warehouse__secondary-button"
-                      onClick={cancelDelete}
+                      onClick={cancelAdjustment}
                     >
                       Отмена
                     </Button>
@@ -870,9 +915,9 @@ export function Warehouse() {
                     <Button
                       type="button"
                       className="warehouse__primary-button"
-                      onClick={confirmDelete}
+                      onClick={handleAdjustment}
                     >
-                      Удалить
+                      Сохранить корректировку
                     </Button>
                   </div>
                 </div>
@@ -1102,7 +1147,7 @@ export function Warehouse() {
                     <Button
                       type="button"
                       className="warehouse__secondary-button"
-                      onClick={cancelDelete}
+                      onClick={cancelDeactivation}
                     >
                       Отмена
                     </Button>
@@ -1110,9 +1155,9 @@ export function Warehouse() {
                     <Button
                       type="button"
                       className="warehouse__primary-button"
-                      onClick={confirmDelete}
+                      onClick={confirmDeactivation}
                     >
-                      Удалить
+                      Деактивировать
                     </Button>
                   </div>
                 </div>

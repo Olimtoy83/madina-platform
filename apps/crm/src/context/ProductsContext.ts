@@ -1,17 +1,25 @@
 ﻿import { createContext } from 'react'
-import type { Product } from '@madina/core'
+import type {
+  Product,
+  Purchase,
+  Sale,
+} from '@madina/core'
 
 export interface ProductsContextValue {
   products: Product[]
 
   addProduct: (product: Product) => void
 
-  removeProduct: (productId: string) => void
+  deactivateProduct: (
+    productId: string,
+  ) => Product | undefined
 
   updateProduct: (
     productId: string,
     updates: Partial<Product>,
-  ) => void
+    sales: Sale[],
+    purchases: Purchase[],
+  ) => Product | undefined
 
   replaceProducts: (
     products: Product[],

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Client } from '../types/client'
 import type { Sale } from '../../sales/types/sale'
 import {
+  deactivateClient,
   getClientSalesStats,
   getCompletedSalesForClient,
 } from './ClientService'
@@ -42,6 +43,26 @@ function createSale(
 }
 
 describe('ClientService', () => {
+  it('deactivates a client without changing its identity or sale snapshots', () => {
+    const client = createClient()
+    const sale = createSale({
+      clientId: client.id,
+      clientName: client.name,
+    })
+
+    const result = deactivateClient(client)
+
+    expect(result).toMatchObject({
+      id: client.id,
+      status: 'inactive',
+    })
+    expect(result.createdAt).toBe(client.createdAt)
+    expect(sale).toMatchObject({
+      clientId: client.id,
+      clientName: client.name,
+    })
+  })
+
   describe('getCompletedSalesForClient', () => {
     it('returns completed sales linked by clientId', () => {
       const client = createClient()

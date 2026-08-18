@@ -4,7 +4,10 @@
   useState,
   type ReactNode,
 } from 'react'
-import type { Client } from '@madina/core'
+import {
+  deactivateClient as deactivateClientCore,
+  type Client,
+} from '@madina/core'
 import {
   loadStorage,
   saveStorage,
@@ -100,24 +103,31 @@ export function ClientsProvider({
     [],
   )
 
-  const deleteClient = useCallback(
+  const deactivateClient = useCallback(
     (clientId: string) => {
-      setClients((currentClients) => {
-        const nextClients =
-          currentClients.filter(
-            (client) =>
-              client.id !== clientId,
-          )
+      const client = clients.find(
+        (currentClient) =>
+          currentClient.id === clientId,
+      )
 
-        saveStorage(
-          STORAGE_KEY,
-          nextClients,
-        )
+      if (!client) {
+        return
+      }
 
-        return nextClients
-      })
+      const deactivatedClient =
+        deactivateClientCore(client)
+
+      const nextClients = clients.map(
+        (currentClient) =>
+          currentClient.id === clientId
+            ? deactivatedClient
+            : currentClient,
+      )
+
+      setClients(nextClients)
+      saveStorage(STORAGE_KEY, nextClients)
     },
-    [],
+    [clients],
   )
 
   const getClientById = useCallback(
@@ -134,14 +144,14 @@ export function ClientsProvider({
       clients,
       addClient,
       updateClient,
-      deleteClient,
+      deactivateClient,
       getClientById,
     }),
     [
       clients,
       addClient,
       updateClient,
-      deleteClient,
+      deactivateClient,
       getClientById,
     ],
   )
