@@ -1,17 +1,21 @@
 ﻿import { useMemo, useState } from 'react'
 import {
-  calculateCategoryCounts,
   calculateCategoryTotals,
-  filterTransactions,
+  getCurrentStockByUnit,
+  getFinancialKpis,
+  getInventoryProductSummary,
+  getPurchasesReportingSummary,
+  getReportingEligibleTransactions,
+  getSalesReportingSummary,
   getTaskStats,
-  getTotalStockQuantity,
-  getTransactionTotals,
+  type PresetReportingPeriod,
   type Transaction,
-  type TransactionPeriod,
 } from '@madina/core'
 
 import { Select } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
+import { usePurchases } from '../../context/usePurchases'
+import { useSales } from '../../context/useSales'
 import { useTasks } from '../../context/useTasks'
 import { useTransactions } from '../../context/useTransactions'
 
@@ -36,60 +40,73 @@ const categoryLabels: Record<
 export function Statistics() {
   const { transactions } = useTransactions()
   const { products } = useProducts()
+  const { sales } = useSales()
+  const { purchases } = usePurchases()
   const { tasks } = useTasks()
 
   const [period, setPeriod] =
-    useState<TransactionPeriod>('all')
+    useState<PresetReportingPeriod>('all')
 
-  const filteredTransactions = useMemo(
-    () =>
-      filterTransactions(
-        transactions,
-        {
-          status: 'completed',
-          period,
-        },
-      ),
+  const eligibleTransactions = useMemo(
+    () => getReportingEligibleTransactions(transactions, period),
     [transactions, period],
   )
 
-  const transactionTotals = useMemo(
-    () =>
-      getTransactionTotals(
-        filteredTransactions,
-      ),
-    [filteredTransactions],
+  const financialKpis = useMemo(
+    () => getFinancialKpis(transactions, period),
+    [transactions, period],
   )
 
   const {
-    income: totalIncome,
-    expense: totalExpense,
-    balance: profit,
-  } = transactionTotals
+    totalIncome,
+    totalExpense,
+    financialBalance,
+  } = financialKpis
 
-  const {
-    sales: salesCount,
-    purchases: purchasesCount,
-  } =
-    calculateCategoryCounts(
-      filteredTransactions,
-    )
+  const salesSummary = useMemo(
+    () => getSalesReportingSummary(sales, period),
+    [sales, period],
+  )
 
-  const warehouseQuantity =
-    getTotalStockQuantity(products)
+  const purchasesSummary = useMemo(
+    () => getPurchasesReportingSummary(purchases, period),
+    [purchases, period],
+  )
+
+  const productSummary = useMemo(
+    () => getInventoryProductSummary(products),
+    [products],
+  )
+
+  const stockByUnit = useMemo(
+    () => getCurrentStockByUnit(products),
+    [products],
+  )
 
   const categoryTotals = useMemo(
     () =>
       calculateCategoryTotals(
-        filteredTransactions,
+        eligibleTransactions,
       ),
-    [filteredTransactions],
+    [eligibleTransactions],
   )
 
   const taskStats = useMemo(
     () => getTaskStats(tasks),
     [tasks],
   )
+
+  function formatStockByUnit() {
+    if (stockByUnit.length === 0) {
+      return 'Нет остатков'
+    }
+
+    return stockByUnit
+      .map(({ quantity, unit }) =>
+        `${quantity.toLocaleString('ru-RU')} ${unit}`,
+      )
+      .join(', ')
+  }
 
   return (
     <section className="statistics-page">
@@ -108,7 +125,7 @@ export function Statistics() {
           value={period}
           onChange={(event) =>
             setPeriod(
-              event.target.value as TransactionPeriod,
+              event.target.value as PresetReportingPeriod,
             )
           }
         >
@@ -132,39 +149,48 @@ export function Statistics() {
 
       <div className="statistics-page__summary">
         <article className="statistics-card">
-          <span>Продажи</span>
-          <strong>{salesCount}</strong>
+          <span>Завершённые продажи</span>
+          <strong>{salesSummary.completedCount}</strong>
         </article>
 
         <article className="statistics-card">
-          <span>Доход</span>
+          <span>Общий доход</span>
           <strong>
             {formatAmount(totalIncome)} SAR
           </strong>
         </article>
 
         <article className="statistics-card">
-          <span>Расход</span>
+          <span>Общие расходы</span>
           <strong>
             {formatAmount(totalExpense)} SAR
           </strong>
         </article>
 
         <article className="statistics-card">
-          <span>Результат</span>
+          <span>Финансовый результат</span>
           <strong>
-            {formatAmount(profit)} SAR
+            {formatAmount(financialBalance)} SAR
           </strong>
         </article>
 
         <article className="statistics-card">
-          <span>Поступления</span>
-          <strong>{purchasesCount}</strong>
+          <span>Завершённые поступления</span>
+          <strong>
+            {purchasesSummary.completedCount}
+          </strong>
         </article>
 
         <article className="statistics-card">
-          <span>Товаров на складе</span>
-          <strong>{warehouseQuantity}</strong>
+          <span>Товарных позиций</span>
+          <strong>{productSummary.productCount}</strong>
+        </article>
+
+        <article className="statistics-card">
+          <span>Остатки на складе</span>
+          <strong title={formatStockByUnit()}>
+            {formatStockByUnit()}
+          </strong>
         </article>
       </div>
 
@@ -259,13 +285,13 @@ export function Statistics() {
             <h2>Финансовые операции</h2>
 
             <span>
-              {filteredTransactions.length}{' '}
+              {eligibleTransactions.length}{' '}
               операций
             </span>
           </div>
         </div>
 
-        {filteredTransactions.length === 0 ? (
+        {eligibleTransactions.length === 0 ? (
           <div className="statistics-empty">
             Операций за выбранный период нет.
           </div>
@@ -283,7 +309,7 @@ export function Statistics() {
               </thead>
 
               <tbody>
-                {filteredTransactions.map(
+                {eligibleTransactions.map(
                   (transaction) => (
                     <tr
                       key={transaction.id}
