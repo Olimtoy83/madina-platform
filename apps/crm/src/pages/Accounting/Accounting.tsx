@@ -2,10 +2,10 @@
 import { useTransactions } from '../../context/useTransactions'
 import {
   calculateCategoryTotals,
-  filterTransactions,
-  getTransactionTotals,
+  getFinancialKpis,
+  getReportingEligibleTransactions,
+  type PresetReportingPeriod,
   type Transaction,
-  type TransactionPeriod,
 } from '@madina/core'
 import { Select } from '@madina/ui'
 
@@ -51,37 +51,33 @@ export function Accounting() {
   const { transactions } = useTransactions()
 
   const [period, setPeriod] =
-    useState<TransactionPeriod>('all')
+    useState<PresetReportingPeriod>('all')
 
   const [typeFilter, setTypeFilter] =
     useState<TypeFilter>('all')
 
+  const eligibleTransactions = useMemo(
+    () => getReportingEligibleTransactions(transactions, period),
+    [transactions, period],
+  )
+
   const filteredTransactions = useMemo(
     () =>
-      filterTransactions(
-        transactions,
-        {
-          period,
-          type:
-            typeFilter === 'all'
-              ? undefined
-              : typeFilter,
-          status: 'completed',
-        },
-      ),
-    [transactions, period, typeFilter],
+      typeFilter === 'all'
+        ? eligibleTransactions
+        : eligibleTransactions.filter(
+          (transaction) => transaction.type === typeFilter,
+        ),
+    [eligibleTransactions, typeFilter],
   )
 
   const {
-    income: totalIncome,
-    expense: totalExpense,
-    balance,
+    totalIncome,
+    totalExpense,
+    financialBalance,
   } = useMemo(
-    () =>
-      getTransactionTotals(
-        filteredTransactions,
-      ),
-    [filteredTransactions],
+    () => getFinancialKpis(filteredTransactions, period),
+    [filteredTransactions, period],
   )
 
   const categoryTotals = useMemo(
@@ -108,7 +104,7 @@ export function Accounting() {
             value={period}
             onChange={(event) =>
               setPeriod(
-                event.target.value as TransactionPeriod
+                event.target.value as PresetReportingPeriod
               )
             }
           >
@@ -149,23 +145,23 @@ export function Accounting() {
 
       <div className="accounting-summary">
         <article className="accounting-card">
-          <span>Доход</span>
+          <span>Общий доход</span>
           <strong className="accounting-card__income">
             +{formatAmount(totalIncome)}
           </strong>
         </article>
 
         <article className="accounting-card">
-          <span>Расход</span>
+          <span>Общие расходы</span>
           <strong className="accounting-card__expense">
             -{formatAmount(totalExpense)}
           </strong>
         </article>
 
         <article className="accounting-card">
-          <span>Чистый результат</span>
+          <span>Финансовый результат</span>
           <strong>
-            {formatAmount(balance)}
+            {formatAmount(financialBalance)}
           </strong>
         </article>
 
@@ -224,7 +220,7 @@ export function Accounting() {
             </span>
 
             <strong>
-              {formatAmount(balance)}
+              {formatAmount(financialBalance)}
             </strong>
           </div>
         </section>
