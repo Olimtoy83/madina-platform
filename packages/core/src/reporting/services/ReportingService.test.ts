@@ -7,6 +7,7 @@ import type { Purchase } from '../../purchases/types/purchase'
 import type { Sale } from '../../sales/types/sale'
 import type { Transaction } from '../../transactions/types/transaction'
 import {
+  getFinancialKpis,
   getReportingEligiblePurchases,
   getReportingEligibleSales,
   getReportingEligibleTransactions,
@@ -285,5 +286,254 @@ describe('ReportingService', () => {
         now,
       ),
     ).toEqual([eligiblePurchase])
+  })
+
+  describe('getFinancialKpis', () => {
+    it('calculates revenue from eligible completed sale income only', () => {
+      const revenue = createTransaction({
+        amount: 100,
+        type: 'income',
+        category: 'sale',
+      })
+
+      expect(
+        getFinancialKpis(
+          [
+            revenue,
+            createTransaction({
+              amount: 200,
+              type: 'income',
+              category: 'other',
+            }),
+            createTransaction({
+              amount: 300,
+              status: 'pending',
+            }),
+            createTransaction({
+              amount: 400,
+              status: 'cancelled',
+            }),
+            createTransaction({
+              amount: 500,
+              transactionDate: new Date(2026, 7, 17),
+            }),
+            createTransaction({
+              amount: 600,
+              transactionDate: new Date(2026, 7, 1),
+            }),
+          ],
+          'today',
+          now,
+        ).revenue,
+      ).toBe(100)
+    })
+
+    it('calculates total income across eligible income categories only', () => {
+      expect(
+        getFinancialKpis(
+          [
+            createTransaction({
+              amount: 100,
+              type: 'income',
+              category: 'sale',
+            }),
+            createTransaction({
+              amount: 200,
+              type: 'income',
+              category: 'other',
+            }),
+            createTransaction({
+              amount: 300,
+              type: 'expense',
+              category: 'purchase',
+            }),
+          ],
+          'today',
+          now,
+        ).totalIncome,
+      ).toBe(300)
+    })
+
+    it('calculates purchase expense from eligible completed purchase expense only', () => {
+      expect(
+        getFinancialKpis(
+          [
+            createTransaction({
+              amount: 100,
+              type: 'expense',
+              category: 'purchase',
+            }),
+            createTransaction({
+              amount: 200,
+              type: 'expense',
+              category: 'other',
+            }),
+            createTransaction({
+              amount: 300,
+              type: 'expense',
+              category: 'purchase',
+              status: 'pending',
+            }),
+            createTransaction({
+              amount: 400,
+              type: 'expense',
+              category: 'purchase',
+              transactionDate: new Date(2026, 7, 17),
+            }),
+            createTransaction({
+              amount: 500,
+              type: 'expense',
+              category: 'purchase',
+              transactionDate: new Date(2026, 7, 15),
+            }),
+          ],
+          'today',
+          now,
+        ).purchaseExpense,
+      ).toBe(100)
+    })
+
+    it('calculates total expense across eligible expense categories only', () => {
+      expect(
+        getFinancialKpis(
+          [
+            createTransaction({
+              amount: 100,
+              type: 'expense',
+              category: 'purchase',
+            }),
+            createTransaction({
+              amount: 200,
+              type: 'expense',
+              category: 'other',
+            }),
+            createTransaction({
+              amount: 300,
+              type: 'income',
+              category: 'sale',
+            }),
+          ],
+          'today',
+          now,
+        ).totalExpense,
+      ).toBe(300)
+    })
+
+    it('calculates positive, zero and negative financial balance', () => {
+      expect(
+        getFinancialKpis(
+          [
+            createTransaction({ amount: 500 }),
+            createTransaction({
+              amount: 200,
+              type: 'expense',
+            }),
+          ],
+          'all',
+          now,
+        ).financialBalance,
+      ).toBe(300)
+
+      expect(
+        getFinancialKpis(
+          [
+            createTransaction({ amount: 200 }),
+            createTransaction({
+              amount: 200,
+              type: 'expense',
+            }),
+          ],
+          'all',
+          now,
+        ).financialBalance,
+      ).toBe(0)
+
+      expect(
+        getFinancialKpis(
+          [
+            createTransaction({ amount: 100 }),
+            createTransaction({
+              amount: 200,
+              type: 'expense',
+            }),
+          ],
+          'all',
+          now,
+        ).financialBalance,
+      ).toBe(-100)
+    })
+
+    it('uses every canonical period and returns zero for no eligible transactions', () => {
+      const transactions = [
+        createTransaction({
+          amount: 10,
+          transactionDate: new Date(2026, 7, 16, 8),
+        }),
+        createTransaction({
+          amount: 20,
+          transactionDate: new Date(2026, 7, 10, 8),
+        }),
+        createTransaction({
+          amount: 30,
+          transactionDate: new Date(2026, 7, 1, 8),
+        }),
+        createTransaction({
+          amount: 40,
+          transactionDate: new Date(2026, 6, 31, 8),
+        }),
+      ]
+
+      expect(
+        getFinancialKpis(transactions, 'today', now).revenue,
+      ).toBe(10)
+      expect(
+        getFinancialKpis(transactions, '7days', now).revenue,
+      ).toBe(30)
+      expect(
+        getFinancialKpis(transactions, 'month', now).revenue,
+      ).toBe(60)
+      expect(
+        getFinancialKpis(transactions, 'all', now).revenue,
+      ).toBe(100)
+      expect(
+        getFinancialKpis(
+          transactions,
+          {
+            kind: 'custom',
+            start: new Date(2026, 6, 31),
+            end: new Date(2026, 6, 31),
+          },
+          now,
+        ).revenue,
+      ).toBe(40)
+      expect(
+        getFinancialKpis(
+          transactions,
+          {
+            kind: 'custom',
+            start: new Date(2026, 5, 1),
+            end: new Date(2026, 5, 1),
+          },
+          now,
+        ),
+      ).toEqual({
+        revenue: 0,
+        totalIncome: 0,
+        purchaseExpense: 0,
+        totalExpense: 0,
+        financialBalance: 0,
+      })
+    })
+
+    it('does not mutate source arrays or transaction objects', () => {
+      const transaction = createTransaction({ amount: 100 })
+      const transactions = [transaction]
+      const snapshot = structuredClone(transactions)
+
+      getFinancialKpis(transactions, 'all', now)
+
+      expect(transactions).toEqual(snapshot)
+      expect(transactions[0]).toBe(transaction)
+    })
   })
 })

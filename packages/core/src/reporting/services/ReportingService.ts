@@ -23,6 +23,14 @@ export interface ReportingDateRange {
   to: Date
 }
 
+export interface FinancialKpis {
+  revenue: number
+  totalIncome: number
+  purchaseExpense: number
+  totalExpense: number
+  financialBalance: number
+}
+
 export class ReportingValidationError extends Error {
   constructor(message: string) {
     super(message)
@@ -135,6 +143,57 @@ export function getReportingEligibleTransactions(
     period,
     now,
   )
+}
+
+export function getFinancialKpis(
+  transactions: readonly Transaction[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): FinancialKpis {
+  const eligibleTransactions =
+    getReportingEligibleTransactions(
+      transactions,
+      period,
+      now,
+    )
+
+  const totals = eligibleTransactions.reduce(
+    (
+      currentTotals,
+      transaction,
+    ) => {
+      if (transaction.type === 'income') {
+        currentTotals.totalIncome += transaction.amount
+
+        if (transaction.category === 'sale') {
+          currentTotals.revenue += transaction.amount
+        }
+      }
+
+      if (transaction.type === 'expense') {
+        currentTotals.totalExpense += transaction.amount
+
+        if (transaction.category === 'purchase') {
+          currentTotals.purchaseExpense +=
+            transaction.amount
+        }
+      }
+
+      return currentTotals
+    },
+    {
+      revenue: 0,
+      totalIncome: 0,
+      purchaseExpense: 0,
+      totalExpense: 0,
+    },
+  )
+
+  return {
+    ...totals,
+    financialBalance:
+      totals.totalIncome - totals.totalExpense,
+  }
 }
 
 export function getReportingEligibleSales(
