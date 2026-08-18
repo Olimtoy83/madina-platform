@@ -12,6 +12,7 @@ import { Tasks } from '../../pages/Tasks/Tasks'
 import { Statistics } from '../../pages/Statistics/Statistics'
 import { Clients } from '../../pages/Clients/Clients'
 import { ClientDetails } from '../../pages/Clients/ClientDetails'
+import { SalesReport } from '../../pages/SalesReport/SalesReport'
 
 
 export const router = createBrowserRouter([
@@ -38,6 +39,10 @@ export const router = createBrowserRouter([
       {
         path: 'sales',
         element: <Sales />,
+      },
+      {
+        path: 'reports/sales',
+        element: <SalesReport />,
       },
       {
         path: 'income',

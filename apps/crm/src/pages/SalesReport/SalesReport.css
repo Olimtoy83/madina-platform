@@ -1,0 +1,121 @@
+.sales-report-page {
+  width: 100%;
+}
+
+.sales-report-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.sales-report-page__header h1 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 32px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.sales-report-page__header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 16px;
+}
+
+.sales-report-page__period {
+  min-width: 180px;
+}
+
+.sales-report-page__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.sales-report-card span {
+  display: block;
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.sales-report-card strong {
+  display: block;
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.sales-report-page__breakdown {
+  overflow: hidden;
+}
+
+.sales-report-page__breakdown-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sales-report-page__breakdown-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 19px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.sales-report-page__status-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sales-report-page__status-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sales-report-page__status-list > div:last-child {
+  border-bottom: none;
+}
+
+.sales-report-page__status-list span {
+  color: #475569;
+  font-size: 14px;
+}
+
+.sales-report-page__status-list strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sales-report-page__empty {
+  padding: 48px 20px;
+}
+
+@media (max-width: 900px) {
+  .sales-report-page__header {
+    flex-direction: column;
+  }
+
+  .sales-report-page__period {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .sales-report-page__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-report-page__header h1 {
+    font-size: 28px;
+  }
+}

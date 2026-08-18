@@ -27,6 +27,10 @@ const sidebarItems: SidebarItem[] = [
     path: '/sales',
   },
   {
+    label: 'Отчёт по продажам',
+    path: '/reports/sales',
+  },
+  {
     label: 'Clients',
     path: '/clients',
   },
