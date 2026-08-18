@@ -1,6 +1,10 @@
 ﻿import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Button } from '@madina/ui'
+import {
+  Alert,
+  Button,
+} from '@madina/ui'
+import { SaleValidationError } from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 
@@ -50,16 +54,25 @@ export function SaleDetails() {
   }
 
   function handleComplete() {
-    const result = completeSale(saleIdValue)
+    try {
+      const result = completeSale(saleIdValue)
 
-    if (!result.success) {
-      setActionMessage(
-        result.message ?? 'Не удалось завершить продажу.',
-      )
-      return
+      if (!result.success) {
+        setActionMessage(
+          result.message ?? 'Не удалось завершить продажу.',
+        )
+        return
+      }
+
+      setActionMessage(null)
+    } catch (error) {
+      if (error instanceof SaleValidationError) {
+        setActionMessage(error.message)
+        return
+      }
+
+      throw error
     }
-
-    setActionMessage(null)
   }
 
   function handleCancel() {
@@ -101,9 +114,14 @@ export function SaleDetails() {
       </p>
 
       {actionMessage && (
-        <p>
+        <Alert
+          variant="danger"
+          title="Ошибка"
+          dismissible
+          onDismiss={() => setActionMessage(null)}
+        >
           {actionMessage}
-        </p>
+        </Alert>
       )}
 
       {isDraft && (

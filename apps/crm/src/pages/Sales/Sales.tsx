@@ -121,6 +121,9 @@ export function Sales() {
       parsedQuantity >
       selectedProduct.quantity
     ) {
+      setError(
+        'Количество товара превышает доступный остаток на складе.',
+      )
       return
     }
 
@@ -149,6 +152,9 @@ export function Sales() {
         newQuantity >
         selectedProduct.quantity
       ) {
+        setError(
+          'Количество товара превышает доступный остаток на складе.',
+        )
         return
       }
 
