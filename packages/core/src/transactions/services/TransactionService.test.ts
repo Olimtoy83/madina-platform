@@ -218,6 +218,13 @@ describe('TransactionService', () => {
             9,
           ),
         }),
+        createTransaction({
+          transactionDate: new Date(
+            2026,
+            7,
+            17,
+          ),
+        }),
       ]
 
       const result = filterTransactions(
@@ -489,6 +496,15 @@ describe('TransactionService', () => {
             9,
           ),
         }),
+        createTransaction({
+          transactionDate: new Date(
+            2026,
+            7,
+            16,
+            12,
+            1,
+          ),
+        }),
       ]
 
       const result =
@@ -499,6 +515,37 @@ describe('TransactionService', () => {
         )
 
       expect(result).toHaveLength(2)
+    })
+
+    it('includes the lower boundary and excludes future transactions', () => {
+      const lowerBoundary = createTransaction({
+        transactionDate: new Date(
+          2026,
+          7,
+          10,
+        ),
+      })
+
+      const futureTransaction = createTransaction({
+        transactionDate: new Date(
+          2026,
+          7,
+          16,
+          12,
+          1,
+        ),
+      })
+
+      const result = getTransactionsByPeriod(
+        [
+          lowerBoundary,
+          futureTransaction,
+        ],
+        '7days',
+        now,
+      )
+
+      expect(result).toEqual([lowerBoundary])
     })
 
     it('returns transactions from the current month', () => {

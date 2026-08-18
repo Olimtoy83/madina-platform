@@ -148,7 +148,10 @@ function isWithinPeriod(
       0,
     )
 
-    return transactionDate >= start
+    return (
+      transactionDate >= start &&
+      transactionDate <= now
+    )
   }
 
   if (period === 'month') {
