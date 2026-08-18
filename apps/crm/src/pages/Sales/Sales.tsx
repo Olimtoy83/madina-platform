@@ -122,6 +122,13 @@ export function Sales() {
     )
 
     if (existingItem) {
+      if (
+        existingItem.unitPrice !==
+        parsedUnitPrice
+      ) {
+        return
+      }
+
       const newQuantity =
         existingItem.quantity +
         parsedQuantity
@@ -140,11 +147,10 @@ export function Sales() {
             ? {
               ...item,
               quantity: newQuantity,
-              unitPrice: parsedUnitPrice,
               totalAmount:
                 getSaleItemTotal(
                   newQuantity,
-                  parsedUnitPrice,),
+                  item.unitPrice,),
             }
             : item,
         ),

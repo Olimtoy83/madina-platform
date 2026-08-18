@@ -5,6 +5,8 @@ import {
   completeSale,
   getCompletedSales,
   getSaleStats,
+  normalizeSale,
+  SaleValidationError,
 } from './SaleService'
 
 function createProduct(
@@ -55,6 +57,72 @@ function createSale(
 }
 
 describe('completeSale', () => {
+  it('normalizes duplicate sale items by product', () => {
+    const sale = createSale()
+
+    sale.items = [
+      {
+        productId: 'product-001',
+        quantity: 2,
+        unit: 'kg',
+        unitPrice: 150,
+        totalAmount: 300,
+      },
+      {
+        productId: 'product-001',
+        quantity: 3,
+        unit: 'kg',
+        unitPrice: 150,
+        totalAmount: 450,
+      },
+    ]
+
+    const normalizedSale = normalizeSale(sale)
+
+    expect(normalizedSale.items).toEqual([
+      {
+        productId: 'product-001',
+        quantity: 5,
+        unit: 'kg',
+        unitPrice: 150,
+        totalAmount: 750,
+      },
+    ])
+    expect(normalizedSale.totalAmount).toBe(750)
+  })
+
+  it('rejects duplicate sale items with different unit prices', () => {
+    const sale = createSale()
+
+    sale.items = [
+      {
+        productId: 'product-001',
+        quantity: 2,
+        unit: 'kg',
+        unitPrice: 150,
+        totalAmount: 300,
+      },
+      {
+        productId: 'product-001',
+        quantity: 3,
+        unit: 'kg',
+        unitPrice: 200,
+        totalAmount: 600,
+      },
+    ]
+
+    expect(() => normalizeSale(sale)).toThrow(
+      SaleValidationError,
+    )
+    expect(() => normalizeSale(sale)).toThrow(
+      'Нельзя объединить позиции продажи с разной ценой.',
+    )
+    expect(() => completeSale(
+      sale,
+      [createProduct()],
+    )).toThrow(SaleValidationError)
+  })
+
   it('completes sale and decreases stock', () => {
     const products = [createProduct()]
     const sale = createSale()
@@ -143,6 +211,52 @@ describe('completeSale', () => {
 
     expect(result.movements).toHaveLength(2)
     expect(result.transaction?.amount).toBe(1350)
+  })
+
+  it('completes duplicate items as one traceable movement', () => {
+    const products = [createProduct()]
+    const sale = createSale()
+
+    sale.items = [
+      {
+        productId: 'product-001',
+        quantity: 2,
+        unit: 'kg',
+        unitPrice: 150,
+        totalAmount: 300,
+      },
+      {
+        productId: 'product-001',
+        quantity: 3,
+        unit: 'kg',
+        unitPrice: 150,
+        totalAmount: 450,
+      },
+    ]
+    sale.totalAmount = 750
+
+    const result = completeSale(
+      sale,
+      products,
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.products[0]?.quantity).toBe(5)
+    expect(result.sale?.items).toHaveLength(1)
+    expect(result.sale?.items[0]).toMatchObject({
+      productId: 'product-001',
+      quantity: 5,
+      unitPrice: 150,
+      totalAmount: 750,
+    })
+    expect(result.movements).toHaveLength(1)
+    expect(result.movements[0]).toMatchObject({
+      productId: 'product-001',
+      type: 'sale',
+      quantity: -5,
+      referenceId: sale.id,
+    })
+    expect(result.transaction?.amount).toBe(750)
   })
 
   it('rejects sale that is not a draft', () => {

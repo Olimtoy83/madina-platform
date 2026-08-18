@@ -3,6 +3,10 @@ import type { Product } from '../../inventory/types/product'
 import type { StockMovement } from '../../inventory/types/stockMovement'
 import type { Transaction } from '../../transactions/types/transaction'
 import { issueStock } from '../../inventory/services/StockService'
+import {
+  getSaleItemTotal,
+  getSaleItemsTotal,
+} from './SaleCalculationService'
 
 export interface CompleteSaleResult {
   success: boolean
@@ -11,6 +15,67 @@ export interface CompleteSaleResult {
   products: Product[]
   movements: StockMovement[]
   transaction?: Transaction
+}
+
+export class SaleValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SaleValidationError'
+  }
+}
+
+export function normalizeSale(
+  sale: Sale,
+): Sale {
+  const itemsByProduct = new Map<
+    string,
+    Sale['items'][number]
+  >()
+
+  for (const item of sale.items) {
+    const existingItem = itemsByProduct.get(
+      item.productId,
+    )
+
+    if (!existingItem) {
+      itemsByProduct.set(item.productId, {
+        ...item,
+        totalAmount: getSaleItemTotal(
+          item.quantity,
+          item.unitPrice,
+        ),
+      })
+      continue
+    }
+
+    if (existingItem.unitPrice !== item.unitPrice) {
+      throw new SaleValidationError(
+        'Нельзя объединить позиции продажи с разной ценой.',
+      )
+    }
+
+    const quantity =
+      existingItem.quantity + item.quantity
+
+    itemsByProduct.set(item.productId, {
+      ...existingItem,
+      quantity,
+      totalAmount: getSaleItemTotal(
+        quantity,
+        existingItem.unitPrice,
+      ),
+    })
+  }
+
+  const items = [
+    ...itemsByProduct.values(),
+  ]
+
+  return {
+    ...sale,
+    items,
+    totalAmount: getSaleItemsTotal(items),
+  }
 }
 
 export function getCompletedSales(
@@ -51,7 +116,9 @@ export function completeSale(
   sale: Sale,
   products: Product[],
 ): CompleteSaleResult {
-  if (sale.status !== 'draft') {
+  const normalizedSale = normalizeSale(sale)
+
+  if (normalizedSale.status !== 'draft') {
     return {
       success: false,
       message:
@@ -61,7 +128,7 @@ export function completeSale(
     }
   }
 
-  if (sale.items.length === 0) {
+  if (normalizedSale.items.length === 0) {
     return {
       success: false,
       message:
@@ -71,7 +138,7 @@ export function completeSale(
     }
   }
 
-  for (const item of sale.items) {
+  for (const item of normalizedSale.items) {
     const product = products.find(
       (currentProduct) =>
         currentProduct.id === item.productId,
@@ -93,13 +160,13 @@ export function completeSale(
   let nextProducts = products
   const movements: StockMovement[] = []
 
-  for (const item of sale.items) {
+  for (const item of normalizedSale.items) {
     const result = issueStock(
       nextProducts,
       item.productId,
       item.quantity,
-      sale.id,
-      `Продажа ${sale.saleNumber}`,
+      normalizedSale.id,
+      `Продажа ${normalizedSale.saleNumber}`,
     )
 
     if (!result.success) {
@@ -128,7 +195,7 @@ export function completeSale(
   }
 
   const completedSale: Sale = {
-    ...sale,
+    ...normalizedSale,
     status: 'completed',
     updatedAt,
   }
@@ -139,12 +206,12 @@ export function completeSale(
     updatedAt,
     type: 'income',
     category: 'sale',
-    amount: sale.totalAmount,
-    paymentMethod: sale.paymentMethod,
-    transactionDate: sale.saleDate,
-    referenceId: sale.id,
+    amount: normalizedSale.totalAmount,
+    paymentMethod: normalizedSale.paymentMethod,
+    transactionDate: normalizedSale.saleDate,
+    referenceId: normalizedSale.id,
     description:
-      `Продажа ${sale.saleNumber}`,
+      `Продажа ${normalizedSale.saleNumber}`,
     status: 'completed',
   }
 
