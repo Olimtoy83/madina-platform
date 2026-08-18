@@ -336,8 +336,10 @@ export function Purchases() {
                   </td>
 
                   <td>
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       onClick={() =>
                         setSelectedPurchase(
                           purchase,
@@ -345,7 +347,7 @@ export function Purchases() {
                       }
                     >
                       Открыть
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))
