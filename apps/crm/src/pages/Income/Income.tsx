@@ -6,6 +6,8 @@ import {
   type Transaction,
 } from '@madina/core'
 
+import { Button } from '@madina/ui'
+
 import './Income.css'
 
 type Filter = 'all' | 'income' | 'expense'
@@ -128,7 +130,7 @@ export function Income() {
       </div>
 
       <div className="income-filters">
-        <button
+        <Button
           type="button"
           className={
             filter === 'all'
@@ -138,9 +140,9 @@ export function Income() {
           onClick={() => setFilter('all')}
         >
           Все
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
           className={
             filter === 'income'
@@ -150,9 +152,9 @@ export function Income() {
           onClick={() => setFilter('income')}
         >
           Доходы
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
           className={
             filter === 'expense'
@@ -162,7 +164,7 @@ export function Income() {
           onClick={() => setFilter('expense')}
         >
           Расходы
-        </button>
+        </Button>
       </div>
 
       <div className="income-table-wrapper">
