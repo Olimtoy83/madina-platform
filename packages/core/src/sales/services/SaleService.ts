@@ -61,6 +61,16 @@ export function completeSale(
     }
   }
 
+  if (sale.items.length === 0) {
+    return {
+      success: false,
+      message:
+        'Нельзя завершить продажу без товаров.',
+      products,
+      movements: [],
+    }
+  }
+
   for (const item of sale.items) {
     const product = products.find(
       (currentProduct) =>

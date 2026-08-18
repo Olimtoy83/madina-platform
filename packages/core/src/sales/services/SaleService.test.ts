@@ -161,6 +161,25 @@ describe('completeSale', () => {
     expect(result.transaction).toBeUndefined()
   })
 
+  it('rejects sale without items', () => {
+    const products = [createProduct()]
+    const sale = createSale()
+
+    sale.items = []
+    sale.totalAmount = 0
+
+    const result = completeSale(
+      sale,
+      products,
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.sale).toBeUndefined()
+    expect(result.movements).toHaveLength(0)
+    expect(result.transaction).toBeUndefined()
+    expect(result.products).toEqual(products)
+  })
+
   it('rejects sale when product is missing', () => {
     const products = [createProduct()]
     const sale = createSale()
