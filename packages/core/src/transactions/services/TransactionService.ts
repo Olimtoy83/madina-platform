@@ -1,10 +1,10 @@
 import type { Transaction } from '../types/transaction'
+import {
+  filterByReportingPeriod,
+  type PresetReportingPeriod,
+} from '../../reporting/services/ReportingService'
 
-export type TransactionPeriod =
-  | 'all'
-  | 'today'
-  | '7days'
-  | 'month'
+export type TransactionPeriod = PresetReportingPeriod
 
 export interface TransactionTotals {
   income: number
@@ -43,12 +43,11 @@ export function getTransactionsByPeriod(
     return transactions
   }
 
-  return transactions.filter((transaction) =>
-    isWithinPeriod(
-      transaction.transactionDate,
-      period,
-      now,
-    ),
+  return filterByReportingPeriod(
+    transactions,
+    (transaction) => transaction.transactionDate,
+    period,
+    now,
   )
 }
 
@@ -114,56 +113,6 @@ export function getTransactionTotals(
     expense,
     balance: income - expense,
   }
-}
-
-function isWithinPeriod(
-  date: Date,
-  period: Exclude<TransactionPeriod, 'all'>,
-  now: Date,
-): boolean {
-  const transactionDate = new Date(date)
-
-  if (period === 'today') {
-    return (
-      transactionDate.getFullYear() ===
-      now.getFullYear() &&
-      transactionDate.getMonth() ===
-      now.getMonth() &&
-      transactionDate.getDate() ===
-      now.getDate()
-    )
-  }
-
-  if (period === '7days') {
-    const start = new Date(now)
-
-    start.setDate(
-      now.getDate() - 6,
-    )
-
-    start.setHours(
-      0,
-      0,
-      0,
-      0,
-    )
-
-    return (
-      transactionDate >= start &&
-      transactionDate <= now
-    )
-  }
-
-  if (period === 'month') {
-    return (
-      transactionDate.getFullYear() ===
-      now.getFullYear() &&
-      transactionDate.getMonth() ===
-      now.getMonth()
-    )
-  }
-
-  return true
 }
 
 export interface TransactionFilters {
