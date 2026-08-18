@@ -70,6 +70,8 @@ export function normalizeSale(
   >()
 
   for (const item of sale.items) {
+    validateSaleItem(item)
+
     const existingItem = itemsByProduct.get(
       item.productId,
     )
@@ -118,6 +120,28 @@ export function normalizeSale(
     ...sale,
     items,
     totalAmount: getSaleItemsTotal(items),
+  }
+}
+
+function validateSaleItem(
+  item: Sale['items'][number],
+) {
+  if (
+    !Number.isFinite(item.quantity) ||
+    item.quantity <= 0
+  ) {
+    throw new SaleValidationError(
+      'Количество позиции продажи должно быть конечным числом больше нуля.',
+    )
+  }
+
+  if (
+    !Number.isFinite(item.unitPrice) ||
+    item.unitPrice <= 0
+  ) {
+    throw new SaleValidationError(
+      'Цена позиции продажи должна быть конечным числом больше нуля.',
+    )
   }
 }
 

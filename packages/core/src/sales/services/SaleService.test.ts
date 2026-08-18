@@ -152,6 +152,74 @@ describe('completeSale', () => {
     )
   })
 
+  it('rejects invalid numeric sale item data during normalization', () => {
+    const sale = createSale()
+    const validItem = sale.items[0]!
+    const invalidItems: Sale['items'] = [
+      { ...validItem, quantity: 0 },
+      { ...validItem, quantity: -1 },
+      { ...validItem, quantity: Number.NaN },
+      { ...validItem, quantity: Number.POSITIVE_INFINITY },
+      { ...validItem, unitPrice: 0 },
+      { ...validItem, unitPrice: -1 },
+      { ...validItem, unitPrice: Number.NaN },
+      {
+        ...validItem,
+        unitPrice: Number.POSITIVE_INFINITY,
+      },
+    ]
+
+    for (const item of invalidItems) {
+      expect(() => normalizeSale({
+        ...sale,
+        items: [item],
+      })).toThrow(SaleValidationError)
+    }
+  })
+
+  it('accepts a fractional positive sale quantity', () => {
+    const sale = createSale()
+
+    const normalizedSale = normalizeSale({
+      ...sale,
+      items: [
+        {
+          ...sale.items[0]!,
+          quantity: 1.5,
+          unitPrice: 100,
+        },
+      ],
+    })
+
+    expect(normalizedSale.items[0]).toMatchObject({
+      quantity: 1.5,
+      totalAmount: 150,
+    })
+    expect(normalizedSale.totalAmount).toBe(150)
+  })
+
+  it('rejects invalid numeric sale data before side effects', () => {
+    const products = [createProduct()]
+    const sale = createSale()
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+
+    sale.items[0] = {
+      ...sale.items[0]!,
+      unitPrice: 0,
+    }
+
+    try {
+      expect(() => completeSale(
+        sale,
+        products,
+      )).toThrow(SaleValidationError)
+      expect(products[0]?.quantity).toBe(10)
+      expect(randomUUID).not.toHaveBeenCalled()
+    } finally {
+      randomUUID.mockRestore()
+    }
+  })
+
   it('completes sale and decreases stock', () => {
     const products = [createProduct()]
     const sale = createSale()

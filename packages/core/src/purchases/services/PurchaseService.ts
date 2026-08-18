@@ -70,6 +70,8 @@ export function normalizePurchase(
   >()
 
   for (const item of purchase.items) {
+    validatePurchaseItem(item)
+
     const existingItem = itemsByProduct.get(
       item.productId,
     )
@@ -118,6 +120,28 @@ export function normalizePurchase(
     ...purchase,
     items,
     totalAmount: getPurchaseTotal({ items }),
+  }
+}
+
+function validatePurchaseItem(
+  item: Purchase['items'][number],
+) {
+  if (
+    !Number.isFinite(item.quantity) ||
+    item.quantity <= 0
+  ) {
+    throw new PurchaseValidationError(
+      'Количество позиции поступления должно быть конечным числом больше нуля.',
+    )
+  }
+
+  if (
+    !Number.isFinite(item.unitCost) ||
+    item.unitCost <= 0
+  ) {
+    throw new PurchaseValidationError(
+      'Цена закупки позиции поступления должна быть конечным числом больше нуля.',
+    )
   }
 }
 

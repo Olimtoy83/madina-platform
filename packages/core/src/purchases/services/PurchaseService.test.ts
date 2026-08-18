@@ -148,6 +148,74 @@ describe('completePurchase', () => {
     )
   })
 
+  it('rejects invalid numeric purchase item data during normalization', () => {
+    const purchase = createPurchase()
+    const validItem = purchase.items[0]!
+    const invalidItems: Purchase['items'] = [
+      { ...validItem, quantity: 0 },
+      { ...validItem, quantity: -1 },
+      { ...validItem, quantity: Number.NaN },
+      { ...validItem, quantity: Number.POSITIVE_INFINITY },
+      { ...validItem, unitCost: 0 },
+      { ...validItem, unitCost: -1 },
+      { ...validItem, unitCost: Number.NaN },
+      {
+        ...validItem,
+        unitCost: Number.POSITIVE_INFINITY,
+      },
+    ]
+
+    for (const item of invalidItems) {
+      expect(() => normalizePurchase({
+        ...purchase,
+        items: [item],
+      })).toThrow(PurchaseValidationError)
+    }
+  })
+
+  it('accepts a fractional positive purchase quantity', () => {
+    const purchase = createPurchase()
+
+    const normalizedPurchase = normalizePurchase({
+      ...purchase,
+      items: [
+        {
+          ...purchase.items[0]!,
+          quantity: 1.5,
+          unitCost: 100,
+        },
+      ],
+    })
+
+    expect(normalizedPurchase.items[0]).toMatchObject({
+      quantity: 1.5,
+      totalCost: 150,
+    })
+    expect(normalizedPurchase.totalAmount).toBe(150)
+  })
+
+  it('rejects invalid numeric purchase data before side effects', () => {
+    const products = [createProduct()]
+    const purchase = createPurchase()
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+
+    purchase.items[0] = {
+      ...purchase.items[0]!,
+      unitCost: 0,
+    }
+
+    try {
+      expect(() => completePurchase(
+        purchase,
+        products,
+      )).toThrow(PurchaseValidationError)
+      expect(products[0]?.quantity).toBe(10)
+      expect(randomUUID).not.toHaveBeenCalled()
+    } finally {
+      randomUUID.mockRestore()
+    }
+  })
+
   it('completes purchase and increases stock', () => {
     const products = [createProduct()]
     const purchase = createPurchase()
