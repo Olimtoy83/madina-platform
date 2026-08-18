@@ -1,6 +1,6 @@
-﻿import {
+import {
+  useCallback,
   useMemo,
-  useState,
   type ReactNode,
 } from 'react'
 import {
@@ -10,153 +10,62 @@ import {
   type Purchase,
   type Sale,
 } from '@madina/core'
-
-import {
-  loadStorage,
-  saveStorage,
-} from '../shared/storage'
+import { getNextSnapshot } from '../shared/transactionalStorage'
 import { ProductsContext } from './ProductsContext'
+import { useTransactionalState } from './useTransactionalState'
 
 interface ProductsProviderProps {
   children: ReactNode
 }
 
-type StoredProduct = Omit<
-  Product,
-  'createdAt' | 'updatedAt'
-> & {
-  createdAt: string
-  updatedAt: string
-}
+export function ProductsProvider({ children }: ProductsProviderProps) {
+  const { snapshot, commit } = useTransactionalState()
+  const { products } = snapshot
 
-const STORAGE_KEY = 'products'
+  const addProduct = useCallback((product: Product) => {
+    commit(getNextSnapshot(snapshot, { products: [...products, product] }))
+  }, [commit, products, snapshot])
 
-function restoreProduct(
-  product: StoredProduct,
-): Product {
-  return {
-    ...product,
-    createdAt: new Date(product.createdAt),
-    updatedAt: new Date(product.updatedAt),
-  }
-}
+  const deactivateProduct = useCallback((productId: string) => {
+    const product = products.find((item) => item.id === productId)
+    if (!product) return undefined
 
-function loadProducts(): Product[] {
-  const storedProducts =
-    loadStorage<StoredProduct[]>(
-      STORAGE_KEY,
-      [],
+    const deactivatedProduct = deactivateProductCore(product)
+    const nextProducts = products.map((item) =>
+      item.id === productId ? deactivatedProduct : item,
     )
-
-  return storedProducts.map(
-    restoreProduct,
-  )
-}
-
-export function ProductsProvider({
-  children,
-}: ProductsProviderProps) {
-  const [products, setProducts] =
-    useState<Product[]>(loadProducts)
-
-  function addProduct(product: Product) {
-    setProducts((currentProducts) => {
-      const nextProducts = [
-        ...currentProducts,
-        product,
-      ]
-
-      saveStorage(
-        STORAGE_KEY,
-        nextProducts,
-      )
-
-      return nextProducts
-    })
-  }
-
-  function deactivateProduct(productId: string) {
-    const product = products.find(
-      (currentProduct) =>
-        currentProduct.id === productId,
-    )
-
-    if (!product) {
-      return undefined
-    }
-
-    const deactivatedProduct =
-      deactivateProductCore(product)
-
-    const nextProducts = products.map(
-      (currentProduct) =>
-        currentProduct.id === productId
-          ? deactivatedProduct
-          : currentProduct,
-    )
-
-    setProducts(nextProducts)
-    saveStorage(STORAGE_KEY, nextProducts)
-
+    commit(getNextSnapshot(snapshot, { products: nextProducts }))
     return deactivatedProduct
-  }
+  }, [commit, products, snapshot])
 
-  function updateProduct(
+  const updateProduct = useCallback((
     productId: string,
     updates: Partial<Product>,
     sales: Sale[],
     purchases: Purchase[],
-  ) {
-    const product = products.find(
-      (currentProduct) =>
-        currentProduct.id === productId,
+  ) => {
+    const product = products.find((item) => item.id === productId)
+    if (!product) return undefined
+
+    const updatedProduct = updateProductCore(product, updates, sales, purchases)
+    const nextProducts = products.map((item) =>
+      item.id === productId ? updatedProduct : item,
     )
-
-    if (!product) {
-      return undefined
-    }
-
-    const updatedProduct = updateProductCore(
-      product,
-      updates,
-      sales,
-      purchases,
-    )
-
-    const nextProducts = products.map(
-      (currentProduct) =>
-        currentProduct.id === productId
-          ? updatedProduct
-          : currentProduct,
-    )
-
-    setProducts(nextProducts)
-    saveStorage(STORAGE_KEY, nextProducts)
-
+    commit(getNextSnapshot(snapshot, { products: nextProducts }))
     return updatedProduct
-  }
+  }, [commit, products, snapshot])
 
-  function replaceProducts(
-    nextProducts: Product[],
-  ) {
-    setProducts(nextProducts)
+  const replaceProducts = useCallback((nextProducts: Product[]) => {
+    commit(getNextSnapshot(snapshot, { products: nextProducts }))
+  }, [commit, snapshot])
 
-    saveStorage(
-      STORAGE_KEY,
-      nextProducts,
-    )
-  }
-
-  const value = useMemo(
-    () => ({
-      products,
-      addProduct,
-      deactivateProduct,
-      updateProduct,
-      replaceProducts,
-    }),
-    [products],
-  )
+  const value = useMemo(() => ({
+    products,
+    addProduct,
+    deactivateProduct,
+    updateProduct,
+    replaceProducts,
+  }), [products, addProduct, deactivateProduct, updateProduct, replaceProducts])
 
   return (
     <ProductsContext.Provider value={value}>

@@ -7,17 +7,19 @@ import { PurchasesProvider } from '../context/PurchasesProvider'
 import { SalesProvider } from '../context/SalesProvider'
 import { StockMovementsProvider } from '../context/StockMovementsProvider'
 import { TasksProvider } from '../context/TasksProvider'
+import { TransactionalStateProvider } from '../context/TransactionalStateProvider'
 import { TransactionsProvider } from '../context/TransactionsProvider'
 
 export function AppLayout() {
   return (
-    <TransactionsProvider>
-      <ClientsProvider>
-        <TasksProvider>
-          <ProductsProvider>
-            <StockMovementsProvider>
-              <PurchasesProvider>
-                <SalesProvider>
+    <ClientsProvider>
+      <TasksProvider>
+        <TransactionalStateProvider>
+          <TransactionsProvider>
+            <ProductsProvider>
+              <StockMovementsProvider>
+                <PurchasesProvider>
+                  <SalesProvider>
                   <div className="app-layout">
                     <Sidebar />
 
@@ -29,12 +31,13 @@ export function AppLayout() {
                       </main>
                     </div>
                   </div>
-                </SalesProvider>
-              </PurchasesProvider>
-            </StockMovementsProvider>
-          </ProductsProvider>
-        </TasksProvider>
-      </ClientsProvider>
-    </TransactionsProvider>
+                  </SalesProvider>
+                </PurchasesProvider>
+              </StockMovementsProvider>
+            </ProductsProvider>
+          </TransactionsProvider>
+        </TransactionalStateProvider>
+      </TasksProvider>
+    </ClientsProvider>
   )
 }

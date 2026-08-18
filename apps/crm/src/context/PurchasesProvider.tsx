@@ -1,246 +1,69 @@
-﻿import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-
+import { useCallback, useMemo, useRef, type ReactNode } from 'react'
 import {
-  completePurchase as completePurchaseCore,
   normalizePurchase,
   updatePurchase as updatePurchaseCore,
   type Purchase,
   type PurchaseStatus,
 } from '@madina/core'
-
-import {
-  loadStorage,
-  saveStorage,
-} from '../shared/storage'
-import { useProducts } from './useProducts'
-import { useStockMovements } from './useStockMovements'
-import { useTransactions } from './useTransactions'
+import { getNextSnapshot, TransactionalPersistenceError } from '../shared/transactionalStorage'
 import { PurchasesContext } from './PurchasesContext'
+import { useTransactionalState } from './useTransactionalState'
+import {
+  completePurchaseSnapshot,
+  createCompletionGuard,
+} from '../shared/transactionalCompletion'
 
-interface PurchasesProviderProps {
-  children: ReactNode
-}
+interface PurchasesProviderProps { children: ReactNode }
 
-type StoredPurchase = Omit<
-  Purchase,
-  'createdAt' | 'updatedAt' | 'purchaseDate'
-> & {
-  createdAt: string
-  updatedAt: string
-  purchaseDate: string
-}
+export function PurchasesProvider({ children }: PurchasesProviderProps) {
+  const { snapshot, commit, persistenceError } = useTransactionalState()
+  const { purchases } = snapshot
+  const completionGuard = useRef(createCompletionGuard())
 
-const STORAGE_KEY = 'purchases'
+  const addPurchase = useCallback((purchase: Purchase) => {
+    const normalizedPurchase = normalizePurchase(purchase)
+    commit(getNextSnapshot(snapshot, {
+      purchases: [normalizedPurchase, ...purchases],
+    }))
+  }, [commit, purchases, snapshot])
 
-function restorePurchase(
-  purchase: StoredPurchase,
-): Purchase {
-  return {
-    ...purchase,
-    createdAt: new Date(purchase.createdAt),
-    updatedAt: new Date(purchase.updatedAt),
-    purchaseDate: new Date(
-      purchase.purchaseDate,
-    ),
-  }
-}
+  const updatePurchase = useCallback((purchaseId: string, updates: Partial<Purchase>) => {
+    const nextPurchases = purchases.map((purchase) => purchase.id === purchaseId
+      ? updatePurchaseCore(purchase, updates)
+      : purchase)
+    commit(getNextSnapshot(snapshot, { purchases: nextPurchases }))
+  }, [commit, purchases, snapshot])
 
-function loadPurchases(): Purchase[] {
-  const storedPurchases =
-    loadStorage<StoredPurchase[]>(
-      STORAGE_KEY,
-      [],
-    )
-
-
-  return storedPurchases.map(restorePurchase)
-}
-
-export function PurchasesProvider({
-  children,
-}: PurchasesProviderProps) {
-  const [purchases, setPurchases] =
-    useState<Purchase[]>(loadPurchases)
-
-  const {
-    products,
-    replaceProducts,
-  } = useProducts()
-
-  const { addMovement } =
-    useStockMovements()
-
-  const { addTransaction } =
-    useTransactions()
-
-  const addPurchase = useCallback(
-    (purchase: Purchase) => {
-      const normalizedPurchase = normalizePurchase(
-        purchase,
-      )
-
-      setPurchases((currentPurchases) => {
-        const nextPurchases = [
-          normalizedPurchase,
-          ...currentPurchases,
-        ]
-
-        saveStorage(
-          STORAGE_KEY,
-          nextPurchases,
-        )
-
-        return nextPurchases
-      })
-    },
-    [],
-  )
-
-  const updatePurchase = useCallback(
-    (
-      purchaseId: string,
-      updates: Partial<Purchase>,
-    ) => {
-      setPurchases((currentPurchases) => {
-        const nextPurchases =
-          currentPurchases.map(
-            (purchase) =>
-              purchase.id === purchaseId
-                ? updatePurchaseCore(
-                  purchase,
-                  updates,
-                )
-                : purchase,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextPurchases,
-        )
-
-        return nextPurchases
-      })
-    },
-    [],
-  )
-
-  const completePurchase = useCallback(
-    (purchaseId: string) => {
-      const purchase = purchases.find(
-        (item) => item.id === purchaseId,
-      )
-
-      if (!purchase) {
-        return {
-          success: false,
-          message: 'Поступление не найдено.',
-        }
+  const completePurchase = useCallback((purchaseId: string) => {
+    if (persistenceError) return { success: false, message: persistenceError.message }
+    if (!completionGuard.current.begin(purchaseId)) {
+      return { success: false, message: 'Завершение поступления уже выполняется.' }
+    }
+    try {
+      const result = completePurchaseSnapshot(snapshot, purchaseId)
+      if (!result.success || !result.snapshot) {
+        return { success: false, message: result.message }
       }
-
-      const result = completePurchaseCore(
-        purchase,
-        products,
-      )
-
-      if (!result.success) {
-        return {
-          success: false,
-          message: result.message,
-        }
+      commit(result.snapshot)
+      return { success: true }
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        return { success: false, message: error.message }
       }
+      throw error
+    } finally {
+      completionGuard.current.finish(purchaseId)
+    }
+  }, [commit, persistenceError, snapshot])
 
-      replaceProducts(result.products)
+  const cancelPurchase = useCallback((purchaseId: string) => {
+    const nextPurchases = purchases.map((purchase) =>
+      purchase.id === purchaseId && purchase.status === 'draft'
+        ? { ...purchase, status: 'cancelled' as PurchaseStatus, updatedAt: new Date() }
+        : purchase)
+    commit(getNextSnapshot(snapshot, { purchases: nextPurchases }))
+  }, [commit, purchases, snapshot])
 
-      for (const movement of result.movements) {
-        addMovement(movement)
-      }
-
-      if (result.transaction) {
-        addTransaction(result.transaction)
-      }
-
-      setPurchases((currentPurchases) => {
-        const nextPurchases =
-          currentPurchases.map(
-            (currentPurchase) =>
-              currentPurchase.id === purchaseId
-                ? result.purchase!
-                : currentPurchase,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextPurchases,
-        )
-
-        return nextPurchases
-      })
-
-      return {
-        success: true,
-      }
-    },
-    [
-      purchases,
-      products,
-      replaceProducts,
-      addMovement,
-      addTransaction,
-    ],
-  )
-
-  const cancelPurchase = useCallback(
-    (purchaseId: string) => {
-      setPurchases((currentPurchases) => {
-        const nextPurchases =
-          currentPurchases.map((purchase) =>
-            purchase.id === purchaseId &&
-              purchase.status === 'draft'
-              ? {
-                ...purchase,
-                status:
-                  'cancelled' as PurchaseStatus,
-                updatedAt: new Date(),
-              }
-              : purchase,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextPurchases,
-        )
-
-        return nextPurchases
-      })
-    },
-    [],
-  )
-
-  const value = useMemo(
-    () => ({
-      purchases,
-      addPurchase,
-      updatePurchase,
-      completePurchase,
-      cancelPurchase,
-    }),
-    [
-      purchases,
-      addPurchase,
-      updatePurchase,
-      completePurchase,
-      cancelPurchase,
-    ],
-  )
-
-  return (
-    <PurchasesContext.Provider value={value}>
-      {children}
-    </PurchasesContext.Provider>
-  )
+  const value = useMemo(() => ({ purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase }), [purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase])
+  return <PurchasesContext.Provider value={value}>{children}</PurchasesContext.Provider>
 }

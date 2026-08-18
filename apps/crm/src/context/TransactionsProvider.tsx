@@ -1,139 +1,31 @@
-﻿import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-import {
-  isDuplicateTransaction,
-  type Transaction,
-} from '@madina/core'
-import { loadStorage, saveStorage } from '../shared/storage'
+import { useCallback, useMemo, type ReactNode } from 'react'
+import { isDuplicateTransaction, type Transaction } from '@madina/core'
+import { getNextSnapshot } from '../shared/transactionalStorage'
 import { TransactionsContext } from './TransactionsContext'
+import { useTransactionalState } from './useTransactionalState'
 
-interface TransactionsProviderProps {
-  children: ReactNode
-}
+interface TransactionsProviderProps { children: ReactNode }
 
-type StoredTransaction = Omit<
-  Transaction,
-  'createdAt' | 'updatedAt' | 'transactionDate'
-> & {
-  createdAt: string
-  updatedAt: string
-  transactionDate: string
-}
+export function TransactionsProvider({ children }: TransactionsProviderProps) {
+  const { snapshot, commit } = useTransactionalState()
+  const { transactions } = snapshot
 
-const STORAGE_KEY = 'transactions'
+  const addTransaction = useCallback((transaction: Transaction) => {
+    if (isDuplicateTransaction(transactions, transaction)) return
+    commit(getNextSnapshot(snapshot, {
+      transactions: [transaction, ...transactions],
+    }))
+  }, [commit, snapshot, transactions])
 
-function restoreTransaction(
-  transaction: StoredTransaction,
-): Transaction {
-  return {
-    ...transaction,
-    createdAt: new Date(transaction.createdAt),
-    updatedAt: new Date(transaction.updatedAt),
-    transactionDate: new Date(
-      transaction.transactionDate,
-    ),
-  }
-}
-
-function loadTransactions(): Transaction[] {
-  const storedTransactions =
-    loadStorage<StoredTransaction[]>(
-      STORAGE_KEY,
-      [],
+  const updateTransaction = useCallback((transactionId: string, updates: Partial<Transaction>) => {
+    const nextTransactions = transactions.map((transaction) =>
+      transaction.id === transactionId
+        ? { ...transaction, ...updates, updatedAt: new Date() }
+        : transaction,
     )
+    commit(getNextSnapshot(snapshot, { transactions: nextTransactions }))
+  }, [commit, snapshot, transactions])
 
-  return storedTransactions.map(
-    restoreTransaction,
-  )
-}
-
-export function TransactionsProvider({
-  children,
-}: TransactionsProviderProps) {
-  const [transactions, setTransactions] =
-    useState<Transaction[]>(
-      loadTransactions,
-    )
-
-  const addTransaction = useCallback(
-    (transaction: Transaction) => {
-      setTransactions((currentTransactions) => {
-        if (
-          isDuplicateTransaction(
-            currentTransactions,
-            transaction,
-          )
-        ) {
-          return currentTransactions
-        }
-
-        const nextTransactions = [
-          transaction,
-          ...currentTransactions,
-        ]
-
-        saveStorage(
-          STORAGE_KEY,
-          nextTransactions,
-        )
-
-        return nextTransactions
-      })
-    },
-    [],
-  )
-
-  const updateTransaction = useCallback(
-    (
-      transactionId: string,
-      updates: Partial<Transaction>,
-    ) => {
-      setTransactions((currentTransactions) => {
-        const nextTransactions =
-          currentTransactions.map(
-            (transaction) =>
-              transaction.id === transactionId
-                ? {
-                  ...transaction,
-                  ...updates,
-                  updatedAt: new Date(),
-                }
-                : transaction,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextTransactions,
-        )
-
-        return nextTransactions
-      })
-    },
-    [],
-  )
-
-  const value = useMemo(
-    () => ({
-      transactions,
-      addTransaction,
-      updateTransaction,
-    }),
-    [
-      transactions,
-      addTransaction,
-      updateTransaction,
-    ],
-  )
-
-  return (
-    <TransactionsContext.Provider
-      value={value}
-    >
-      {children}
-    </TransactionsContext.Provider>
-  )
+  const value = useMemo(() => ({ transactions, addTransaction, updateTransaction }), [transactions, addTransaction, updateTransaction])
+  return <TransactionsContext.Provider value={value}>{children}</TransactionsContext.Provider>
 }

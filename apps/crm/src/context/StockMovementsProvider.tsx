@@ -1,150 +1,38 @@
-﻿import {
-  useCallback,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import type { StockMovement } from '@madina/core'
-import {
-  loadStorage,
-  saveStorage,
-} from '../shared/storage'
+import { getNextSnapshot } from '../shared/transactionalStorage'
 import { StockMovementsContext } from './StockMovementsContext'
+import { useTransactionalState } from './useTransactionalState'
 
-interface StockMovementsProviderProps {
-  children: ReactNode
-}
+interface StockMovementsProviderProps { children: ReactNode }
 
-type StoredStockMovement = Omit<
-  StockMovement,
-  'createdAt' | 'updatedAt'
-> & {
-  createdAt: string
-  updatedAt: string
-}
-
-const STORAGE_KEY = 'stock-movements'
-
-function restoreMovement(
-  movement: StoredStockMovement,
-): StockMovement {
-  return {
-    ...movement,
-    createdAt: new Date(movement.createdAt),
-    updatedAt: new Date(movement.updatedAt),
-  }
-}
-
-function loadMovements(): StockMovement[] {
-  const storedMovements =
-    loadStorage<StoredStockMovement[]>(
-      STORAGE_KEY,
-      [],
-    )
-
-  return storedMovements.map(
-    restoreMovement,
+function isDuplicateMovement(movements: StockMovement[], movement: StockMovement) {
+  return Boolean(movement.referenceId) && movements.some((currentMovement) =>
+    currentMovement.type === movement.type &&
+    currentMovement.productId === movement.productId &&
+    currentMovement.referenceId === movement.referenceId,
   )
 }
 
-function hasReference(
-  movement: StockMovement,
-): boolean {
-  return Boolean(movement.referenceId)
-}
+export function StockMovementsProvider({ children }: StockMovementsProviderProps) {
+  const { snapshot, commit } = useTransactionalState()
+  const movements = snapshot.stockMovements
 
-function isDuplicateMovement(
-  movements: StockMovement[],
-  movement: StockMovement,
-): boolean {
-  if (!hasReference(movement)) {
-    return false
-  }
+  const addMovement = useCallback((movement: StockMovement) => {
+    if (isDuplicateMovement(movements, movement)) return
+    commit(getNextSnapshot(snapshot, {
+      stockMovements: [...movements, movement],
+    }))
+  }, [commit, movements, snapshot])
 
-  return movements.some(
-    (currentMovement) =>
-      currentMovement.type === movement.type &&
-      currentMovement.productId ===
-        movement.productId &&
-      currentMovement.referenceId ===
-        movement.referenceId,
-  )
-}
+  const getProductMovements = useCallback((productId: string) =>
+    movements.filter((movement) => movement.productId === productId), [movements])
+  const getMovementsByType = useCallback((type: StockMovement['type']) =>
+    movements.filter((movement) => movement.type === type), [movements])
 
-export function StockMovementsProvider({
-  children,
-}: StockMovementsProviderProps) {
-  const [movements, setMovements] =
-    useState<StockMovement[]>(
-      loadMovements,
-    )
+  const value = useMemo(() => ({
+    movements, addMovement, getProductMovements, getMovementsByType,
+  }), [movements, addMovement, getProductMovements, getMovementsByType])
 
-  const addMovement = useCallback(
-    (movement: StockMovement) => {
-      setMovements((currentMovements) => {
-        if (
-          isDuplicateMovement(
-            currentMovements,
-            movement,
-          )
-        ) {
-          return currentMovements
-        }
-
-        const nextMovements = [
-          ...currentMovements,
-          movement,
-        ]
-
-        saveStorage(
-          STORAGE_KEY,
-          nextMovements,
-        )
-
-        return nextMovements
-      })
-    },
-    [],
-  )
-
-  const getProductMovements = useCallback(
-    (productId: string) =>
-      movements.filter(
-        (movement) =>
-          movement.productId === productId,
-      ),
-    [movements],
-  )
-
-  const getMovementsByType = useCallback(
-    (type: StockMovement['type']) =>
-      movements.filter(
-        (movement) =>
-          movement.type === type,
-      ),
-    [movements],
-  )
-
-  const value = useMemo(
-    () => ({
-      movements,
-      addMovement,
-      getProductMovements,
-      getMovementsByType,
-    }),
-    [
-      movements,
-      addMovement,
-      getProductMovements,
-      getMovementsByType,
-    ],
-  )
-
-  return (
-    <StockMovementsContext.Provider
-      value={value}
-    >
-      {children}
-    </StockMovementsContext.Provider>
-  )
+  return <StockMovementsContext.Provider value={value}>{children}</StockMovementsContext.Provider>
 }

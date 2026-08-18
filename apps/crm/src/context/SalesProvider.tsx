@@ -1,243 +1,76 @@
-﻿import {
+import {
   useCallback,
   useMemo,
-  useState,
+  useRef,
   type ReactNode,
 } from 'react'
-
 import {
-  completeSale as completeSaleCore,
   normalizeSale,
   updateSale as updateSaleCore,
   type Sale,
   type SaleStatus,
 } from '@madina/core'
-
 import {
-  loadStorage,
-  saveStorage,
-} from '../shared/storage'
-import { useProducts } from './useProducts'
-import { useStockMovements } from './useStockMovements'
-import { useTransactions } from './useTransactions'
+  getNextSnapshot,
+  TransactionalPersistenceError,
+} from '../shared/transactionalStorage'
 import { SalesContext } from './SalesContext'
+import { useTransactionalState } from './useTransactionalState'
+import {
+  completeSaleSnapshot,
+  createCompletionGuard,
+} from '../shared/transactionalCompletion'
 
-interface SalesProviderProps {
-  children: ReactNode
-}
+interface SalesProviderProps { children: ReactNode }
 
-type StoredSale = Omit<
-  Sale,
-  'createdAt' | 'updatedAt' | 'saleDate'
-> & {
-  createdAt: string
-  updatedAt: string
-  saleDate: string
-}
+export function SalesProvider({ children }: SalesProviderProps) {
+  const { snapshot, commit, persistenceError } = useTransactionalState()
+  const { sales } = snapshot
+  const completionGuard = useRef(createCompletionGuard())
 
-const STORAGE_KEY = 'sales'
+  const addSale = useCallback((sale: Sale) => {
+    const normalizedSale = normalizeSale(sale)
+    commit(getNextSnapshot(snapshot, { sales: [...sales, normalizedSale] }))
+  }, [commit, sales, snapshot])
 
-function restoreSale(
-  sale: StoredSale,
-): Sale {
-  return {
-    ...sale,
-    createdAt: new Date(sale.createdAt),
-    updatedAt: new Date(sale.updatedAt),
-    saleDate: new Date(sale.saleDate),
-  }
-}
+  const updateSale = useCallback((saleId: string, updates: Partial<Sale>) => {
+    const nextSales = sales.map((sale) => sale.id === saleId
+      ? updateSaleCore(sale, updates)
+      : sale)
+    commit(getNextSnapshot(snapshot, { sales: nextSales }))
+  }, [commit, sales, snapshot])
 
-function loadSales(): Sale[] {
-  const storedSales =
-    loadStorage<StoredSale[]>(
-      STORAGE_KEY,
-      [],
-    )
-
-  return storedSales.map(
-    restoreSale,
-  )
-}
-
-export function SalesProvider({
-  children,
-}: SalesProviderProps) {
-  const [sales, setSales] =
-    useState<Sale[]>(loadSales)
-
-  const {
-    products,
-    replaceProducts,
-  } = useProducts()
-
-  const { addMovement } =
-    useStockMovements()
-
-  const { addTransaction } =
-    useTransactions()
-
-  const addSale = useCallback(
-    (sale: Sale) => {
-      const normalizedSale = normalizeSale(sale)
-
-      setSales((currentSales) => {
-        const nextSales = [
-          ...currentSales,
-          normalizedSale,
-        ]
-
-        saveStorage(
-          STORAGE_KEY,
-          nextSales,
-        )
-
-        return nextSales
-      })
-    },
-    [],
-  )
-
-  const updateSale = useCallback(
-    (
-      saleId: string,
-      updates: Partial<Sale>,
-    ) => {
-      setSales((currentSales) => {
-        const nextSales =
-          currentSales.map(
-            (sale) =>
-              sale.id === saleId
-                ? updateSaleCore(
-                  sale,
-                  updates,
-                )
-                : sale,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextSales,
-        )
-
-        return nextSales
-      })
-    },
-    [],
-  )
-
-  const completeSale = useCallback(
-    (saleId: string) => {
-      const sale = sales.find(
-        (item) => item.id === saleId,
-      )
-
-      if (!sale) {
-        return {
-          success: false,
-          message: 'Продажа не найдена.',
-        }
+  const completeSale = useCallback((saleId: string) => {
+    if (persistenceError) {
+      return { success: false, message: persistenceError.message }
+    }
+    if (!completionGuard.current.begin(saleId)) {
+      return { success: false, message: 'Завершение продажи уже выполняется.' }
+    }
+    try {
+      const result = completeSaleSnapshot(snapshot, saleId)
+      if (!result.success || !result.snapshot) {
+        return { success: false, message: result.message }
       }
-
-      const result = completeSaleCore(
-        sale,
-        products,
-      )
-
-      if (!result.success) {
-        return {
-          success: false,
-          message: result.message,
-        }
+      commit(result.snapshot)
+      return { success: true }
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        return { success: false, message: error.message }
       }
+      throw error
+    } finally {
+      completionGuard.current.finish(saleId)
+    }
+  }, [commit, persistenceError, snapshot])
 
-      replaceProducts(result.products)
+  const cancelSale = useCallback((saleId: string) => {
+    const nextSales = sales.map((sale) => sale.id === saleId && sale.status === 'draft'
+      ? { ...sale, status: 'cancelled' as SaleStatus, updatedAt: new Date() }
+      : sale)
+    commit(getNextSnapshot(snapshot, { sales: nextSales }))
+  }, [commit, sales, snapshot])
 
-      for (const movement of result.movements) {
-        addMovement(movement)
-      }
-
-      if (result.transaction) {
-        addTransaction(result.transaction)
-      }
-
-      setSales((currentSales) => {
-        const nextSales =
-          currentSales.map(
-            (currentSale) =>
-              currentSale.id === saleId
-                ? result.sale!
-                : currentSale,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextSales,
-        )
-
-        return nextSales
-      })
-
-      return {
-        success: true,
-      }
-    },
-    [
-      sales,
-      products,
-      replaceProducts,
-      addMovement,
-      addTransaction,
-    ],
-  )
-
-  const cancelSale = useCallback(
-    (saleId: string) => {
-      setSales((currentSales) => {
-        const nextSales =
-          currentSales.map((sale) =>
-            sale.id === saleId &&
-              sale.status === 'draft'
-              ? {
-                ...sale,
-                status:
-                  'cancelled' as SaleStatus,
-                updatedAt: new Date(),
-              }
-              : sale,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextSales,
-        )
-
-        return nextSales
-      })
-    },
-    [],
-  )
-
-  const value = useMemo(
-    () => ({
-      sales,
-      addSale,
-      updateSale,
-      completeSale,
-      cancelSale,
-    }),
-    [
-      sales,
-      addSale,
-      updateSale,
-      completeSale,
-      cancelSale,
-    ],
-  )
-
-  return (
-    <SalesContext.Provider value={value}>
-      {children}
-    </SalesContext.Provider>
-  )
+  const value = useMemo(() => ({ sales, addSale, updateSale, completeSale, cancelSale }), [sales, addSale, updateSale, completeSale, cancelSale])
+  return <SalesContext.Provider value={value}>{children}</SalesContext.Provider>
 }
