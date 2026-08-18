@@ -1,7 +1,14 @@
 import type { Purchase } from '../../purchases/types/purchase'
 import type { Sale } from '../../sales/types/sale'
 import type { Transaction } from '../../transactions/types/transaction'
-import type { ProductUnit } from '../../inventory/types/product'
+import type {
+  Product,
+  ProductUnit,
+} from '../../inventory/types/product'
+import type {
+  StockMovement,
+  StockMovementType,
+} from '../../inventory/types/stockMovement'
 
 export type PresetReportingPeriod =
   | 'all'
@@ -61,6 +68,22 @@ export interface ClientSalesMetric {
   clientNames: string[]
   completedSaleCount: number
   completedSaleAmount: number
+}
+
+export interface InventoryProductSummary {
+  productCount: number
+  activeProductCount: number
+}
+
+export interface UnitQuantityMetric {
+  unit: ProductUnit
+  quantity: number
+}
+
+export interface StockMovementMetric {
+  type: StockMovementType
+  unit: ProductUnit
+  quantity: number
 }
 
 export class ReportingValidationError extends Error {
@@ -353,6 +376,123 @@ export function getClientSalesMetrics(
   }
 
   return [...metricsByClientId.values()]
+}
+
+export function getInventoryProductSummary(
+  products: readonly Product[],
+): InventoryProductSummary {
+  return {
+    productCount: products.length,
+    activeProductCount: products.filter(
+      (product) => product.status === 'active',
+    ).length,
+  }
+}
+
+export function getCurrentStockByUnit(
+  products: readonly Product[],
+): UnitQuantityMetric[] {
+  const quantitiesByUnit = new Map<
+    ProductUnit,
+    UnitQuantityMetric
+  >()
+
+  for (const product of products) {
+    const metric = quantitiesByUnit.get(product.unit)
+
+    if (metric) {
+      metric.quantity += product.quantity
+      continue
+    }
+
+    quantitiesByUnit.set(product.unit, {
+      unit: product.unit,
+      quantity: product.quantity,
+    })
+  }
+
+  return [...quantitiesByUnit.values()]
+}
+
+export function getReportingEligibleStockMovements(
+  movements: readonly StockMovement[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): StockMovement[] {
+  return filterByReportingPeriod(
+    movements,
+    (movement) => movement.createdAt,
+    period,
+    now,
+  )
+}
+
+export function getStockMovementMetrics(
+  movements: readonly StockMovement[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): StockMovementMetric[] {
+  const metricsByTypeAndUnit = new Map<
+    StockMovementType,
+    Map<ProductUnit, StockMovementMetric>
+  >()
+
+  for (const movement of getReportingEligibleStockMovements(
+    movements,
+    period,
+    now,
+  )) {
+    const metricsByUnit =
+      metricsByTypeAndUnit.get(movement.type) ?? new Map()
+    const metric = metricsByUnit.get(movement.unit)
+
+    if (metric) {
+      metric.quantity += movement.quantity
+    } else {
+      metricsByUnit.set(movement.unit, {
+        type: movement.type,
+        unit: movement.unit,
+        quantity: movement.quantity,
+      })
+    }
+
+    metricsByTypeAndUnit.set(movement.type, metricsByUnit)
+  }
+
+  return [...metricsByTypeAndUnit.values()].flatMap(
+    (metricsByUnit) => [...metricsByUnit.values()],
+  )
+}
+
+export function getNetStockMovementByUnit(
+  movements: readonly StockMovement[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): UnitQuantityMetric[] {
+  const quantitiesByUnit = new Map<
+    ProductUnit,
+    UnitQuantityMetric
+  >()
+
+  for (const movement of getReportingEligibleStockMovements(
+    movements,
+    period,
+    now,
+  )) {
+    const metric = quantitiesByUnit.get(movement.unit)
+
+    if (metric) {
+      metric.quantity += movement.quantity
+      continue
+    }
+
+    quantitiesByUnit.set(movement.unit, {
+      unit: movement.unit,
+      quantity: movement.quantity,
+    })
+  }
+
+  return [...quantitiesByUnit.values()]
 }
 
 function getDocumentReportingSummary<

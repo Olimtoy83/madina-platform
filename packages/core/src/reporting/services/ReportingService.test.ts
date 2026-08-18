@@ -6,9 +6,14 @@ import {
 import type { Purchase } from '../../purchases/types/purchase'
 import type { Sale } from '../../sales/types/sale'
 import type { Transaction } from '../../transactions/types/transaction'
+import type { Product } from '../../inventory/types/product'
+import type { StockMovement } from '../../inventory/types/stockMovement'
 import {
+  getCurrentStockByUnit,
   getFinancialKpis,
   getClientSalesMetrics,
+  getInventoryProductSummary,
+  getNetStockMovementByUnit,
   getPurchasesProductMetrics,
   getPurchasesReportingSummary,
   getReportingEligiblePurchases,
@@ -16,6 +21,7 @@ import {
   getReportingEligibleTransactions,
   getSalesProductMetrics,
   getSalesReportingSummary,
+  getStockMovementMetrics,
   ReportingValidationError,
   resolveReportingPeriod,
 } from './ReportingService'
@@ -69,6 +75,39 @@ function createPurchase(
     totalAmount: 100,
     paymentMethod: 'cash',
     status: 'completed',
+    ...overrides,
+  }
+}
+
+function createProduct(
+  overrides: Partial<Product> = {},
+): Product {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    name: 'Product',
+    category: 'dry-fruits',
+    quantity: 0,
+    unit: 'kg',
+    costPrice: 10,
+    salePrice: 20,
+    status: 'active',
+    ...overrides,
+  }
+}
+
+function createStockMovement(
+  overrides: Partial<StockMovement> = {},
+): StockMovement {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    productId: 'product-1',
+    type: 'purchase',
+    quantity: 1,
+    unit: 'kg',
     ...overrides,
   }
 }
@@ -889,6 +928,173 @@ describe('ReportingService', () => {
       )
       expect(sales).toEqual(salesSnapshot)
       expect(purchases).toEqual(purchasesSnapshot)
+    })
+  })
+
+  describe('Unit-aware inventory reporting', () => {
+    it('counts all Product master records and active Products separately', () => {
+      expect(
+        getInventoryProductSummary([
+          createProduct({ status: 'active' }),
+          createProduct({ status: 'inactive' }),
+          createProduct({ status: 'active' }),
+        ]),
+      ).toEqual({
+        productCount: 3,
+        activeProductCount: 2,
+      })
+    })
+
+    it('groups current on-hand stock by unit and retains inactive and zero-quantity Products', () => {
+      expect(
+        getCurrentStockByUnit([
+          createProduct({
+            quantity: 2,
+            unit: 'kg',
+          }),
+          createProduct({
+            quantity: 3,
+            unit: 'kg',
+            status: 'inactive',
+          }),
+          createProduct({
+            quantity: 4,
+            unit: 'piece',
+          }),
+          createProduct({
+            quantity: 0,
+            unit: 'liter',
+          }),
+        ]),
+      ).toEqual([
+        { unit: 'kg', quantity: 5 },
+        { unit: 'piece', quantity: 4 },
+        { unit: 'liter', quantity: 0 },
+      ])
+    })
+
+    it('returns empty unit-aware inventory metrics for empty source data', () => {
+      expect(getInventoryProductSummary([])).toEqual({
+        productCount: 0,
+        activeProductCount: 0,
+      })
+      expect(getCurrentStockByUnit([])).toEqual([])
+      expect(getStockMovementMetrics([], 'all', now)).toEqual([])
+      expect(getNetStockMovementByUnit([], 'all', now)).toEqual([])
+    })
+
+    it('groups eligible movement quantities by type and unit with signed semantics preserved', () => {
+      expect(
+        getStockMovementMetrics(
+          [
+            createStockMovement({
+              type: 'purchase',
+              unit: 'kg',
+              quantity: 5,
+            }),
+            createStockMovement({
+              type: 'purchase',
+              unit: 'kg',
+              quantity: 2,
+            }),
+            createStockMovement({
+              type: 'sale',
+              unit: 'kg',
+              quantity: -3,
+            }),
+            createStockMovement({
+              type: 'adjustment',
+              unit: 'kg',
+              quantity: -1,
+            }),
+            createStockMovement({
+              type: 'purchase',
+              unit: 'piece',
+              quantity: 4,
+            }),
+          ],
+          'today',
+          now,
+        ),
+      ).toEqual([
+        { type: 'purchase', unit: 'kg', quantity: 7 },
+        { type: 'purchase', unit: 'piece', quantity: 4 },
+        { type: 'sale', unit: 'kg', quantity: -3 },
+        { type: 'adjustment', unit: 'kg', quantity: -1 },
+      ])
+    })
+
+    it('returns signed net movement per unit and applies canonical periods', () => {
+      const movements = [
+        createStockMovement({
+          type: 'purchase',
+          unit: 'kg',
+          quantity: 5,
+        }),
+        createStockMovement({
+          type: 'sale',
+          unit: 'kg',
+          quantity: -2,
+        }),
+        createStockMovement({
+          type: 'purchase',
+          unit: 'piece',
+          quantity: 3,
+        }),
+        createStockMovement({
+          type: 'sale',
+          unit: 'kg',
+          quantity: -1,
+          createdAt: new Date(2026, 7, 15),
+        }),
+        createStockMovement({
+          type: 'purchase',
+          unit: 'kg',
+          quantity: 10,
+          createdAt: new Date(2026, 7, 17),
+        }),
+      ]
+
+      expect(
+        getNetStockMovementByUnit(
+          movements,
+          'today',
+          now,
+        ),
+      ).toEqual([
+        { unit: 'kg', quantity: 3 },
+        { unit: 'piece', quantity: 3 },
+      ])
+      expect(
+        getNetStockMovementByUnit(
+          movements,
+          {
+            kind: 'custom',
+            start: new Date(2026, 7, 15),
+            end: new Date(2026, 7, 15),
+          },
+          now,
+        ),
+      ).toEqual([{ unit: 'kg', quantity: -1 }])
+    })
+
+    it('does not mutate Product or StockMovement source arrays and objects', () => {
+      const products = [
+        createProduct({ quantity: 2, unit: 'kg' }),
+      ]
+      const movements = [
+        createStockMovement({ quantity: -1, type: 'sale' }),
+      ]
+      const productsSnapshot = structuredClone(products)
+      const movementsSnapshot = structuredClone(movements)
+
+      getInventoryProductSummary(products)
+      getCurrentStockByUnit(products)
+      getStockMovementMetrics(movements, 'all', now)
+      getNetStockMovementByUnit(movements, 'all', now)
+
+      expect(products).toEqual(productsSnapshot)
+      expect(movements).toEqual(movementsSnapshot)
     })
   })
 })
