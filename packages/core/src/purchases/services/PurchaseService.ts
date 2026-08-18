@@ -96,6 +96,16 @@ export function completePurchase(
     }
   }
 
+  if (normalizedPurchase.items.length === 0) {
+    return {
+      success: false,
+      message:
+        'Нельзя завершить поступление без товаров.',
+      products,
+      movements: [],
+    }
+  }
+
   for (const item of normalizedPurchase.items) {
     const product = products.find(
       (currentProduct) =>

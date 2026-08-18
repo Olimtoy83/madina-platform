@@ -284,6 +284,25 @@ describe('completePurchase', () => {
     expect(result.transaction).toBeUndefined()
   })
 
+  it('rejects purchase without items', () => {
+    const products = [createProduct()]
+    const purchase = createPurchase()
+
+    purchase.items = []
+    purchase.totalAmount = 0
+
+    const result = completePurchase(
+      purchase,
+      products,
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.purchase).toBeUndefined()
+    expect(result.movements).toHaveLength(0)
+    expect(result.transaction).toBeUndefined()
+    expect(result.products).toEqual(products)
+  })
+
   it('rejects purchase when product is missing', () => {
     const products = [createProduct()]
     const purchase = createPurchase()
