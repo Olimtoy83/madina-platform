@@ -7,6 +7,7 @@
 
 import {
   completeSale as completeSaleCore,
+  normalizeSale,
   type Sale,
   type SaleStatus,
 } from '@madina/core'
@@ -77,10 +78,12 @@ export function SalesProvider({
 
   const addSale = useCallback(
     (sale: Sale) => {
+      const normalizedSale = normalizeSale(sale)
+
       setSales((currentSales) => {
         const nextSales = [
           ...currentSales,
-          sale,
+          normalizedSale,
         ]
 
         saveStorage(
