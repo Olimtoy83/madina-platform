@@ -369,6 +369,40 @@ describe('completePurchase', () => {
     expect(result.transaction?.amount).toBe(500)
   })
 
+  it('rejects a conflicting legacy draft before completion side effects', () => {
+    const products = [createProduct()]
+    const purchase = createPurchase()
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+
+    purchase.items = [
+      {
+        productId: 'product-001',
+        quantity: 2,
+        unit: 'kg',
+        unitCost: 100,
+        totalCost: 200,
+      },
+      {
+        productId: 'product-001',
+        quantity: 3,
+        unit: 'kg',
+        unitCost: 120,
+        totalCost: 360,
+      },
+    ]
+
+    try {
+      expect(() => completePurchase(
+        purchase,
+        products,
+      )).toThrow(PurchaseValidationError)
+      expect(products[0]?.quantity).toBe(10)
+      expect(randomUUID).not.toHaveBeenCalled()
+    } finally {
+      randomUUID.mockRestore()
+    }
+  })
+
   it('rejects purchase that is not a draft', () => {
     const products = [createProduct()]
     const purchase = createPurchase(
@@ -448,6 +482,31 @@ describe('completePurchase', () => {
 })
 
 describe('updatePurchase', () => {
+  it('rejects updates to a conflicting legacy draft', () => {
+    const purchase = createPurchase()
+
+    purchase.items = [
+      {
+        productId: 'product-001',
+        quantity: 2,
+        unit: 'kg',
+        unitCost: 100,
+        totalCost: 200,
+      },
+      {
+        productId: 'product-001',
+        quantity: 3,
+        unit: 'kg',
+        unitCost: 120,
+        totalCost: 360,
+      },
+    ]
+
+    expect(() => updatePurchase(purchase, {
+      note: 'Updated note',
+    })).toThrow(PurchaseValidationError)
+  })
+
   it('updates a draft purchase with normalized items and a system-managed timestamp', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-18T12:00:00'))

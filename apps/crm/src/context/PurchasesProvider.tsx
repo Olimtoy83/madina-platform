@@ -58,9 +58,7 @@ function loadPurchases(): Purchase[] {
     )
 
 
-  return storedPurchases
-    .map(restorePurchase)
-    .map(normalizePurchase)
+  return storedPurchases.map(restorePurchase)
 }
 
 export function PurchasesProvider({
