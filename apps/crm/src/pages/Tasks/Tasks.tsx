@@ -100,7 +100,7 @@ export function Tasks() {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
           onClick={() =>
             setIsFormOpen((current) => !current)
@@ -109,7 +109,7 @@ export function Tasks() {
           {isFormOpen
             ? 'Закрыть'
             : 'Новая задача'}
-        </button>
+        </Button>
       </div>
 
       {isFormOpen && (

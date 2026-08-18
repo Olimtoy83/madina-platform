@@ -10,6 +10,7 @@ import {
 } from '@madina/core'
 
 import {
+  Button,
   Input,
   Select,
 } from '@madina/ui'
@@ -290,13 +291,13 @@ export function Warehouse() {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
           className="warehouse__add-button"
           onClick={startAdding}
         >
           Добавить товар
-        </button>
+        </Button>
       </div>
 
       <div className="warehouse__toolbar">
@@ -394,14 +395,14 @@ export function Warehouse() {
                   </td>
 
                   <td>
-                    <button
+                    <Button
                       type="button"
                       onClick={() =>
                         openProduct(product)
                       }
                     >
                       Открыть
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))
@@ -421,14 +422,14 @@ export function Warehouse() {
               </p>
             </div>
 
-            <button
+            <Button
               type="button"
               className="warehouse__product-card-close"
               onClick={cancelAdding}
               aria-label="Закрыть форму"
             >
               ×
-            </button>
+            </Button>
           </div>
 
           <div className="warehouse__edit-form">
@@ -604,22 +605,22 @@ export function Warehouse() {
           </div>
 
           <div className="warehouse__product-card-actions">
-            <button
+            <Button
               type="button"
               className="warehouse__secondary-button"
               onClick={cancelAdding}
             >
               Отмена
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
               className="warehouse__primary-button"
               onClick={handleAddProduct}
               disabled={!addForm.name.trim()}
             >
               Сохранить товар
-            </button>
+            </Button>
           </div>
         </section>
       )}
@@ -633,14 +634,14 @@ export function Warehouse() {
               <p>Карточка товара</p>
             </div>
 
-            <button
+            <Button
               type="button"
               className="warehouse__product-card-close"
               onClick={closeProduct}
               aria-label="Закрыть карточку"
             >
               ×
-            </button>
+            </Button>
           </div>
 
           {!isEditing ? (
@@ -730,37 +731,37 @@ export function Warehouse() {
               </div>
 
               <div className="warehouse__product-card-actions">
-                <button
+                <Button
                   type="button"
                   className="warehouse__secondary-button"
                   onClick={closeProduct}
                 >
                   Закрыть
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
                   className="warehouse__secondary-button"
                   onClick={startDelete}
                 >
                   Удалить
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
                   className="warehouse__secondary-button"
                   onClick={startAdjustment}
                 >
                   Корректировка
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
                   className="warehouse__primary-button"
                   onClick={startEditing}
                 >
                   Редактировать
-                </button>
+                </Button>
               </div>
 
               {isAdjustmentOpen && (
@@ -825,15 +826,15 @@ export function Warehouse() {
                   </div>
 
                   <div className="warehouse__product-card-actions">
-                    <button
+                    <Button
                       type="button"
                       className="warehouse__secondary-button"
                       onClick={cancelAdjustment}
                     >
                       Отмена
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                       type="button"
                       className="warehouse__primary-button"
                       onClick={handleAdjustment}
@@ -843,7 +844,7 @@ export function Warehouse() {
                       }
                     >
                       Сохранить корректировку
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -858,21 +859,21 @@ export function Warehouse() {
                   </p>
 
                   <div className="warehouse__product-card-actions">
-                    <button
+                    <Button
                       type="button"
                       className="warehouse__secondary-button"
                       onClick={cancelDelete}
                     >
                       Отмена
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                       type="button"
                       className="warehouse__primary-button"
                       onClick={confirmDelete}
                     >
                       Удалить
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1098,31 +1099,27 @@ export function Warehouse() {
                   </div>
 
                   <div className="warehouse__product-card-actions">
-                    <button
+                    <Button
                       type="button"
                       className="warehouse__secondary-button"
-                      onClick={cancelAdjustment}
+                      onClick={cancelDelete}
                     >
                       Отмена
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
                       type="button"
                       className="warehouse__primary-button"
-                      onClick={handleAdjustment}
-                      disabled={
-                        !adjustmentQuantity ||
-                        Number(adjustmentQuantity) <= 0
-                      }
+                      onClick={confirmDelete}
                     >
-                      Сохранить корректировку
-                    </button>
+                      Удалить
+                    </Button>
                   </div>
                 </div>
               )}
 
               <div className="warehouse__product-card-actions">
-                <button
+                <Button
                   type="button"
                   className="warehouse__secondary-button"
                   onClick={() =>
@@ -1130,16 +1127,16 @@ export function Warehouse() {
                   }
                 >
                   Отмена
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
                   className="warehouse__primary-button"
                   onClick={handleSaveEdit}
                   disabled={!editForm.name.trim()}
                 >
                   Сохранить
-                </button>
+                </Button>
               </div>
             </>
           )}

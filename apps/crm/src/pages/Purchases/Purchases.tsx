@@ -369,7 +369,7 @@ export function Purchases() {
               </p>
             </div>
 
-            <button
+            <Button
               type="button"
               className="purchases__purchase-card-close"
               onClick={() =>
@@ -378,7 +378,7 @@ export function Purchases() {
               aria-label="Закрыть карточку"
             >
               ×
-            </button>
+            </Button>
           </div>
 
           <div className="purchases__purchase-details">
@@ -566,7 +566,7 @@ export function Purchases() {
                 </p>
               </div>
 
-              <button
+              <Button
                 type="button"
                 className="purchases__purchase-card-close"
                 onClick={() =>
@@ -575,7 +575,7 @@ export function Purchases() {
                 aria-label="Закрыть"
               >
                 ×
-              </button>
+              </Button>
             </div>
 
             <div className="purchases__form">
