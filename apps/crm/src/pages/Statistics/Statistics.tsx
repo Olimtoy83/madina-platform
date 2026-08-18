@@ -10,6 +10,7 @@ import {
   type TransactionPeriod,
 } from '@madina/core'
 
+import { Select } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { useTasks } from '../../context/useTasks'
 import { useTransactions } from '../../context/useTransactions'
@@ -102,7 +103,7 @@ export function Statistics() {
           </p>
         </div>
 
-        <select
+        <Select
           className="statistics-page__period"
           value={period}
           onChange={(event) =>
@@ -126,7 +127,7 @@ export function Statistics() {
           <option value="month">
             Текущий месяц
           </option>
-        </select>
+        </Select>
       </header>
 
       <div className="statistics-page__summary">
