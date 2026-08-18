@@ -1,6 +1,7 @@
 import type { Purchase } from '../../purchases/types/purchase'
 import type { Sale } from '../../sales/types/sale'
 import type { Transaction } from '../../transactions/types/transaction'
+import type { ProductUnit } from '../../inventory/types/product'
 
 export type PresetReportingPeriod =
   | 'all'
@@ -29,6 +30,37 @@ export interface FinancialKpis {
   purchaseExpense: number
   totalExpense: number
   financialBalance: number
+}
+
+export interface DocumentStatusBreakdown {
+  draft: number
+  completed: number
+  cancelled: number
+}
+
+export interface DocumentReportingSummary {
+  statusBreakdown: DocumentStatusBreakdown
+  completedCount: number
+  completedAmount: number
+}
+
+export type SalesReportingSummary =
+  DocumentReportingSummary
+
+export type PurchasesReportingSummary =
+  DocumentReportingSummary
+
+export interface ProductQuantityMetric {
+  productId: string
+  unit: ProductUnit
+  quantity: number
+}
+
+export interface ClientSalesMetric {
+  clientId: string
+  clientNames: string[]
+  completedSaleCount: number
+  completedSaleAmount: number
 }
 
 export class ReportingValidationError extends Error {
@@ -221,6 +253,169 @@ export function getReportingEligiblePurchases(
     (purchase) => purchase.purchaseDate,
     period,
     now,
+  )
+}
+
+export function getSalesReportingSummary(
+  sales: readonly Sale[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): SalesReportingSummary {
+  return getDocumentReportingSummary(
+    filterByReportingPeriod(
+      sales,
+      (sale) => sale.saleDate,
+      period,
+      now,
+    ),
+  )
+}
+
+export function getPurchasesReportingSummary(
+  purchases: readonly Purchase[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): PurchasesReportingSummary {
+  return getDocumentReportingSummary(
+    filterByReportingPeriod(
+      purchases,
+      (purchase) => purchase.purchaseDate,
+      period,
+      now,
+    ),
+  )
+}
+
+export function getSalesProductMetrics(
+  sales: readonly Sale[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): ProductQuantityMetric[] {
+  return getProductQuantityMetrics(
+    getReportingEligibleSales(sales, period, now).flatMap(
+      (sale) => sale.items,
+    ),
+  )
+}
+
+export function getPurchasesProductMetrics(
+  purchases: readonly Purchase[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): ProductQuantityMetric[] {
+  return getProductQuantityMetrics(
+    getReportingEligiblePurchases(
+      purchases,
+      period,
+      now,
+    ).flatMap((purchase) => purchase.items),
+  )
+}
+
+export function getClientSalesMetrics(
+  sales: readonly Sale[],
+  period: ReportingPeriod,
+  now: Date = new Date(),
+): ClientSalesMetric[] {
+  const metricsByClientId = new Map<
+    string,
+    ClientSalesMetric
+  >()
+
+  for (const sale of getReportingEligibleSales(
+    sales,
+    period,
+    now,
+  )) {
+    if (!sale.clientId) {
+      continue
+    }
+
+    const metric = metricsByClientId.get(sale.clientId)
+
+    if (metric) {
+      metric.completedSaleCount += 1
+      metric.completedSaleAmount += sale.totalAmount
+
+      if (!metric.clientNames.includes(sale.clientName)) {
+        metric.clientNames.push(sale.clientName)
+      }
+
+      continue
+    }
+
+    metricsByClientId.set(sale.clientId, {
+      clientId: sale.clientId,
+      clientNames: [sale.clientName],
+      completedSaleCount: 1,
+      completedSaleAmount: sale.totalAmount,
+    })
+  }
+
+  return [...metricsByClientId.values()]
+}
+
+function getDocumentReportingSummary<
+  T extends {
+    status: 'draft' | 'completed' | 'cancelled'
+    totalAmount: number
+  },
+>(documents: readonly T[]): DocumentReportingSummary {
+  return documents.reduce<DocumentReportingSummary>(
+    (summary, document) => {
+      summary.statusBreakdown[document.status] += 1
+
+      if (document.status === 'completed') {
+        summary.completedCount += 1
+        summary.completedAmount += document.totalAmount
+      }
+
+      return summary
+    },
+    {
+      statusBreakdown: {
+        draft: 0,
+        completed: 0,
+        cancelled: 0,
+      },
+      completedCount: 0,
+      completedAmount: 0,
+    },
+  )
+}
+
+function getProductQuantityMetrics(
+  items: readonly {
+    productId: string
+    unit: ProductUnit
+    quantity: number
+  }[],
+): ProductQuantityMetric[] {
+  const metricsByProductId = new Map<
+    string,
+    Map<ProductUnit, ProductQuantityMetric>
+  >()
+
+  for (const item of items) {
+    const metricsByUnit =
+      metricsByProductId.get(item.productId) ?? new Map()
+    const metric = metricsByUnit.get(item.unit)
+
+    if (metric) {
+      metric.quantity += item.quantity
+    } else {
+      metricsByUnit.set(item.unit, {
+        productId: item.productId,
+        unit: item.unit,
+        quantity: item.quantity,
+      })
+    }
+
+    metricsByProductId.set(item.productId, metricsByUnit)
+  }
+
+  return [...metricsByProductId.values()].flatMap(
+    (metricsByUnit) => [...metricsByUnit.values()],
   )
 }
 

@@ -8,9 +8,14 @@ import type { Sale } from '../../sales/types/sale'
 import type { Transaction } from '../../transactions/types/transaction'
 import {
   getFinancialKpis,
+  getClientSalesMetrics,
+  getPurchasesProductMetrics,
+  getPurchasesReportingSummary,
   getReportingEligiblePurchases,
   getReportingEligibleSales,
   getReportingEligibleTransactions,
+  getSalesProductMetrics,
+  getSalesReportingSummary,
   ReportingValidationError,
   resolveReportingPeriod,
 } from './ReportingService'
@@ -534,6 +539,356 @@ describe('ReportingService', () => {
 
       expect(transactions).toEqual(snapshot)
       expect(transactions[0]).toBe(transaction)
+    })
+  })
+
+  describe('Sales and Purchases reporting', () => {
+    it('summarizes Sales by period and separates completed metrics from status breakdown', () => {
+      expect(
+        getSalesReportingSummary(
+          [
+            createSale({
+              status: 'completed',
+              totalAmount: 100,
+            }),
+            createSale({
+              status: 'draft',
+              totalAmount: 200,
+            }),
+            createSale({
+              status: 'cancelled',
+              totalAmount: 300,
+            }),
+            createSale({
+              status: 'completed',
+              totalAmount: 400,
+              saleDate: new Date(2026, 7, 15),
+            }),
+            createSale({
+              status: 'completed',
+              totalAmount: 500,
+              saleDate: new Date(2026, 7, 17),
+            }),
+          ],
+          'today',
+          now,
+        ),
+      ).toEqual({
+        statusBreakdown: {
+          draft: 1,
+          completed: 1,
+          cancelled: 1,
+        },
+        completedCount: 1,
+        completedAmount: 100,
+      })
+    })
+
+    it('summarizes Purchases by purchaseDate and excludes future records', () => {
+      expect(
+        getPurchasesReportingSummary(
+          [
+            createPurchase({
+              status: 'completed',
+              totalAmount: 100,
+            }),
+            createPurchase({
+              status: 'draft',
+              totalAmount: 200,
+            }),
+            createPurchase({
+              status: 'cancelled',
+              totalAmount: 300,
+            }),
+            createPurchase({
+              status: 'completed',
+              totalAmount: 400,
+              purchaseDate: new Date(2026, 7, 15),
+            }),
+            createPurchase({
+              status: 'completed',
+              totalAmount: 500,
+              purchaseDate: new Date(2026, 7, 17),
+            }),
+          ],
+          'today',
+          now,
+        ),
+      ).toEqual({
+        statusBreakdown: {
+          draft: 1,
+          completed: 1,
+          cancelled: 1,
+        },
+        completedCount: 1,
+        completedAmount: 100,
+      })
+    })
+
+    it('groups completed Sale item quantities by product and historical unit', () => {
+      const sales = [
+        createSale({
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 2,
+              unit: 'kg',
+              unitPrice: 10,
+              totalAmount: 20,
+            },
+          ],
+        }),
+        createSale({
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 3,
+              unit: 'piece',
+              unitPrice: 10,
+              totalAmount: 30,
+            },
+          ],
+        }),
+        createSale({
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 4,
+              unit: 'kg',
+              unitPrice: 10,
+              totalAmount: 40,
+            },
+          ],
+        }),
+        createSale({
+          status: 'draft',
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 5,
+              unit: 'kg',
+              unitPrice: 10,
+              totalAmount: 50,
+            },
+          ],
+        }),
+      ]
+
+      expect(
+        getSalesProductMetrics(sales, 'today', now),
+      ).toEqual([
+        {
+          productId: 'product-1',
+          unit: 'kg',
+          quantity: 6,
+        },
+        {
+          productId: 'product-1',
+          unit: 'piece',
+          quantity: 3,
+        },
+      ])
+    })
+
+    it('groups completed Purchase item quantities by product and historical unit', () => {
+      const purchases = [
+        createPurchase({
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 2,
+              unit: 'kg',
+              unitCost: 10,
+              totalCost: 20,
+            },
+          ],
+        }),
+        createPurchase({
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 3,
+              unit: 'piece',
+              unitCost: 10,
+              totalCost: 30,
+            },
+          ],
+        }),
+        createPurchase({
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 4,
+              unit: 'kg',
+              unitCost: 10,
+              totalCost: 40,
+            },
+          ],
+        }),
+        createPurchase({
+          status: 'cancelled',
+          items: [
+            {
+              productId: 'product-1',
+              quantity: 5,
+              unit: 'kg',
+              unitCost: 10,
+              totalCost: 50,
+            },
+          ],
+        }),
+      ]
+
+      expect(
+        getPurchasesProductMetrics(
+          purchases,
+          'today',
+          now,
+        ),
+      ).toEqual([
+        {
+          productId: 'product-1',
+          unit: 'kg',
+          quantity: 6,
+        },
+        {
+          productId: 'product-1',
+          unit: 'piece',
+          quantity: 3,
+        },
+      ])
+    })
+
+    it('groups eligible completed Sales by clientId and preserves all historical name snapshots', () => {
+      const sales = [
+        createSale({
+          clientId: 'client-1',
+          clientName: 'Original name',
+          totalAmount: 100,
+        }),
+        createSale({
+          clientId: 'client-1',
+          clientName: 'Renamed client',
+          totalAmount: 200,
+        }),
+        createSale({
+          clientId: 'client-2',
+          clientName: 'Another client',
+          totalAmount: 300,
+        }),
+        createSale({
+          clientId: 'client-1',
+          clientName: 'Original name',
+          status: 'draft',
+          totalAmount: 400,
+        }),
+        createSale({
+          clientId: 'client-1',
+          clientName: 'Original name',
+          saleDate: new Date(2026, 7, 17),
+          totalAmount: 500,
+        }),
+        createSale({
+          clientId: undefined,
+          clientName: 'Unlinked sale',
+          totalAmount: 600,
+        }),
+      ]
+      const snapshot = structuredClone(sales)
+
+      expect(
+        getClientSalesMetrics(sales, 'today', now),
+      ).toEqual([
+        {
+          clientId: 'client-1',
+          clientNames: [
+            'Original name',
+            'Renamed client',
+          ],
+          completedSaleCount: 2,
+          completedSaleAmount: 300,
+        },
+        {
+          clientId: 'client-2',
+          clientNames: ['Another client'],
+          completedSaleCount: 1,
+          completedSaleAmount: 300,
+        },
+      ])
+      expect(sales).toEqual(snapshot)
+    })
+
+    it('returns empty summaries and groups for empty eligible sets without mutating source items', () => {
+      const sale = createSale({
+        saleDate: new Date(2026, 7, 17),
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 2,
+            unit: 'kg',
+            unitPrice: 10,
+            totalAmount: 20,
+          },
+        ],
+      })
+      const purchase = createPurchase({
+        purchaseDate: new Date(2026, 7, 17),
+        items: [
+          {
+            productId: 'product-1',
+            quantity: 2,
+            unit: 'kg',
+            unitCost: 10,
+            totalCost: 20,
+          },
+        ],
+      })
+      const sales = [sale]
+      const purchases = [purchase]
+      const salesSnapshot = structuredClone(sales)
+      const purchasesSnapshot = structuredClone(purchases)
+
+      expect(
+        getSalesReportingSummary(sales, 'today', now),
+      ).toEqual({
+        statusBreakdown: {
+          draft: 0,
+          completed: 0,
+          cancelled: 0,
+        },
+        completedCount: 0,
+        completedAmount: 0,
+      })
+      expect(
+        getPurchasesReportingSummary(
+          purchases,
+          'today',
+          now,
+        ),
+      ).toEqual({
+        statusBreakdown: {
+          draft: 0,
+          completed: 0,
+          cancelled: 0,
+        },
+        completedCount: 0,
+        completedAmount: 0,
+      })
+      expect(getSalesProductMetrics(sales, 'today', now)).toEqual(
+        [],
+      )
+      expect(
+        getPurchasesProductMetrics(
+          purchases,
+          'today',
+          now,
+        ),
+      ).toEqual([])
+      expect(getClientSalesMetrics(sales, 'today', now)).toEqual(
+        [],
+      )
+      expect(sales).toEqual(salesSnapshot)
+      expect(purchases).toEqual(purchasesSnapshot)
     })
   })
 })
