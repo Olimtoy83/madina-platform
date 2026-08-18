@@ -5,7 +5,12 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '@madina/core'
-import { Button } from '@madina/ui'
+import {
+  Button,
+  Input,
+  Select,
+  Textarea,
+} from '@madina/ui'
 import './Tasks.css'
 
 const priorityLabels: Record<TaskPriority, string> = {
@@ -114,7 +119,7 @@ export function Tasks() {
           <div>
             <label>
               Название
-              <input
+              <Input
                 type="text"
                 value={title}
                 onChange={(event) =>
@@ -128,7 +133,7 @@ export function Tasks() {
           <div>
             <label>
               Описание
-              <textarea
+              <Textarea
                 value={description}
                 onChange={(event) =>
                   setDescription(
@@ -143,7 +148,7 @@ export function Tasks() {
           <div>
             <label>
               Приоритет
-              <select
+              <Select
                 value={priority}
                 onChange={(event) =>
                   setPriority(
@@ -163,14 +168,14 @@ export function Tasks() {
                 <option value="high">
                   Высокий
                 </option>
-              </select>
+              </Select>
             </label>
           </div>
 
           <div>
             <label>
               Статус
-              <select
+              <Select
                 value={status}
                 onChange={(event) =>
                   setStatus(
@@ -194,14 +199,14 @@ export function Tasks() {
                 <option value="cancelled">
                   Отменено
                 </option>
-              </select>
+              </Select>
             </label>
           </div>
 
           <div>
             <label>
               Срок выполнения
-              <input
+              <Input
                 type="date"
                 value={dueDate}
                 onChange={(event) =>
@@ -294,7 +299,7 @@ export function Tasks() {
                   </td>
 
                   <td>
-                    <select
+                    <Select
                       value={task.status}
                       onChange={(event) =>
                         updateTask(
@@ -322,7 +327,7 @@ export function Tasks() {
                       <option value="cancelled">
                         Отменено
                       </option>
-                    </select>
+                    </Select>
                   </td>
 
                   <td>
