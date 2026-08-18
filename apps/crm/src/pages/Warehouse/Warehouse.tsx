@@ -9,6 +9,11 @@ import {
   type ProductUnit,
 } from '@madina/core'
 
+import {
+  Input,
+  Select,
+} from '@madina/ui'
+
 import './Warehouse.css'
 
 const categoryLabels: Record<ProductCategory, string> = {
@@ -295,7 +300,7 @@ export function Warehouse() {
       </div>
 
       <div className="warehouse__toolbar">
-        <input
+        <Input
           type="search"
           value={search}
           onChange={(event) =>
@@ -305,7 +310,7 @@ export function Warehouse() {
           aria-label="Поиск товара"
         />
 
-        <select
+        <Select
           value={category}
           onChange={(event) =>
             setCategory(
@@ -331,7 +336,7 @@ export function Warehouse() {
           <option value="carpets">
             Ковры
           </option>
-        </select>
+        </Select>
       </div>
 
       <div className="warehouse__table-wrapper">
@@ -432,7 +437,7 @@ export function Warehouse() {
                 Название товара
               </label>
 
-              <input
+              <Input
                 id="add-product-name"
                 type="text"
                 value={addForm.name}
@@ -451,7 +456,7 @@ export function Warehouse() {
                 Категория
               </label>
 
-              <select
+              <Select
                 id="add-product-category"
                 value={addForm.category}
                 onChange={(event) =>
@@ -478,7 +483,7 @@ export function Warehouse() {
                 <option value="carpets">
                   Ковры
                 </option>
-              </select>
+              </Select>
             </div>
 
             <div className="warehouse__form-field">
@@ -486,7 +491,7 @@ export function Warehouse() {
                 Количество
               </label>
 
-              <input
+              <Input
                 id="add-product-quantity"
                 type="number"
                 min="0"
@@ -507,7 +512,7 @@ export function Warehouse() {
                 Единица
               </label>
 
-              <select
+              <Select
                 id="add-product-unit"
                 value={addForm.unit}
                 onChange={(event) =>
@@ -522,7 +527,7 @@ export function Warehouse() {
                 <option value="piece">шт.</option>
                 <option value="liter">л</option>
                 <option value="box">кор.</option>
-              </select>
+              </Select>
             </div>
 
             <div className="warehouse__form-field">
@@ -530,7 +535,7 @@ export function Warehouse() {
                 Себестоимость
               </label>
 
-              <input
+              <Input
                 id="add-product-cost"
                 type="number"
                 min="0"
@@ -552,7 +557,7 @@ export function Warehouse() {
                 Цена продажи
               </label>
 
-              <input
+              <Input
                 id="add-product-sale"
                 type="number"
                 min="0"
@@ -574,7 +579,7 @@ export function Warehouse() {
                 Статус
               </label>
 
-              <select
+              <Select
                 id="add-product-status"
                 value={addForm.status}
                 onChange={(event) =>
@@ -594,7 +599,7 @@ export function Warehouse() {
                 <option value="inactive">
                   Неактивен
                 </option>
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -765,7 +770,7 @@ export function Warehouse() {
                       Тип корректировки
                     </label>
 
-                    <select
+                    <Select
                       id="adjustment-type"
                       value={adjustmentType}
                       onChange={(event) =>
@@ -783,7 +788,7 @@ export function Warehouse() {
                       <option value="decrease">
                         Уменьшить остаток
                       </option>
-                    </select>
+                    </Select>
                   </div>
 
                   <div className="warehouse__form-field">
@@ -791,7 +796,7 @@ export function Warehouse() {
                       Количество
                     </label>
 
-                    <input
+                    <Input
                       id="adjustment-quantity"
                       type="number"
                       min="0"
@@ -808,7 +813,7 @@ export function Warehouse() {
                       Причина
                     </label>
 
-                    <input
+                    <Input
                       id="adjustment-note"
                       type="text"
                       value={adjustmentNote}
@@ -880,7 +885,7 @@ export function Warehouse() {
                     Название товара
                   </label>
 
-                  <input
+                  <Input
                     id="edit-product-name"
                     type="text"
                     value={editForm.name}
@@ -898,15 +903,14 @@ export function Warehouse() {
                     Категория
                   </label>
 
-                  <select
+                  <Select
                     id="edit-product-category"
                     value={editForm.category}
                     onChange={(event) =>
                       setEditForm({
                         ...editForm,
                         category:
-                          event.target
-                            .value as ProductCategory,
+                          event.target.value as ProductCategory,
                       })
                     }
                   >
@@ -925,7 +929,7 @@ export function Warehouse() {
                     <option value="carpets">
                       Ковры
                     </option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="warehouse__form-field">
@@ -933,14 +937,13 @@ export function Warehouse() {
                     Единица
                   </label>
 
-                  <select
+                  <Select
                     id="edit-product-unit"
                     value={editForm.unit}
                     onChange={(event) =>
                       setEditForm({
                         ...editForm,
-                        unit: event.target
-                          .value as ProductUnit,
+                        unit: event.target.value as ProductUnit,
                       })
                     }
                   >
@@ -959,7 +962,7 @@ export function Warehouse() {
                     <option value="box">
                       кор.
                     </option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="warehouse__form-field">
@@ -967,7 +970,7 @@ export function Warehouse() {
                     Себестоимость
                   </label>
 
-                  <input
+                  <Input
                     id="edit-product-cost"
                     type="number"
                     min="0"
@@ -976,9 +979,7 @@ export function Warehouse() {
                     onChange={(event) =>
                       setEditForm({
                         ...editForm,
-                        costPrice: Number(
-                          event.target.value,
-                        ),
+                        costPrice: Number(event.target.value),
                       })
                     }
                   />
@@ -989,7 +990,7 @@ export function Warehouse() {
                     Цена продажи
                   </label>
 
-                  <input
+                  <Input
                     id="edit-product-sale"
                     type="number"
                     min="0"
@@ -998,9 +999,7 @@ export function Warehouse() {
                     onChange={(event) =>
                       setEditForm({
                         ...editForm,
-                        salePrice: Number(
-                          event.target.value,
-                        ),
+                        salePrice: Number(event.target.value),
                       })
                     }
                   />
@@ -1011,7 +1010,7 @@ export function Warehouse() {
                     Статус
                   </label>
 
-                  <select
+                  <Select
                     id="edit-product-status"
                     value={editForm.status}
                     onChange={(event) =>
@@ -1031,7 +1030,7 @@ export function Warehouse() {
                     <option value="inactive">
                       Неактивен
                     </option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -1042,7 +1041,7 @@ export function Warehouse() {
                       Тип корректировки
                     </label>
 
-                    <select
+                    <Select
                       id="adjustment-type"
                       value={adjustmentType}
                       onChange={(event) =>
@@ -1060,7 +1059,7 @@ export function Warehouse() {
                       <option value="decrease">
                         Уменьшить остаток
                       </option>
-                    </select>
+                    </Select>
                   </div>
 
                   <div className="warehouse__form-field">
@@ -1068,16 +1067,14 @@ export function Warehouse() {
                       Количество
                     </label>
 
-                    <input
+                    <Input
                       id="adjustment-quantity"
                       type="number"
                       min="0"
                       step="0.01"
                       value={adjustmentQuantity}
                       onChange={(event) =>
-                        setAdjustmentQuantity(
-                          event.target.value,
-                        )
+                        setAdjustmentQuantity(event.target.value)
                       }
                     />
                   </div>
@@ -1087,7 +1084,7 @@ export function Warehouse() {
                       Причина
                     </label>
 
-                    <input
+                    <Input
                       id="adjustment-note"
                       type="text"
                       value={adjustmentNote}
