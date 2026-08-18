@@ -6,6 +6,7 @@
 import {
   getNextPurchaseNumber,
   getPurchaseItemTotal,
+  normalizePurchase,
   type Purchase,
   type PurchaseItem,
   type PurchasePaymentMethod,
@@ -103,7 +104,13 @@ export function Purchases() {
   }
 
   function addFormItem() {
-    const firstProduct = products[0]
+    const firstProduct = products.find(
+      (product) =>
+        !formItems.some(
+          (item) =>
+            item.productId === product.id,
+        ),
+    )
 
     if (!firstProduct) {
       return
@@ -131,16 +138,51 @@ export function Purchases() {
     index: number,
     updates: Partial<FormItem>,
   ) {
-    setFormItems((currentItems) =>
-      currentItems.map((item, itemIndex) =>
+    setFormItems((currentItems) => {
+      const currentItem = currentItems[index]
+
+      if (!currentItem) {
+        return currentItems
+      }
+
+      const nextItem = {
+        ...currentItem,
+        ...updates,
+      }
+
+      const duplicateIndex =
+        updates.productId
+          ? currentItems.findIndex(
+            (item, itemIndex) =>
+              itemIndex !== index &&
+              item.productId === updates.productId,
+          )
+          : -1
+
+      if (duplicateIndex >= 0) {
+        return currentItems
+          .filter((_, itemIndex) => itemIndex !== index)
+          .map((item, itemIndex) =>
+            itemIndex ===
+            (duplicateIndex > index
+              ? duplicateIndex - 1
+              : duplicateIndex)
+              ? {
+                ...item,
+                quantity:
+                  item.quantity +
+                  currentItem.quantity,
+              }
+              : item,
+          )
+      }
+
+      return currentItems.map((item, itemIndex) =>
         itemIndex === index
-          ? {
-            ...item,
-            ...updates,
-          }
+          ? nextItem
           : item,
-      ),
-    )
+      )
+    })
   }
 
   function savePurchase() {
@@ -203,7 +245,7 @@ export function Purchases() {
         }
       })
 
-    const newPurchase: Purchase = {
+    const newPurchase = normalizePurchase({
       id: `purchase-${crypto.randomUUID()}`,
       createdAt: now,
       updatedAt: now,
@@ -217,7 +259,7 @@ export function Purchases() {
       paymentMethod,
       status: 'draft',
       note: note.trim() || undefined,
-    }
+    })
 
     addPurchase(newPurchase)
 

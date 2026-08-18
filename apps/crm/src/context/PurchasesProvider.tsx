@@ -7,6 +7,7 @@
 
 import {
   completePurchase as completePurchaseCore,
+  normalizePurchase,
   type Purchase,
   type PurchaseStatus,
 } from '@madina/core'
@@ -56,9 +57,9 @@ function loadPurchases(): Purchase[] {
     )
 
 
-  return storedPurchases.map(
-    restorePurchase,
-  )
+  return storedPurchases
+    .map(restorePurchase)
+    .map(normalizePurchase)
 }
 
 export function PurchasesProvider({
@@ -80,9 +81,13 @@ export function PurchasesProvider({
 
   const addPurchase = useCallback(
     (purchase: Purchase) => {
+      const normalizedPurchase = normalizePurchase(
+        purchase,
+      )
+
       setPurchases((currentPurchases) => {
         const nextPurchases = [
-          purchase,
+          normalizedPurchase,
           ...currentPurchases,
         ]
 

@@ -3,6 +3,10 @@ import type { Product } from '../../inventory/types/product'
 import type { StockMovement } from '../../inventory/types/stockMovement'
 import type { Transaction } from '../../transactions/types/transaction'
 import { receiveStock } from '../../inventory/services/StockService'
+import {
+  getPurchaseItemTotal,
+  getPurchaseTotal,
+} from './PurchaseCalculationService'
 
 export interface CompletePurchaseResult {
   success: boolean
@@ -13,11 +17,76 @@ export interface CompletePurchaseResult {
   transaction?: Transaction
 }
 
+export class PurchaseValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PurchaseValidationError'
+  }
+}
+
+export function normalizePurchase(
+  purchase: Purchase,
+): Purchase {
+  const itemsByProduct = new Map<
+    string,
+    Purchase['items'][number]
+  >()
+
+  for (const item of purchase.items) {
+    const existingItem = itemsByProduct.get(
+      item.productId,
+    )
+
+    if (!existingItem) {
+      itemsByProduct.set(item.productId, {
+        ...item,
+        totalCost: getPurchaseItemTotal(
+          item.quantity,
+          item.unitCost,
+        ),
+      })
+      continue
+    }
+
+    if (existingItem.unitCost !== item.unitCost) {
+      throw new PurchaseValidationError(
+        'Нельзя объединить позиции поступления с разной ценой закупки.',
+      )
+    }
+
+    const quantity =
+      existingItem.quantity + item.quantity
+
+    itemsByProduct.set(item.productId, {
+      ...existingItem,
+      quantity,
+      totalCost: getPurchaseItemTotal(
+        quantity,
+        existingItem.unitCost,
+      ),
+    })
+  }
+
+  const items = [
+    ...itemsByProduct.values(),
+  ]
+
+  return {
+    ...purchase,
+    items,
+    totalAmount: getPurchaseTotal({ items }),
+  }
+}
+
 export function completePurchase(
   purchase: Purchase,
   products: Product[],
 ): CompletePurchaseResult {
-  if (purchase.status !== 'draft') {
+  const normalizedPurchase = normalizePurchase(
+    purchase,
+  )
+
+  if (normalizedPurchase.status !== 'draft') {
     return {
       success: false,
       message:
@@ -27,7 +96,7 @@ export function completePurchase(
     }
   }
 
-  for (const item of purchase.items) {
+  for (const item of normalizedPurchase.items) {
     const product = products.find(
       (currentProduct) =>
         currentProduct.id === item.productId,
@@ -49,13 +118,13 @@ export function completePurchase(
   let nextProducts = products
   const movements: StockMovement[] = []
 
-  for (const item of purchase.items) {
+  for (const item of normalizedPurchase.items) {
     const result = receiveStock(
       nextProducts,
       item.productId,
       item.quantity,
-      purchase.id,
-      `Поступление ${purchase.purchaseNumber}`,
+      normalizedPurchase.id,
+      `Поступление ${normalizedPurchase.purchaseNumber}`,
     )
 
     if (!result.success) {
@@ -84,7 +153,7 @@ export function completePurchase(
   }
 
   const completedPurchase: Purchase = {
-    ...purchase,
+    ...normalizedPurchase,
     status: 'completed',
     updatedAt,
   }
@@ -95,12 +164,12 @@ export function completePurchase(
     updatedAt,
     type: 'expense',
     category: 'purchase',
-    amount: purchase.totalAmount,
-    paymentMethod: purchase.paymentMethod,
-    transactionDate: purchase.purchaseDate,
-    referenceId: purchase.id,
+    amount: normalizedPurchase.totalAmount,
+    paymentMethod: normalizedPurchase.paymentMethod,
+    transactionDate: normalizedPurchase.purchaseDate,
+    referenceId: normalizedPurchase.id,
     description:
-      `Поступление ${purchase.purchaseNumber}`,
+      `Поступление ${normalizedPurchase.purchaseNumber}`,
     status: 'completed',
   }
 
