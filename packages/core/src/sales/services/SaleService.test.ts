@@ -7,6 +7,7 @@ import {
   getSaleStats,
   normalizeSale,
   SaleValidationError,
+  updateSale,
 } from './SaleService'
 
 function createProduct(
@@ -382,6 +383,82 @@ describe('completeSale', () => {
     expect(result.movements).toHaveLength(0)
     expect(result.transaction).toBeUndefined()
     expect(result.products[0]?.quantity).toBe(3)
+  })
+})
+
+describe('updateSale', () => {
+  it('updates a draft sale with normalized items and a system-managed timestamp', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-18T12:00:00'))
+
+    try {
+      const sale = createSale()
+
+      const updatedSale = updateSale(sale, {
+        clientName: 'Updated Client',
+        note: 'Updated note',
+        items: [
+          {
+            productId: 'product-001',
+            quantity: 2,
+            unit: 'kg',
+            unitPrice: 150,
+            totalAmount: 300,
+          },
+          {
+            productId: 'product-001',
+            quantity: 3,
+            unit: 'kg',
+            unitPrice: 150,
+            totalAmount: 450,
+          },
+        ],
+      })
+
+      expect(updatedSale).toMatchObject({
+        clientName: 'Updated Client',
+        note: 'Updated note',
+        totalAmount: 750,
+        updatedAt: new Date('2026-08-18T12:00:00'),
+      })
+      expect(updatedSale.items).toHaveLength(1)
+      expect(updatedSale.items[0]).toMatchObject({
+        quantity: 5,
+        totalAmount: 750,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects direct changes to sale identity, status, and system fields', () => {
+    const sale = createSale()
+
+    const invalidUpdates: Partial<Sale>[] = [
+      { id: 'sale-002' },
+      { saleNumber: 'SAL-0002' },
+      { createdAt: new Date('2026-01-01') },
+      { updatedAt: new Date('2026-01-01') },
+      { status: 'completed' },
+      { totalAmount: 999 },
+    ]
+
+    for (const updates of invalidUpdates) {
+      expect(() => updateSale(sale, updates)).toThrow(
+        SaleValidationError,
+      )
+    }
+  })
+
+  it('rejects updates, including note changes, for terminal sales', () => {
+    for (const status of ['completed', 'cancelled'] as const) {
+      const sale = createSale(status)
+
+      expect(() => updateSale(sale, {
+        note: 'Updated note',
+      })).toThrow(SaleValidationError)
+      expect(sale.note).toBeUndefined()
+    }
   })
 })
 

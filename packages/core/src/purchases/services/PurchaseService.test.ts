@@ -5,6 +5,7 @@ import {
   completePurchase,
   normalizePurchase,
   PurchaseValidationError,
+  updatePurchase,
 } from './PurchaseService'
 
 function createProduct(
@@ -375,5 +376,81 @@ describe('completePurchase', () => {
     expect(result.movements).toHaveLength(0)
     expect(result.transaction).toBeUndefined()
     expect(result.products[0]?.quantity).toBe(10)
+  })
+})
+
+describe('updatePurchase', () => {
+  it('updates a draft purchase with normalized items and a system-managed timestamp', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-18T12:00:00'))
+
+    try {
+      const purchase = createPurchase()
+
+      const updatedPurchase = updatePurchase(purchase, {
+        supplierName: 'Updated Supplier',
+        note: 'Updated note',
+        items: [
+          {
+            productId: 'product-001',
+            quantity: 2,
+            unit: 'kg',
+            unitCost: 100,
+            totalCost: 200,
+          },
+          {
+            productId: 'product-001',
+            quantity: 3,
+            unit: 'kg',
+            unitCost: 100,
+            totalCost: 300,
+          },
+        ],
+      })
+
+      expect(updatedPurchase).toMatchObject({
+        supplierName: 'Updated Supplier',
+        note: 'Updated note',
+        totalAmount: 500,
+        updatedAt: new Date('2026-08-18T12:00:00'),
+      })
+      expect(updatedPurchase.items).toHaveLength(1)
+      expect(updatedPurchase.items[0]).toMatchObject({
+        quantity: 5,
+        totalCost: 500,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects direct changes to purchase identity, status, and system fields', () => {
+    const purchase = createPurchase()
+
+    const invalidUpdates: Partial<Purchase>[] = [
+      { id: 'purchase-002' },
+      { purchaseNumber: 'PUR-0002' },
+      { createdAt: new Date('2026-01-01') },
+      { updatedAt: new Date('2026-01-01') },
+      { status: 'completed' },
+      { totalAmount: 999 },
+    ]
+
+    for (const updates of invalidUpdates) {
+      expect(() => updatePurchase(purchase, updates)).toThrow(
+        PurchaseValidationError,
+      )
+    }
+  })
+
+  it('rejects updates, including note changes, for terminal purchases', () => {
+    for (const status of ['completed', 'cancelled'] as const) {
+      const purchase = createPurchase(status)
+
+      expect(() => updatePurchase(purchase, {
+        note: 'Updated note',
+      })).toThrow(PurchaseValidationError)
+      expect(purchase.note).toBeUndefined()
+    }
   })
 })

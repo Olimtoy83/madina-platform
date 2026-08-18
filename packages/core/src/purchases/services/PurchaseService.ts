@@ -24,6 +24,43 @@ export class PurchaseValidationError extends Error {
   }
 }
 
+const restrictedPurchaseUpdateFields: (keyof Purchase)[] = [
+  'id',
+  'purchaseNumber',
+  'createdAt',
+  'updatedAt',
+  'status',
+  'totalAmount',
+]
+
+export function updatePurchase(
+  purchase: Purchase,
+  updates: Partial<Purchase>,
+): Purchase {
+  if (purchase.status !== 'draft') {
+    throw new PurchaseValidationError(
+      'Нельзя изменять завершённое или отменённое поступление.',
+    )
+  }
+
+  const restrictedField =
+    restrictedPurchaseUpdateFields.find((field) =>
+      Object.hasOwn(updates, field),
+    )
+
+  if (restrictedField) {
+    throw new PurchaseValidationError(
+      `Нельзя напрямую изменять поле поступления: ${restrictedField}.`,
+    )
+  }
+
+  return normalizePurchase({
+    ...purchase,
+    ...updates,
+    updatedAt: new Date(),
+  })
+}
+
 export function normalizePurchase(
   purchase: Purchase,
 ): Purchase {

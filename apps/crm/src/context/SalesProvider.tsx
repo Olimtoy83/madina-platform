@@ -8,6 +8,7 @@
 import {
   completeSale as completeSaleCore,
   normalizeSale,
+  updateSale as updateSaleCore,
   type Sale,
   type SaleStatus,
 } from '@madina/core'
@@ -107,11 +108,10 @@ export function SalesProvider({
           currentSales.map(
             (sale) =>
               sale.id === saleId
-                ? normalizeSale({
-                  ...sale,
-                  ...updates,
-                  updatedAt: new Date(),
-                })
+                ? updateSaleCore(
+                  sale,
+                  updates,
+                )
                 : sale,
           )
 

@@ -24,6 +24,43 @@ export class SaleValidationError extends Error {
   }
 }
 
+const restrictedSaleUpdateFields: (keyof Sale)[] = [
+  'id',
+  'saleNumber',
+  'createdAt',
+  'updatedAt',
+  'status',
+  'totalAmount',
+]
+
+export function updateSale(
+  sale: Sale,
+  updates: Partial<Sale>,
+): Sale {
+  if (sale.status !== 'draft') {
+    throw new SaleValidationError(
+      'Нельзя изменять завершённую или отменённую продажу.',
+    )
+  }
+
+  const restrictedField =
+    restrictedSaleUpdateFields.find((field) =>
+      Object.hasOwn(updates, field),
+    )
+
+  if (restrictedField) {
+    throw new SaleValidationError(
+      `Нельзя напрямую изменять поле продажи: ${restrictedField}.`,
+    )
+  }
+
+  return normalizeSale({
+    ...sale,
+    ...updates,
+    updatedAt: new Date(),
+  })
+}
+
 export function normalizeSale(
   sale: Sale,
 ): Sale {

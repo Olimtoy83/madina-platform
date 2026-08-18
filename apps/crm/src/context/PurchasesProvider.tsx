@@ -8,6 +8,7 @@
 import {
   completePurchase as completePurchaseCore,
   normalizePurchase,
+  updatePurchase as updatePurchaseCore,
   type Purchase,
   type PurchaseStatus,
 } from '@madina/core'
@@ -112,11 +113,10 @@ export function PurchasesProvider({
           currentPurchases.map(
             (purchase) =>
               purchase.id === purchaseId
-                ? normalizePurchase({
-                  ...purchase,
-                  ...updates,
-                  updatedAt: new Date(),
-                })
+                ? updatePurchaseCore(
+                  purchase,
+                  updates,
+                )
                 : purchase,
           )
 
