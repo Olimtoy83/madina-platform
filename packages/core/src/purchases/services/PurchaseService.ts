@@ -54,6 +54,12 @@ export function normalizePurchase(
       )
     }
 
+    if (existingItem.unit !== item.unit) {
+      throw new PurchaseValidationError(
+        'Нельзя объединить позиции поступления с разными единицами измерения.',
+      )
+    }
+
     const quantity =
       existingItem.quantity + item.quantity
 
@@ -120,6 +126,12 @@ export function completePurchase(
         products,
         movements: [],
       }
+    }
+
+    if (item.unit !== product.unit) {
+      throw new PurchaseValidationError(
+        'Единица измерения позиции поступления должна совпадать с единицей товара.',
+      )
     }
   }
 

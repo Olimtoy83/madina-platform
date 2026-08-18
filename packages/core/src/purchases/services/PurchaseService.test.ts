@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Product } from '../../inventory/types/product'
 import type { Purchase } from '../types/purchase'
 import {
@@ -119,6 +119,34 @@ describe('completePurchase', () => {
     )
   })
 
+  it('rejects duplicate purchase items with matching costs and different units', () => {
+    const purchase = createPurchase()
+
+    purchase.items = [
+      {
+        productId: 'product-001',
+        quantity: 2,
+        unit: 'kg',
+        unitCost: 100,
+        totalCost: 200,
+      },
+      {
+        productId: 'product-001',
+        quantity: 3,
+        unit: 'box',
+        unitCost: 100,
+        totalCost: 300,
+      },
+    ]
+
+    expect(() => normalizePurchase(purchase)).toThrow(
+      PurchaseValidationError,
+    )
+    expect(() => normalizePurchase(purchase)).toThrow(
+      'Нельзя объединить позиции поступления с разными единицами измерения.',
+    )
+  })
+
   it('completes purchase and increases stock', () => {
     const products = [createProduct()]
     const purchase = createPurchase()
@@ -155,6 +183,28 @@ describe('completePurchase', () => {
       referenceId: purchase.id,
       status: 'completed',
     })
+  })
+
+  it('rejects a purchase item with a mismatching unit before side effects', () => {
+    const products = [createProduct()]
+    const purchase = createPurchase()
+    const randomUUID = vi.spyOn(crypto, 'randomUUID')
+
+    purchase.items[0] = {
+      ...purchase.items[0]!,
+      unit: 'box',
+    }
+
+    try {
+      expect(() => completePurchase(
+        purchase,
+        products,
+      )).toThrow(PurchaseValidationError)
+      expect(products[0]?.quantity).toBe(10)
+      expect(randomUUID).not.toHaveBeenCalled()
+    } finally {
+      randomUUID.mockRestore()
+    }
   })
 
   it('completes purchase with multiple items', () => {

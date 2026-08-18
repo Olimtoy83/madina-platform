@@ -54,6 +54,12 @@ export function normalizeSale(
       )
     }
 
+    if (existingItem.unit !== item.unit) {
+      throw new SaleValidationError(
+        'Нельзя объединить позиции продажи с разными единицами измерения.',
+      )
+    }
+
     const quantity =
       existingItem.quantity + item.quantity
 
@@ -152,6 +158,12 @@ export function completeSale(
         products,
         movements: [],
       }
+    }
+
+    if (item.unit !== product.unit) {
+      throw new SaleValidationError(
+        'Единица измерения позиции продажи должна совпадать с единицей товара.',
+      )
     }
   }
 
