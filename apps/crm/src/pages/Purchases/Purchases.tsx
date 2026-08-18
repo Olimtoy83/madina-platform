@@ -13,6 +13,7 @@ import {
   type PurchaseStatus,
 } from '@madina/core'
 import {
+  Alert,
   Button,
   Input,
   Select,
@@ -60,6 +61,10 @@ export function Purchases() {
   const [isCreateOpen, setIsCreateOpen] =
     useState(false)
 
+  const [error, setError] = useState<string | null>(
+    null,
+  )
+
   const [purchaseDate, setPurchaseDate] =
     useState('')
 
@@ -104,6 +109,8 @@ export function Purchases() {
   }
 
   function addFormItem() {
+    setError(null)
+
     const firstProduct = products.find(
       (product) =>
         !formItems.some(
@@ -127,6 +134,8 @@ export function Purchases() {
   }
 
   function removeFormItem(index: number) {
+    setError(null)
+
     setFormItems((currentItems) =>
       currentItems.filter(
         (_, itemIndex) => itemIndex !== index,
@@ -138,6 +147,8 @@ export function Purchases() {
     index: number,
     updates: Partial<FormItem>,
   ) {
+    setError(null)
+
     setFormItems((currentItems) => {
       const currentItem = currentItems[index]
 
@@ -187,17 +198,17 @@ export function Purchases() {
 
   function savePurchase() {
     if (!purchaseDate) {
-      window.alert('Укажите дату поступления.')
+      setError('Укажите дату поступления.')
       return
     }
 
     if (!supplierName.trim()) {
-      window.alert('Укажите поставщика.')
+      setError('Укажите поставщика.')
       return
     }
 
     if (formItems.length === 0) {
-      window.alert('Добавьте хотя бы один товар.')
+      setError('Добавьте хотя бы один товар.')
       return
     }
 
@@ -208,7 +219,7 @@ export function Purchases() {
     )
 
     if (invalidItem) {
-      window.alert(
+      setError(
         'Количество и цена закупки должны быть больше нуля.',
       )
       return
@@ -263,6 +274,7 @@ export function Purchases() {
 
     addPurchase(newPurchase)
 
+    setError(null)
     setSelectedPurchase(newPurchase)
 
     setIsCreateOpen(false)
@@ -284,6 +296,7 @@ export function Purchases() {
   function openCreateForm() {
     const firstProduct = products[0]
 
+    setError(null)
     setPurchaseDate('')
     setSupplierName('')
     setPaymentMethod('cash')
@@ -321,6 +334,17 @@ export function Purchases() {
           Добавить поступление
         </Button>
       </div>
+
+      {error && !isCreateOpen && (
+        <Alert
+          variant="danger"
+          title="Ошибка"
+          dismissible
+          onDismiss={() => setError(null)}
+        >
+          {error}
+        </Alert>
+      )}
 
       <div className="purchases__table-wrapper">
         <table className="purchases__table">
@@ -382,11 +406,12 @@ export function Purchases() {
                       type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() =>
+                      onClick={() => {
+                        setError(null)
                         setSelectedPurchase(
                           purchase,
                         )
-                      }
+                      }}
                     >
                       Открыть
                     </Button>
@@ -414,9 +439,10 @@ export function Purchases() {
             <Button
               type="button"
               className="purchases__purchase-card-close"
-              onClick={() =>
+              onClick={() => {
+                setError(null)
                 setSelectedPurchase(null)
-              }
+              }}
               aria-label="Закрыть карточку"
             >
               ×
@@ -532,12 +558,14 @@ export function Purchases() {
                   type="button"
                   variant="primary"
                   onClick={() => {
+                    setError(null)
+
                     const result = completePurchase(
                       selectedPurchase.id,
                     )
 
                     if (!result.success) {
-                      window.alert(
+                      setError(
                         result.message ??
                         'Не удалось завершить поступление.',
                       )
@@ -572,6 +600,7 @@ export function Purchases() {
                     return
                   }
 
+                  setError(null)
                   cancelPurchase(selectedPurchase.id)
 
                   // существующий код
@@ -584,9 +613,10 @@ export function Purchases() {
             <Button
               type="button"
               variant="secondary"
-              onClick={() =>
+              onClick={() => {
+                setError(null)
                 setSelectedPurchase(null)
-              }
+              }}
             >
               Закрыть
             </Button>
@@ -621,17 +651,29 @@ export function Purchases() {
             </div>
 
             <div className="purchases__form">
+              {error && (
+                <Alert
+                  variant="danger"
+                  title="Ошибка"
+                  dismissible
+                  onDismiss={() => setError(null)}
+                >
+                  {error}
+                </Alert>
+              )}
+
               <label>
                 <span>Дата поступления</span>
 
                 <Input
                   type="date"
                   value={purchaseDate}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setError(null)
                     setPurchaseDate(
                       event.target.value,
                     )
-                  }
+                  }}
                 />
               </label>
 
@@ -641,11 +683,12 @@ export function Purchases() {
                 <Input
                   type="text"
                   value={supplierName}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setError(null)
                     setSupplierName(
                       event.target.value,
                     )
-                  }
+                  }}
                   placeholder="Введите поставщика"
                 />
               </label>
@@ -785,11 +828,12 @@ export function Purchases() {
 
                 <Textarea
                   value={note}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setError(null)
                     setNote(
                       event.target.value,
                     )
-                  }
+                  }}
                   placeholder="Дополнительная информация"
                   rows={4}
                 />
