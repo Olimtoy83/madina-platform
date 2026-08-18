@@ -344,7 +344,7 @@ export function StockMovements() {
                           >
                             {movement.type ===
                               'sale'
-                              ? `-${movement.quantity}`
+                              ? movement.quantity
                               : `+${movement.quantity}`}
                           </strong>
                         </td>

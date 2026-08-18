@@ -7,7 +7,7 @@ import {
   getNextPurchaseNumber,
   getPurchaseItemTotal,
   normalizePurchase,
-  type Purchase,
+  PurchaseValidationError,
   type PurchaseItem,
   type PurchasePaymentMethod,
   type PurchaseStatus,
@@ -55,8 +55,15 @@ export function Purchases() {
     cancelPurchase,
   } = usePurchases()
 
-  const [selectedPurchase, setSelectedPurchase] =
-    useState<Purchase | null>(null)
+  const [selectedPurchaseId, setSelectedPurchaseId] =
+    useState<string | null>(null)
+
+  const selectedPurchase = selectedPurchaseId
+    ? purchases.find(
+      (purchase) =>
+        purchase.id === selectedPurchaseId,
+    ) ?? null
+    : null
 
   const [isCreateOpen, setIsCreateOpen] =
     useState(false)
@@ -299,7 +306,7 @@ export function Purchases() {
     addPurchase(newPurchase)
 
     setError(null)
-    setSelectedPurchase(newPurchase)
+    setSelectedPurchaseId(newPurchase.id)
 
     setIsCreateOpen(false)
 
@@ -432,8 +439,8 @@ export function Purchases() {
                       size="sm"
                       onClick={() => {
                         setError(null)
-                        setSelectedPurchase(
-                          purchase,
+                        setSelectedPurchaseId(
+                          purchase.id,
                         )
                       }}
                     >
@@ -465,7 +472,7 @@ export function Purchases() {
               className="purchases__purchase-card-close"
               onClick={() => {
                 setError(null)
-                setSelectedPurchase(null)
+                setSelectedPurchaseId(null)
               }}
               aria-label="Закрыть карточку"
             >
@@ -584,27 +591,28 @@ export function Purchases() {
                   onClick={() => {
                     setError(null)
 
-                    const result = completePurchase(
-                      selectedPurchase.id,
-                    )
-
-                    if (!result.success) {
-                      setError(
-                        result.message ??
-                        'Не удалось завершить поступление.',
+                    try {
+                      const result = completePurchase(
+                        selectedPurchase.id,
                       )
-                      return
-                    }
 
-                    setSelectedPurchase((currentPurchase) =>
-                      currentPurchase
-                        ? {
-                          ...currentPurchase,
-                          status: 'completed',
-                          updatedAt: new Date(),
-                        }
-                        : currentPurchase,
-                    )
+                      if (!result.success) {
+                        setError(
+                          result.message ??
+                          'Не удалось завершить поступление.',
+                        )
+                      }
+                    } catch (error) {
+                      if (
+                        error instanceof
+                        PurchaseValidationError
+                      ) {
+                        setError(error.message)
+                        return
+                      }
+
+                      throw error
+                    }
                   }}
                 >
                   Завершить поступление
@@ -626,8 +634,6 @@ export function Purchases() {
 
                   setError(null)
                   cancelPurchase(selectedPurchase.id)
-
-                  // существующий код
                 }}
               >
                 Отменить поступление
@@ -639,7 +645,7 @@ export function Purchases() {
               variant="secondary"
               onClick={() => {
                 setError(null)
-                setSelectedPurchase(null)
+                setSelectedPurchaseId(null)
               }}
             >
               Закрыть
