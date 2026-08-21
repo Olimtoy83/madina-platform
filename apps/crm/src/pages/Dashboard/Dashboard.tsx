@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   getCurrentStockByUnit,
@@ -9,7 +9,7 @@ import {
   getSalesReportingSummary,
 } from '@madina/core'
 
-import { Button } from '@madina/ui'
+import { Button, Card } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useTransactions } from '../../context/useTransactions'
@@ -121,7 +121,7 @@ export function Dashboard() {
       </div>
 
       <div className="dashboard__kpi-grid">
-        <article className="dashboard__card">
+        <Card className="dashboard__card">
           <span className="dashboard__card-label">
             Завершённые продажи
           </span>
@@ -129,9 +129,9 @@ export function Dashboard() {
           <strong className="dashboard__card-value">
             {salesCount}
           </strong>
-        </article>
+        </Card>
 
-        <article className="dashboard__card">
+        <Card className="dashboard__card">
           <span className="dashboard__card-label">
             Общий доход
           </span>
@@ -139,9 +139,9 @@ export function Dashboard() {
           <strong className="dashboard__card-value">
             {formatMoney(totalIncome)}
           </strong>
-        </article>
+        </Card>
 
-        <article className="dashboard__card">
+        <Card className="dashboard__card">
           <span className="dashboard__card-label">
             Общие расходы
           </span>
@@ -149,9 +149,9 @@ export function Dashboard() {
           <strong className="dashboard__card-value">
             {formatMoney(totalExpense)}
           </strong>
-        </article>
+        </Card>
 
-        <article className="dashboard__card">
+        <Card className="dashboard__card">
           <span className="dashboard__card-label">
             Финансовый результат
           </span>
@@ -159,9 +159,9 @@ export function Dashboard() {
           <strong className="dashboard__card-value">
             {formatMoney(financialBalance)}
           </strong>
-        </article>
+        </Card>
 
-        <article className="dashboard__card">
+        <Card className="dashboard__card">
           <span className="dashboard__card-label">
             Товарных позиций
           </span>
@@ -169,9 +169,9 @@ export function Dashboard() {
           <strong className="dashboard__card-value">
             {warehouseProductsCount}
           </strong>
-        </article>
+        </Card>
 
-        <article className="dashboard__card">
+        <Card className="dashboard__card">
           <span className="dashboard__card-label">
             Остатки на складе
           </span>
@@ -179,7 +179,7 @@ export function Dashboard() {
           <strong className="dashboard__card-value">
             {formatStockByUnit()}
           </strong>
-        </article>
+        </Card>
       </div>
 
       <div className="dashboard__sections">
