@@ -128,7 +128,7 @@
 .dashboard__sale-row p {
   margin: 4px 0 0;
   color: #6b7280;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   line-height: 1.4;
 }
 
