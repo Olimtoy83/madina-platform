@@ -42,7 +42,7 @@
 .stock-movements__summary-card strong {
   display: block;
   color: #17201f;
-  font-size: 28px;
+  font-size: var(--font-size-metric-lg);
   line-height: 1.2;
 }
 

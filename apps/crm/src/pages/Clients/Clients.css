@@ -95,7 +95,7 @@
 
 .clients-page__summary strong {
   color: #111827;
-  font-size: 28px;
+  font-size: var(--font-size-metric-lg);
   font-weight: 600;
 }
 

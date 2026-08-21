@@ -55,7 +55,7 @@
 .income-card__value {
   display: block;
   color: #111827;
-  font-size: 28px;
+  font-size: var(--font-size-metric-lg);
   font-weight: 600;
   line-height: 1.2;
 }
