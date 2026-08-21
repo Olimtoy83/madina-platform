@@ -10,7 +10,7 @@
 
 .dashboard__intro h2 {
   margin: 0 0 6px;
-  color: #111827;
+  color: var(--color-text-heading);
   font-size: var(--font-size-display);
   font-weight: 600;
   line-height: 1.2;
@@ -18,7 +18,7 @@
 
 .dashboard__intro p {
   margin: 0;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -32,21 +32,21 @@
 .dashboard__card {
   min-width: 0;
   padding: 20px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
 
 .dashboard__card-label {
   display: block;
   margin-bottom: 10px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
 .dashboard__card-value {
   display: block;
-  color: #111827;
+  color: var(--color-text-heading);
   font-size: var(--font-size-metric-sm);
   font-weight: 600;
   line-height: 1.25;
@@ -62,20 +62,20 @@
 
 .dashboard__section {
   min-width: 0;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   overflow: hidden;
 }
 
 .dashboard__section-header {
   padding: 18px 20px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .dashboard__section-header h3 {
   margin: 0;
-  color: #111827;
+  color: var(--color-text-heading);
   font-size: var(--font-size-section);
   font-weight: 600;
 }
@@ -83,7 +83,7 @@
 .dashboard__section>p {
   margin: 0;
   padding: 20px;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 14px;
 }
 
@@ -98,7 +98,7 @@
   justify-content: space-between;
   gap: 20px;
   padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .dashboard__sale-row:last-child {
@@ -120,14 +120,14 @@
 
 .dashboard__sale-row strong {
   display: block;
-  color: #111827;
+  color: var(--color-text-heading);
   font-size: 14px;
   font-weight: 600;
 }
 
 .dashboard__sale-row p {
   margin: 4px 0 0;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: var(--font-size-caption);
   line-height: 1.4;
 }
