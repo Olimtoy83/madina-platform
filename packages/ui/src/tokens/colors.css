@@ -2,6 +2,8 @@
   --color-primary: #00695c;
   --color-primary-hover: #00574b;
   --color-primary-soft: #e0f2f1;
+  --color-primary-hover-soft: #f0f4f3;
+  --color-primary-active-soft: #e6f2f0;
 
   --color-background: #f5f7f9;
   --color-surface: #ffffff;
@@ -36,6 +38,8 @@
   --color-border-input: #cbd5e1;
 
   --color-danger-border: #fecaca;
+
+  --color-danger-border-strong: #ef4444;
 
   --color-danger-hover: #b91c1c;
 
