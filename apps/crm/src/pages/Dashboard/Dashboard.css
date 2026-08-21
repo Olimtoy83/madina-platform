@@ -34,7 +34,7 @@
   padding: 20px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .dashboard__card-label {
@@ -64,7 +64,7 @@
   min-width: 0;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
