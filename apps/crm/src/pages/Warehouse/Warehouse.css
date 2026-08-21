@@ -25,7 +25,7 @@
 .warehouse__header p {
   margin: 0;
   color: #6b7280;
-  font-size: 15px;
+  font-size: var(--font-size-page-description);
 }
 
 .warehouse__add-button {
