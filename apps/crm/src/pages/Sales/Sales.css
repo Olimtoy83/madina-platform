@@ -236,7 +236,7 @@
 .sales-modal__header h2 {
   margin: 0;
   color: #111827;
-  font-size: 22px;
+  font-size: var(--font-size-panel-title);
   font-weight: 600;
 }
 
