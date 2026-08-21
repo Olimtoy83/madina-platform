@@ -46,7 +46,7 @@
   box-sizing: border-box;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -73,7 +73,7 @@
   width: 100%;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -157,7 +157,7 @@
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 500;
 }
@@ -220,7 +220,7 @@
   overflow-y: auto;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
 }
 
@@ -251,7 +251,7 @@
   height: 36px;
   padding: 0;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #ffffff;
   color: #374151;
   font-size: 22px;
@@ -294,7 +294,7 @@
   box-sizing: border-box;
   padding: 0 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font: inherit;
@@ -325,7 +325,7 @@
 .sales-modal__stock {
   padding: 12px 14px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #f8fafc;
   color: #64748b;
   font-size: 14px;
@@ -357,7 +357,7 @@
   gap: 16px;
   padding: 14px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #f8fafc;
 }
 
@@ -396,7 +396,7 @@
   gap: 16px;
   padding: 16px;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #f8fafc;
 }
 
@@ -501,7 +501,7 @@
 .sales-page__cancel-button {
   padding: 10px 16px;
   border: 1px solid #00695c;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #00695c;
   color: #ffffff;
   font: inherit;
