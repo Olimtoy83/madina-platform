@@ -19,7 +19,7 @@
 .client-details-page__header p {
   margin: 0;
   color: #64748b;
-  font-size: 16px;
+  font-size: var(--font-size-body);
 }
 
 .client-details-page__summary {

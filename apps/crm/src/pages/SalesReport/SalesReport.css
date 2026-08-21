@@ -21,7 +21,7 @@
 .sales-report-page__header p {
   margin: 0;
   color: #64748b;
-  font-size: 16px;
+  font-size: var(--font-size-body);
 }
 
 .sales-report-page__period {
