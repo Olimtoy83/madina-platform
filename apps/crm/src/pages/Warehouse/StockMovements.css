@@ -29,7 +29,7 @@
   padding: 22px 24px;
   background: #ffffff;
   border: 1px solid #e1e7e5;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 .stock-movements__summary-card span {
@@ -65,7 +65,7 @@
   padding: 20px;
   background: #ffffff;
   border: 1px solid #e1e7e5;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 .stock-movements__filter {
@@ -87,7 +87,7 @@
   box-sizing: border-box;
   padding: 0 12px;
   border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #ffffff;
   color: #111827;
   font: inherit;
@@ -106,7 +106,7 @@
   overflow: hidden;
   background: #ffffff;
   border: 1px solid #e1e7e5;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 .stock-movements__table-header {
