@@ -20,6 +20,17 @@
   --color-danger: #d32f2f;
   --color-danger-soft: #ffebee;
 
+  --color-text-heading: #111827;
+  --color-text-secondary: #374151;
+  --color-text-subtle: #64748b;
+
+  --color-border-light: #f1f5f9;
+  --color-border-strong: #94a3b8;
+
+  --color-success-text: #15803d;
+  --color-danger-text: #dc2626;
+  --color-warning-text: #c2410c;
+
   --color-info: #0288d1;
   --color-info-soft: #e1f5fe;
 }
