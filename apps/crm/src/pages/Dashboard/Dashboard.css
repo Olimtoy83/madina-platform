@@ -11,7 +11,7 @@
 .dashboard__intro h2 {
   margin: 0 0 6px;
   color: #111827;
-  font-size: 24px;
+  font-size: var(--font-size-display);
   font-weight: 600;
   line-height: 1.2;
 }
@@ -155,7 +155,7 @@
 
 @media (max-width: 700px) {
   .dashboard__intro h2 {
-    font-size: 22px;
+    font-size: var(--font-size-h1);
   }
 
   .dashboard__kpi-grid {
