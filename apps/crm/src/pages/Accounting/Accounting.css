@@ -45,7 +45,7 @@
   min-height: 40px;
   padding: 0 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font: inherit;
@@ -74,7 +74,7 @@
   box-sizing: border-box;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 
   display: flex;
   flex-direction: column;
@@ -122,7 +122,7 @@
   box-sizing: border-box;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -264,7 +264,7 @@
   align-items: center;
   min-height: 28px;
   padding: 0 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
 }
