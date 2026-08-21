@@ -40,7 +40,7 @@
   padding: 18px 20px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 
@@ -71,7 +71,7 @@
 .income-filter {
   padding: 9px 16px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font-size: 14px;
@@ -107,7 +107,7 @@
   overflow-x: auto;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 
