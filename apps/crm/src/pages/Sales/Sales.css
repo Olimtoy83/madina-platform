@@ -164,17 +164,17 @@
 
 .sales-page__status--draft {
   background: #fff7ed;
-  color: var(--color-warning-text);
+  color: var(--color-status-warning-bg)
 }
 
 .sales-page__status--completed {
   background: #ecfdf5;
-  color: var(--color-success-text);
+  color: var(--color-status-success-bg)
 }
 
 .sales-page__status--cancelled {
   background: #fef2f2;
-  color: var(--color-danger-hover);
+  color: var(--color-status-danger-bg)
 }
 
 /* =========================================================
@@ -382,7 +382,7 @@
 
 .sales-modal__item span {
   color: #64748b;
-  font-size: var(--font-size-small);
+  font-size: var(--color-text-subtle)
 }
 
 /* =========================================================
