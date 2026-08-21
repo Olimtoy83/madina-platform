@@ -64,7 +64,7 @@
 .client-details-page__info h2 {
   margin: 0 0 20px;
   color: #0f172a;
-  font-size: 20px;
+  font-size: var(--font-size-h3);
 }
 
 .client-details-page__info>div {
@@ -102,7 +102,7 @@
 .client-details-page__section-header h2 {
   margin: 0;
   color: #0f172a;
-  font-size: 20px;
+  font-size: var(--font-size-h3);
 }
 
 .client-details-page__section-header span {

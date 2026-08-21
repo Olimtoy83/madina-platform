@@ -117,7 +117,7 @@
 .stock-movements__table-header h2 {
   margin: 0 0 5px;
   color: #17201f;
-  font-size: 20px;
+  font-size: var(--font-size-h3);
 }
 
 .stock-movements__table-header p {
