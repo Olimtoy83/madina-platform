@@ -345,7 +345,7 @@
   }
 
   .tasks-page__card strong {
-    font-size: 24px;
+    font-size: var(--font-size-metric-sm);
   }
 
   .tasks-page__form>div:last-child {

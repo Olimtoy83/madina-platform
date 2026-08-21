@@ -47,7 +47,7 @@
 .dashboard__card-value {
   display: block;
   color: #111827;
-  font-size: 24px;
+  font-size: var(--font-size-metric-sm);
   font-weight: 600;
   line-height: 1.25;
   word-break: break-word;

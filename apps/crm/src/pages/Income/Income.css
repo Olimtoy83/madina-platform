@@ -190,7 +190,7 @@
 
 
   .income-card__value {
-    font-size: 24px;
+    font-size: var(--font-size-metric-sm);
   }
 
 
