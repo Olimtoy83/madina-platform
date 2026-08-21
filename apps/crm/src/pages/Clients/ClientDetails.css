@@ -13,7 +13,7 @@
 .client-details-page__header h1 {
   margin: 0 0 6px;
   color: #0f172a;
-  font-size: 32px;
+  font-size: var(--font-size-display);
 }
 
 .client-details-page__header p {
@@ -168,6 +168,6 @@
   }
 
   .client-details-page__header h1 {
-    font-size: 28px;
+    font-size: var(--font-size-h1);
   }
 }

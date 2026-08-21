@@ -19,7 +19,7 @@
 .purchases__header h1 {
   margin: 0 0 6px;
   color: #111827;
-  font-size: 32px;
+  font-size: var(--font-size-display);
   line-height: 1.2;
   font-weight: 600;
 }
