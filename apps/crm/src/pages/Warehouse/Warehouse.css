@@ -31,7 +31,7 @@
 .warehouse__add-button {
   padding: 10px 18px;
   border: 1px solid #00695c;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #00695c;
   color: #ffffff;
   font: inherit;
@@ -59,7 +59,7 @@
   box-sizing: border-box;
   padding: 0 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font: inherit;
@@ -90,7 +90,7 @@
   overflow-x: auto;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .warehouse__table {
@@ -137,7 +137,7 @@
 .warehouse__table td button {
   padding: 7px 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font: inherit;
@@ -168,7 +168,7 @@
   padding: 24px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .warehouse__product-card-header {
@@ -198,7 +198,7 @@
   height: 36px;
   padding: 0;
   border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: #ffffff;
   color: #374151;
   font-size: 22px;
@@ -225,7 +225,7 @@
   padding: 16px;
   background: #f8fafc;
   border: 1px solid #f1f5f9;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .warehouse__detail span {
@@ -256,7 +256,7 @@
 .warehouse__secondary-button,
 .warehouse__primary-button {
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font: inherit;
   font-size: 14px;
   cursor: pointer;
