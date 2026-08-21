@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useState,
@@ -21,6 +21,7 @@ import {
 } from '@madina/core'
 import {
   Alert,
+  Badge,
   Button,
   Input,
   Select,
@@ -385,16 +386,21 @@ export function Sales() {
                       SAR
                     </td>
 
-                    <td>
-                      <span
-                        className={`sales-page__status sales-page__status--${sale.status}`}
-                      >
-                        {sale.status === 'draft'
-                          ? 'Черновик'
-                          : sale.status === 'completed'
-                            ? 'Завершено'
-                            : 'Отменено'}
-                      </span>
+                    <td>                  <Badge
+                    variant={
+                      sale.status === 'draft'
+                        ? 'warning'
+                        : sale.status === 'completed'
+                          ? 'success'
+                          : 'danger'
+                    }
+                  >
+                    {sale.status === 'draft'
+                      ? 'Черновик'
+                      : sale.status === 'completed'
+                        ? 'Завершено'
+                        : 'Отменено'}
+                  </Badge>
                     </td>
 
                     <td>
