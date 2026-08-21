@@ -34,7 +34,7 @@
   min-height: 40px;
   padding: 0 16px;
   border: 1px solid #00695c;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #00695c;
   color: #ffffff;
   font: inherit;
@@ -57,7 +57,7 @@
   padding: 24px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .tasks-page__form h2 {
@@ -89,7 +89,7 @@
   box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font: inherit;
@@ -124,7 +124,7 @@
   min-height: 38px;
   padding: 0 16px;
   border: 1px solid #00695c;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #00695c;
   color: #ffffff;
   font: inherit;
@@ -168,7 +168,7 @@
   box-sizing: border-box;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 
   display: flex;
   flex-direction: column;
@@ -198,7 +198,7 @@
   overflow-x: auto;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
 }
 
 .tasks-page__table {
@@ -260,7 +260,7 @@
   min-height: 36px;
   padding: 0 10px;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #ffffff;
   color: #334155;
   font: inherit;
@@ -281,7 +281,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid #fecaca;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: #fff1f2;
   color: #b91c1c;
   font: inherit;
