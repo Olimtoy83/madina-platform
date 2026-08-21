@@ -6,7 +6,9 @@ import {
   type TaskStatus,
 } from '@madina/core'
 import {
+  Badge,
   Button,
+  Card,
   Input,
   Select,
   Textarea,
@@ -243,20 +245,20 @@ export function Tasks() {
       )}
 
       <div className="tasks-page__summary">
-        <article className="tasks-page__card">
+        <Card className="tasks-page__card">
           <span>Всего задач</span>
           <strong>{taskStats.total}</strong>
-        </article>
+        </Card>
 
-        <article className="tasks-page__card">
+        <Card className="tasks-page__card">
           <span>В работе</span>
           <strong>{taskStats.inProgress}</strong>
-        </article>
+        </Card>
 
-        <article className="tasks-page__card">
+        <Card className="tasks-page__card">
           <span>Завершено</span>
           <strong>{taskStats.completed}</strong>
-        </article>
+        </Card>
       </div>
 
       <div className="tasks-page__table-wrapper">
@@ -295,7 +297,17 @@ export function Tasks() {
                   </td>
 
                   <td>
-                    {priorityLabels[task.priority]}
+                    <Badge
+                      variant={
+                        task.priority === 'high'
+                          ? 'danger'
+                          : task.priority === 'medium'
+                            ? 'warning'
+                            : 'success'
+                      }
+                    >
+                      {priorityLabels[task.priority]}
+                    </Badge>
                   </td>
 
                   <td>
