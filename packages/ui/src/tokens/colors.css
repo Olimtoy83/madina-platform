@@ -31,6 +31,16 @@
   --color-danger-text: #dc2626;
   --color-warning-text: #c2410c;
 
+  --color-surface-muted: #f8fafc;
+
+  --color-border-input: #cbd5e1;
+
+  --color-border-strong: #94a3b8;
+
+  --color-danger-border: #fecaca;
+
+  --color-danger-hover: #b91c1c;
+
   --color-info: #0288d1;
   --color-info-soft: #e1f5fe;
 }
