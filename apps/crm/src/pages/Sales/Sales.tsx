@@ -23,6 +23,7 @@ import {
   Alert,
   Badge,
   Button,
+  Card,
   Input,
   Select,
 } from '@madina/ui'
@@ -218,7 +219,7 @@ export function Sales() {
       if (!result.success) {
         setError(
           result.message ??
-            'Не удалось завершить продажу.',
+          'Не удалось завершить продажу.',
         )
       }
     } catch (error) {
@@ -311,30 +312,30 @@ export function Sales() {
       )}
 
       <div className="sales-page__summary">
-        <div className="sales-page__summary-card">
+        <Card className="sales-page__summary-card">
           <span>Всего продаж</span>
           <strong>{sales.length}</strong>
-        </div>
+        </Card>
 
-        <div className="sales-page__summary-card">
+        <Card className="sales-page__summary-card">
           <span>Завершено</span>
           <strong>{completedCount}</strong>
-        </div>
+        </Card>
 
-        <div className="sales-page__summary-card">
+        <Card className="sales-page__summary-card">
           <span>Черновики</span>
           <strong>{draftCount}</strong>
-        </div>
+        </Card>
 
-        <div className="sales-page__summary-card">
+        <Card className="sales-page__summary-card">
           <span>Общая сумма</span>
           <strong>
             {totalAmount.toLocaleString('ru-RU')} SAR
           </strong>
-        </div>
+        </Card>
       </div>
 
-      <div className="sales-page__table-card">
+      <Card className="sales-page__table-card">
         <div className="sales-page__table-header">
           <h2>Список продаж</h2>
         </div>
@@ -387,20 +388,20 @@ export function Sales() {
                     </td>
 
                     <td>                  <Badge
-                    variant={
-                      sale.status === 'draft'
-                        ? 'warning'
+                      variant={
+                        sale.status === 'draft'
+                          ? 'warning'
+                          : sale.status === 'completed'
+                            ? 'success'
+                            : 'danger'
+                      }
+                    >
+                      {sale.status === 'draft'
+                        ? 'Черновик'
                         : sale.status === 'completed'
-                          ? 'success'
-                          : 'danger'
-                    }
-                  >
-                    {sale.status === 'draft'
-                      ? 'Черновик'
-                      : sale.status === 'completed'
-                        ? 'Завершено'
-                        : 'Отменено'}
-                  </Badge>
+                          ? 'Завершено'
+                          : 'Отменено'}
+                    </Badge>
                     </td>
 
                     <td>
@@ -440,7 +441,7 @@ export function Sales() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {isModalOpen && (
         <div
