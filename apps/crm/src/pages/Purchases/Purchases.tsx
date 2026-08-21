@@ -14,7 +14,9 @@ import {
 } from '@madina/core'
 import {
   Alert,
+  Badge,
   Button,
+  Card,
   Input,
   Select,
   Textarea,
@@ -210,9 +212,9 @@ export function Purchases() {
           .filter((_, itemIndex) => itemIndex !== index)
           .map((item, itemIndex) =>
             itemIndex ===
-            (duplicateIndex > index
-              ? duplicateIndex - 1
-              : duplicateIndex)
+              (duplicateIndex > index
+                ? duplicateIndex - 1
+                : duplicateIndex)
               ? {
                 ...item,
                 quantity:
@@ -458,7 +460,7 @@ export function Purchases() {
       </div>
 
       {selectedPurchase && (
-        <div className="purchases__purchase-card">
+        <Card className="purchases__purchase-card">
           <div className="purchases__purchase-card-header">
             <div>
               <h2>
@@ -516,13 +518,17 @@ export function Purchases() {
 
             <div className="purchases__detail">
               <span>Статус</span>
-              <strong>
-                {
-                  statusLabels[
-                  selectedPurchase.status
-                  ]
+              <Badge
+                variant={
+                  selectedPurchase.status === 'draft'
+                    ? 'warning'
+                    : selectedPurchase.status === 'completed'
+                      ? 'success'
+                      : 'danger'
                 }
-              </strong>
+              >
+                {statusLabels[selectedPurchase.status]}
+              </Badge>
             </div>
 
             <div className="purchases__detail">
@@ -654,7 +660,7 @@ export function Purchases() {
               Закрыть
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {isCreateOpen && (
