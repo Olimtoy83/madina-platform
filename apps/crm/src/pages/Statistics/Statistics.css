@@ -265,7 +265,7 @@
   }
 
   .statistics-card strong {
-    font-size: 22px;
+    font-size: var(--font-size-metric-xs);
   }
 
   .statistics-panel__header {

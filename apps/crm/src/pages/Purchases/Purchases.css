@@ -424,7 +424,7 @@
 
 .purchases__form-total strong {
   color: #111827;
-  font-size: 22px;
+  font-size: var(--font-size-metric-xs);
   font-weight: 600;
 }
 

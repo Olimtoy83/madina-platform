@@ -407,7 +407,7 @@
 
 .sales-modal__total strong {
   color: #111827;
-  font-size: 20px;
+  font-size: var(--font-size-h3);
   font-weight: 600;
 }
 
