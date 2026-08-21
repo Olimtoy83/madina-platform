@@ -9,6 +9,7 @@ import {
 } from '@madina/core'
 import {
   Button,
+  Card,
   Input,
   Textarea,
   Select,
@@ -229,13 +230,17 @@ export function Clients() {
       )}
 
       <div className="clients-page__summary">
-        <article>
+        <Card className="clients-page__summary-card">
           <span>Всего клиентов</span>
-          <strong>{clients.length}</strong>
-        </article>
 
-        <article>
+          <strong>
+            {clients.length}
+          </strong>
+        </Card>
+
+        <Card className="clients-page__summary-card">
           <span>Активные</span>
+
           <strong>
             {
               clients.filter(
@@ -244,7 +249,7 @@ export function Clients() {
               ).length
             }
           </strong>
-        </article>
+        </Card>
       </div>
 
       <div className="clients-page__table-wrapper">
