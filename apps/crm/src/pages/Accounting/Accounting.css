@@ -1,4 +1,4 @@
-﻿.accounting-page {
+.accounting-page {
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -90,8 +90,8 @@
 
 .accounting-card strong {
   color: #111827;
-  font-size: 26px;
-  line-height: 1.2;
+  font-size: var(--font-size-metric);
+  line-height: var(--line-height-metric);
   font-weight: 600;
 }
 
@@ -134,7 +134,7 @@
 .accounting-panel__header h2 {
   margin: 0;
   color: #111827;
-  font-size: 18px;
+  font-size: var(--font-size-section);
   line-height: 1.3;
   font-weight: 600;
 }

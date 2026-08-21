@@ -1,4 +1,4 @@
-﻿.client-details-page {
+.client-details-page {
   width: 100%;
 }
 
@@ -46,7 +46,7 @@
 .client-details-page__summary strong {
   display: block;
   color: #0f172a;
-  font-size: 26px;
+  font-size: var(--font-size-metric);
 }
 
 .client-details-page__info,
