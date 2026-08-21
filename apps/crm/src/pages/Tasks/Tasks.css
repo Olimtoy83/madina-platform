@@ -220,7 +220,7 @@
 .tasks-page__table th {
   background: #f8fafc;
   color: #475569;
-  font-size: 13px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -247,7 +247,7 @@
   max-width: 360px;
   margin: 5px 0 0;
   color: #64748b;
-  font-size: 13px;
+  font-size: var(--font-size-small);
   line-height: 1.4;
 }
 

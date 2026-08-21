@@ -112,7 +112,7 @@
 .sales-page__table th {
   background: #f8fafc;
   color: #475569;
-  font-size: 13px;
+  font-size: var(--font-size-small);
   font-weight: 600;
 }
 
@@ -382,7 +382,7 @@
 
 .sales-modal__item span {
   color: #64748b;
-  font-size: 13px;
+  font-size: var(--font-size-small);
 }
 
 /* =========================================================

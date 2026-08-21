@@ -132,7 +132,7 @@
   display: block;
   margin-top: 5px;
   color: #64748b;
-  font-size: 13px;
+  font-size: var(--font-size-small);
 }
 
 /* =========================================================
@@ -194,7 +194,7 @@
 .statistics-table th {
   background: #f8fafc;
   color: #475569;
-  font-size: 13px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   white-space: nowrap;
 }
