@@ -68,10 +68,6 @@
 
 .statistics-card {
   min-width: 0;
-  padding: 22px 20px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
 }
 
 .statistics-card span {
