@@ -115,7 +115,7 @@ export function Tasks() {
       </div>
 
       {isFormOpen && (
-        <section className="tasks-page__form">
+        <Card className="tasks-page__form">
           <h2>Новая задача</h2>
 
           <div>
@@ -241,7 +241,7 @@ export function Tasks() {
               Отмена
             </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       <div className="tasks-page__summary">
