@@ -31,9 +31,6 @@
 
 .client-details-page__summary article {
   padding: 22px 24px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
 }
 
 .client-details-page__summary span {
@@ -52,9 +49,6 @@
 .client-details-page__info,
 .client-details-page__sales {
   margin-bottom: 24px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
 }
 
 .client-details-page__info {
@@ -171,4 +165,3 @@
     font-size: var(--font-size-h1);
   }
 }
-

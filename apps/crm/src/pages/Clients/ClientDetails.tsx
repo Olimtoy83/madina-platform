@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react'
+import { useMemo } from 'react'
 import {
   Link,
   useNavigate,
@@ -11,7 +11,10 @@ import {
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import './ClientDetails.css'
-import { Button } from '@madina/ui'
+import {
+  Button,
+  Card,
+} from '@madina/ui'
 export function ClientDetails() {
   const { clientId } = useParams()
   const navigate = useNavigate()
@@ -112,7 +115,7 @@ export function ClientDetails() {
         </div>
       </div>
 
-      <div className="client-details-page__summary">
+      <Card className="client-details-page__summary-card">
         <article>
           <span>Продажи</span>
           <strong>
@@ -140,9 +143,9 @@ export function ClientDetails() {
               : '—'}
           </strong>
         </article>
-      </div>
+      </Card>
 
-      <section className="client-details-page__info">
+      <Card className="client-details-page__info">
         <h2>Информация о клиенте</h2>
 
         <div>
@@ -181,9 +184,9 @@ export function ClientDetails() {
             {client.note ?? '—'}
           </strong>
         </div>
-      </section>
+      </Card>
 
-      <section className="client-details-page__sales">
+      <Card className="client-details-page__sales">
         <div className="client-details-page__section-header">
           <h2>История продаж</h2>
 
@@ -232,7 +235,7 @@ export function ClientDetails() {
             )}
           </div>
         )}
-      </section>
+      </Card>
     </section>
   )
 }
