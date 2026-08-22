@@ -37,12 +37,8 @@
 
 
 .income-card {
-  padding: 18px 20px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  min-width: 0;
 }
-
 
 .income-card__label {
   display: block;
