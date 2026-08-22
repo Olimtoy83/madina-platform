@@ -387,7 +387,7 @@ export function Warehouse() {
         </Select>
       </div>
 
-      <div className="warehouse__table-wrapper">
+      <Card className="warehouse__table-wrapper">
         <table className="warehouse__table">
           <thead>
             <tr>
@@ -464,7 +464,7 @@ export function Warehouse() {
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {isAdding && (
         <Card className="warehouse__product-card">
