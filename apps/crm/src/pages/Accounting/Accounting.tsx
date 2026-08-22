@@ -177,7 +177,7 @@ export function Accounting() {
       </div>
 
       <div className="accounting-grid">
-        <section className="accounting-panel">
+        <Card className="accounting-panel">
           <div className="accounting-panel__header">
             <h2>По категориям</h2>
           </div>
@@ -210,9 +210,9 @@ export function Accounting() {
               </strong>
             </div>
           </div>
-        </section>
+        </Card>
 
-        <section className="accounting-panel">
+        <Card className="accounting-panel">
           <div className="accounting-panel__header">
             <h2>Финансовый результат</h2>
           </div>
@@ -226,10 +226,10 @@ export function Accounting() {
               {formatAmount(financialBalance)}
             </strong>
           </div>
-        </section>
+        </Card>
       </div>
 
-      <section className="accounting-panel accounting-panel--table">
+      <Card className="accounting-panel accounting-panel--table">
         <div className="accounting-panel__header">
           <div>
             <h2>Операции</h2>
@@ -332,7 +332,7 @@ export function Accounting() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </section>
   )
 }
