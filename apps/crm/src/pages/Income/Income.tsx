@@ -6,7 +6,10 @@ import {
   type Transaction,
 } from '@madina/core'
 
-import { Button } from '@madina/ui'
+import {
+  Button,
+  Card,
+} from '@madina/ui'
 
 import './Income.css'
 
@@ -100,7 +103,7 @@ export function Income() {
       </div>
 
       <div className="income-summary">
-        <article className="income-card">
+        <Card className="income-card">
           <span className="income-card__label">
             Доход
           </span>
@@ -108,9 +111,9 @@ export function Income() {
           <strong className="income-card__value">
             {formatAmount(totalIncome)} SAR
           </strong>
-        </article>
+        </Card>
 
-        <article className="income-card">
+        <Card className="income-card">
           <span className="income-card__label">
             Расход
           </span>
@@ -118,9 +121,9 @@ export function Income() {
           <strong className="income-card__value">
             {formatAmount(totalExpense)} SAR
           </strong>
-        </article>
+        </Card>
 
-        <article className="income-card">
+        <Card className="income-card">
           <span className="income-card__label">
             Финансовый результат
           </span>
@@ -128,7 +131,7 @@ export function Income() {
           <strong className="income-card__value">
             {formatAmount(financialBalance)} SAR
           </strong>
-        </article>
+        </Card>
       </div>
 
       <div className="income-filters">
