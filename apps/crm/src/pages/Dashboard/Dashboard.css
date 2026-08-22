@@ -31,10 +31,6 @@
 
 .dashboard__card {
   min-width: 0;
-  padding: 20px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
 .dashboard__card-label {
@@ -62,9 +58,6 @@
 
 .dashboard__section {
   min-width: 0;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
