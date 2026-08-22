@@ -124,7 +124,7 @@ export function Clients() {
       </div>
 
       {isFormOpen && (
-        <section className="clients-page__form">
+        <Card className="clients-page__form">
           <h2>Новый клиент</h2>
 
           <label>
@@ -226,7 +226,7 @@ export function Clients() {
               Отмена
             </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       <div className="clients-page__summary">
