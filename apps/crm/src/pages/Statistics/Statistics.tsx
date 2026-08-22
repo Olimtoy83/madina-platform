@@ -282,7 +282,7 @@ export function Statistics() {
         </Card>
       </div>
 
-      <section className="statistics-panel statistics-panel--table">
+      <Card className="statistics-panel statistics-panel--table">
         <div className="statistics-panel__header">
           <div>
             <h2>Финансовые операции</h2>
@@ -358,7 +358,7 @@ export function Statistics() {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </section>
   )
 }
