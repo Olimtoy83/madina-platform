@@ -88,9 +88,6 @@
 .warehouse__table-wrapper {
   width: 100%;
   overflow-x: auto;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius-md);
 }
 
 .warehouse__table {
@@ -166,9 +163,6 @@
 .warehouse__product-card {
   margin-top: 28px;
   padding: 24px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius-md);
 }
 
 .warehouse__product-card-header {
