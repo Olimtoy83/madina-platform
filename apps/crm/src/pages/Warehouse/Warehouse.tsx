@@ -16,6 +16,7 @@ import {
   Alert,
   Badge,
   Button,
+  Card,
   Input,
   Select,
 } from '@madina/ui'
@@ -466,7 +467,7 @@ export function Warehouse() {
       </div>
 
       {isAdding && (
-        <section className="warehouse__product-card">
+        <Card className="warehouse__product-card">
           <div className="warehouse__product-card-header">
             <div>
               <h2>Добавить товар</h2>
@@ -676,11 +677,11 @@ export function Warehouse() {
               Сохранить товар
             </Button>
           </div>
-        </section>
+        </Card>
       )}
 
       {selectedProduct && (
-        <section className="warehouse__product-card">
+        <Card className="warehouse__product-card">
           <div className="warehouse__product-card-header">
             <div>
               <h2>{selectedProduct.name}</h2>
@@ -1199,7 +1200,7 @@ export function Warehouse() {
               </div>
             </>
           )}
-        </section>
+        </Card>
       )}
     </section>
   )
