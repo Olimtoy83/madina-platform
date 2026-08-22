@@ -183,7 +183,7 @@ export function Dashboard() {
       </div>
 
       <div className="dashboard__sections">
-        <section className="dashboard__section">
+        <Card className="dashboard__section">
           <div className="dashboard__section-header">
             <h3>Последние операции</h3>
           </div>
@@ -232,9 +232,9 @@ export function Dashboard() {
               )}
             </div>
           )}
-        </section>
+        </Card>
 
-        <section className="dashboard__section">
+        <Card className="dashboard__section">
           <div className="dashboard__section-header">
             <h3>Быстрые действия</h3>
           </div>
@@ -270,10 +270,10 @@ export function Dashboard() {
               Открыть склад
             </Button>
           </div>
-        </section>
+        </Card>
       </div>
 
-      <section className="dashboard__section">
+      <Card className="dashboard__section">
         <div className="dashboard__section-header">
           <h3>Склад</h3>
         </div>
@@ -291,7 +291,7 @@ export function Dashboard() {
             {formatStockByUnit()}
           </strong>
         </p>
-      </section>
-    </section>
+      </Card>
+    </section >
   )
 }
