@@ -7,6 +7,7 @@ import {
 } from '@madina/core'
 
 import {
+  Badge,
   Button,
   Card,
 } from '@madina/ui'
@@ -238,11 +239,21 @@ export function Income() {
                     </td>
 
                     <td>
-                      {
-                        statusLabels[
-                        transaction.status
-                        ]
-                      }
+                      <Badge
+                        variant={
+                          transaction.status === 'completed'
+                            ? 'success'
+                            : transaction.status === 'cancelled'
+                              ? 'danger'
+                              : 'warning'
+                        }
+                      >
+                        {
+                          statusLabels[
+                          transaction.status
+                          ]
+                        }
+                      </Badge>
                     </td>
                   </tr>
                 ),
