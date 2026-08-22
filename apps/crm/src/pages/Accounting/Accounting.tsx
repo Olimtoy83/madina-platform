@@ -7,7 +7,10 @@ import {
   type PresetReportingPeriod,
   type Transaction,
 } from '@madina/core'
-import { Select } from '@madina/ui'
+import {
+  Card,
+  Select,
+} from '@madina/ui'
 
 import './Accounting.css'
 
@@ -144,33 +147,33 @@ export function Accounting() {
       </header>
 
       <div className="accounting-summary">
-        <article className="accounting-card">
+        <Card className="accounting-card">
           <span>Общий доход</span>
           <strong className="accounting-card__income">
             +{formatAmount(totalIncome)}
           </strong>
-        </article>
+        </Card>
 
-        <article className="accounting-card">
+        <Card className="accounting-card">
           <span>Общие расходы</span>
           <strong className="accounting-card__expense">
             -{formatAmount(totalExpense)}
           </strong>
-        </article>
+        </Card>
 
-        <article className="accounting-card">
+        <Card className="accounting-card">
           <span>Финансовый результат</span>
           <strong>
             {formatAmount(financialBalance)}
           </strong>
-        </article>
+        </Card>
 
-        <article className="accounting-card">
+        <Card className="accounting-card">
           <span>Операций</span>
           <strong>
             {filteredTransactions.length}
           </strong>
-        </article>
+        </Card>
       </div>
 
       <div className="accounting-grid">
