@@ -1,8 +1,9 @@
-﻿import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { getStockMovementTotals } from '@madina/core'
 import { useStockMovements } from '../../context/useStockMovements'
 import { useProducts } from '../../context/useProducts'
 import {
+  Card,
   Input,
   Select,
 } from '@madina/ui'
@@ -141,13 +142,13 @@ export function StockMovements() {
       </div>
 
       <div className="stock-movements__summary">
-        <div className="stock-movements__summary-card">
+        <Card className="stock-movements__summary-card">
           <span>Всего движений</span>
 
           <strong>
             {movements.length}
           </strong>
-        </div>
+        </Card>
 
         <div className="stock-movements__summary-card stock-movements__summary-card--income">
           <span>Приход</span>
@@ -263,7 +264,7 @@ export function StockMovements() {
         </div>
       </div>
 
-      <div className="stock-movements__table-card">
+      <Card className="stock-movements__table-card">
         <div className="stock-movements__table-header">
           <div>
             <h2>История движений</h2>
@@ -370,7 +371,7 @@ export function StockMovements() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
     </section>
   )
 }
