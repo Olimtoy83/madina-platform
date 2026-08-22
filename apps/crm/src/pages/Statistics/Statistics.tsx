@@ -198,7 +198,7 @@ export function Statistics() {
       </div>
 
       <div className="statistics-page__grid">
-        <section className="statistics-panel">
+        <Card className="statistics-panel">
           <div className="statistics-panel__header">
             <h2>Финансы по категориям</h2>
           </div>
@@ -243,9 +243,9 @@ export function Statistics() {
               </strong>
             </div>
           </div>
-        </section>
+        </Card>
 
-        <section className="statistics-panel">
+        <Card className="statistics-panel">
           <div className="statistics-panel__header">
             <h2>Задачи</h2>
           </div>
@@ -279,7 +279,7 @@ export function Statistics() {
               </strong>
             </div>
           </div>
-        </section>
+        </Card>
       </div>
 
       <section className="statistics-panel statistics-panel--table">
