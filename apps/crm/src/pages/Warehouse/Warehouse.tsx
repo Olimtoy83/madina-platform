@@ -14,6 +14,7 @@ import {
 
 import {
   Alert,
+  Badge,
   Button,
   Input,
   Select,
@@ -434,9 +435,17 @@ export function Warehouse() {
                   </td>
 
                   <td>
-                    {product.status === 'active'
-                      ? 'Активен'
-                      : 'Неактивен'}
+                    <Badge
+                      variant={
+                        product.status === 'active'
+                          ? 'success'
+                          : 'danger'
+                      }
+                    >
+                      {product.status === 'active'
+                        ? 'Активен'
+                        : 'Неактивен'}
+                    </Badge>
                   </td>
 
                   <td>
@@ -746,12 +755,17 @@ export function Warehouse() {
                 <div className="warehouse__detail">
                   <span>Статус</span>
 
-                  <strong>
-                    {selectedProduct.status ===
-                      'active'
+                  <Badge
+                    variant={
+                      selectedProduct.status === 'active'
+                        ? 'success'
+                        : 'danger'
+                    }
+                  >
+                    {selectedProduct.status === 'active'
                       ? 'Активен'
                       : 'Неактивен'}
-                  </strong>
+                  </Badge>
                 </div>
 
                 <div className="warehouse__detail">
