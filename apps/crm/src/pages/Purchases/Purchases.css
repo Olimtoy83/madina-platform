@@ -37,9 +37,6 @@
 .purchases__table-wrapper {
   width: 100%;
   overflow-x: auto;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
 .purchases__table {
@@ -93,9 +90,6 @@
 .purchases__purchase-card {
   margin-top: 24px;
   padding: 24px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
 }
 
 .purchases__purchase-card-header {
@@ -502,4 +496,3 @@
     justify-content: space-between;
   }
 }
-
