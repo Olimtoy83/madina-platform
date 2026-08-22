@@ -382,7 +382,7 @@ export function Purchases() {
         </Alert>
       )}
 
-      <div className="purchases__table-wrapper">
+      <Card className="purchases__table-wrapper">
         <table className="purchases__table">
           <thead>
             <tr>
@@ -457,7 +457,7 @@ export function Purchases() {
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {selectedPurchase && (
         <Card className="purchases__purchase-card">
