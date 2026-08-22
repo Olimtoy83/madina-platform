@@ -12,7 +12,10 @@ import {
   type Transaction,
 } from '@madina/core'
 
-import { Select } from '@madina/ui'
+import {
+  Card,
+  Select,
+} from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
 import { useSales } from '../../context/useSales'
@@ -148,50 +151,50 @@ export function Statistics() {
       </header>
 
       <div className="statistics-page__summary">
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Завершённые продажи</span>
           <strong>{salesSummary.completedCount}</strong>
-        </article>
+        </Card>
 
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Общий доход</span>
           <strong>
             {formatAmount(totalIncome)} SAR
           </strong>
-        </article>
+        </Card>
 
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Общие расходы</span>
           <strong>
             {formatAmount(totalExpense)} SAR
           </strong>
-        </article>
+        </Card>
 
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Финансовый результат</span>
           <strong>
             {formatAmount(financialBalance)} SAR
           </strong>
-        </article>
+        </Card>
 
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Завершённые поступления</span>
           <strong>
             {purchasesSummary.completedCount}
           </strong>
-        </article>
+        </Card>
 
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Товарных позиций</span>
           <strong>{productSummary.productCount}</strong>
-        </article>
+        </Card>
 
-        <article className="statistics-card">
+        <Card className="statistics-card">
           <span>Остатки на складе</span>
           <strong title={formatStockByUnit()}>
             {formatStockByUnit()}
           </strong>
-        </article>
+        </Card>
       </div>
 
       <div className="statistics-page__grid">
