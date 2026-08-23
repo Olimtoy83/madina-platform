@@ -329,6 +329,7 @@ export function Clients() {
 
                     <td>
                       <Select
+                        size="sm"
                         value={client.status}
                         onChange={(event) =>
                           updateClient(
