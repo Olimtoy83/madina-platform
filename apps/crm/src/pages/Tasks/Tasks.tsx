@@ -261,7 +261,7 @@ export function Tasks() {
         </Card>
       </div>
 
-      <div className="tasks-page__table-wrapper">
+      <Card className="tasks-page__table-wrapper">
         <table className="tasks-page__table">
           <thead>
             <tr>
@@ -366,7 +366,7 @@ export function Tasks() {
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
     </section>
   )
 }

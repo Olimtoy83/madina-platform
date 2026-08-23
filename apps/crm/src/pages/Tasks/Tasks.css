@@ -190,9 +190,6 @@
 .tasks-page__table-wrapper {
   width: 100%;
   overflow-x: auto;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius-md);
 }
 
 .tasks-page__table {
