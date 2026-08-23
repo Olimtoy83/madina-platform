@@ -293,7 +293,7 @@ export function Sales() {
 
         <Button
           type="button"
-          className="sales-page__cancel-button"
+          variant="primary"
           onClick={() => openModal()}
         >
           Новая продажа
@@ -409,7 +409,7 @@ export function Sales() {
                         <div className="sales-page__actions">
                           <Button
                             type="button"
-                            className="sales-page__cancel-button"
+                            variant="primary"
                             onClick={() =>
                               handleCompleteSale(sale.id)
                             }
@@ -419,7 +419,7 @@ export function Sales() {
 
                           <Button
                             type="button"
-                            className="sales-page__cancel-button"
+                            variant="danger"
                             onClick={() => {
                               if (
                                 window.confirm(

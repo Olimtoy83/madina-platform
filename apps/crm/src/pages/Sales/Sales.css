@@ -487,29 +487,3 @@
     justify-content: space-between;
   }
 }
-
-/* =========================================================
-   Buttons
-   ========================================================= */
-
-.sales-page__cancel-button {
-  padding: 10px 16px;
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  background: var(--color-primary);
-  color: var(--color-surface);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.sales-page__cancel-button:hover {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}
-
-.sales-page__cancel-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
