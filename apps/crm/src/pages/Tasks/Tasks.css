@@ -30,22 +30,6 @@
   font-size: var(--font-size-page-description);
 }
 
-.tasks-page__header>button {
-  min-height: 40px;
-  padding: 0 16px;
-  border: 1px solid #00695c;
-  border-radius: var(--radius-sm);
-  background: #00695c;
-  color: #ffffff;
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.tasks-page__header>button:hover {
-  background: #00574d;
-}
-
 /* =========================================================
    Create form
    ========================================================= */
@@ -115,38 +99,6 @@
   align-items: center;
   gap: 10px;
   padding-top: 4px;
-}
-
-.tasks-page__form>div:last-child button {
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid #00695c;
-  border-radius: var(--radius-sm);
-  background: #00695c;
-  color: #ffffff;
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.tasks-page__form>div:last-child button:hover {
-  background: #00574d;
-}
-
-.tasks-page__form>div:last-child button:last-child {
-  border-color: #cbd5e1;
-  background: #ffffff;
-  color: #334155;
-}
-
-.tasks-page__form>div:last-child button:last-child:hover {
-  border-color: #94a3b8;
-  background: #f8fafc;
-}
-
-.tasks-page__form>div:last-child button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* =========================================================
@@ -262,26 +214,6 @@
   outline: none;
   border-color: #00695c;
   box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
-}
-
-/* =========================================================
-   Delete button
-   ========================================================= */
-
-.tasks-page__table td button {
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid #fecaca;
-  border-radius: var(--radius-sm);
-  background: #fff1f2;
-  color: #b91c1c;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.tasks-page__table td button:hover {
-  background: #ffe4e6;
 }
 
 /* =========================================================
