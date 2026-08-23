@@ -474,7 +474,8 @@ export function Sales() {
 
               <Button
                 type="button"
-                className="sales-modal__close"
+                variant="secondary"
+                size="sm"
                 onClick={closeModal}
                 aria-label="Закрыть"
               >
