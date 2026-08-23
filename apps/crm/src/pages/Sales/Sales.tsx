@@ -498,6 +498,7 @@ export function Sales() {
                 <span>Клиент</span>
 
                 <Select
+                  fullWidth
                   value={clientId}
                   onChange={(event) =>
                     setClientId(event.target.value)
@@ -530,6 +531,7 @@ export function Sales() {
                 <span>Способ оплаты</span>
 
                 <Select
+                  fullWidth
                   value={paymentMethod}
                   onChange={(event) =>
                     setPaymentMethod(
@@ -559,6 +561,7 @@ export function Sales() {
                 <span>Товар</span>
 
                 <Select
+                  fullWidth
                   value={productId}
                   onChange={(event) =>
                     handleProductChange(
@@ -606,6 +609,7 @@ export function Sales() {
                   </span>
 
                   <Input
+                    fullWidth
                     type="number"
                     min="0"
                     step="0.01"
@@ -621,6 +625,7 @@ export function Sales() {
                   <span>Цена за единицу</span>
 
                   <Input
+                    fullWidth
                     type="number"
                     min="0"
                     step="0.01"

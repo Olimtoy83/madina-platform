@@ -281,27 +281,6 @@
   font-weight: 500;
 }
 
-.sales-modal__field input,
-.sales-modal__field select {
-  width: 100%;
-  min-height: 40px;
-  box-sizing: border-box;
-  padding: 0 12px;
-  border: 1px solid var(--color-border-input);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: 14px;
-}
-
-.sales-modal__field input:focus,
-.sales-modal__field select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
-}
-
 /* =========================================================
    Modal fields row
    ========================================================= */
