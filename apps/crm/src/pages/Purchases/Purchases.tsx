@@ -474,7 +474,8 @@ export function Purchases() {
 
             <Button
               type="button"
-              className="purchases__purchase-card-close"
+              variant="secondary"
+              size="sm"
               onClick={() => {
                 setError(null)
                 setSelectedPurchaseId(null)
@@ -679,7 +680,8 @@ export function Purchases() {
 
               <Button
                 type="button"
-                className="purchases__purchase-card-close"
+                variant="secondary"
+                size="sm"
                 onClick={() =>
                   setIsCreateOpen(false)
                 }

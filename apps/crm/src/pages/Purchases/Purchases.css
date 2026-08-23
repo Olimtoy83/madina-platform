@@ -112,29 +112,6 @@
   color: var(--color-text-muted);
 }
 
-.purchases__purchase-card-close {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--color-border-input);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
-}
-
-.purchases__purchase-card-close:hover {
-  background: var(--color-surface-muted);
-  border-color: var(--color-border-strong);
-  color: var(--color-text-heading);
-}
-
 /* =========================================================
    Purchase details
    ========================================================= */
