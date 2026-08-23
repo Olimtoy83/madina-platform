@@ -150,21 +150,21 @@ export function StockMovements() {
           </strong>
         </Card>
 
-        <div className="stock-movements__summary-card stock-movements__summary-card--income">
+        <Card className="stock-movements__summary-card stock-movements__summary-card--income">
           <span>Приход</span>
 
           <strong>
             {totalPurchases}
           </strong>
-        </div>
+        </Card>
 
-        <div className="stock-movements__summary-card stock-movements__summary-card--expense">
+        <Card className="stock-movements__summary-card stock-movements__summary-card--expense">
           <span>Расход</span>
 
           <strong>
             {totalSales}
           </strong>
-        </div>
+        </Card>
       </div>
 
       <div className="stock-movements__filters">

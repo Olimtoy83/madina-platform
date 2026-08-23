@@ -27,9 +27,6 @@
 
 .stock-movements__summary-card {
   padding: 22px 24px;
-  background: #ffffff;
-  border: 1px solid #e1e7e5;
-  border-radius: var(--radius-md);
 }
 
 .stock-movements__summary-card span {
@@ -104,9 +101,6 @@
 
 .stock-movements__table-card {
   overflow: hidden;
-  background: #ffffff;
-  border: 1px solid #e1e7e5;
-  border-radius: var(--radius-md);
 }
 
 .stock-movements__table-header {
