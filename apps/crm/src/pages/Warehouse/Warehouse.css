@@ -39,32 +39,12 @@
   margin-bottom: 16px;
 }
 
-.warehouse__toolbar input,
-.warehouse__toolbar select {
-  height: 40px;
-  box-sizing: border-box;
-  padding: 0 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  font-size: 14px;
-}
-
 .warehouse__toolbar input {
   width: 320px;
 }
 
 .warehouse__toolbar select {
   min-width: 180px;
-}
-
-.warehouse__toolbar input:focus,
-.warehouse__toolbar select:focus {
-  outline: none;
-  border-color: #00695c;
-  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
 }
 
 /* =========================================================
