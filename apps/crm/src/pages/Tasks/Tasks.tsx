@@ -122,6 +122,7 @@ export function Tasks() {
             <label>
               Название
               <Input
+                fullWidth
                 type="text"
                 value={title}
                 onChange={(event) =>
@@ -136,6 +137,7 @@ export function Tasks() {
             <label>
               Описание
               <Textarea
+                fullWidth
                 value={description}
                 onChange={(event) =>
                   setDescription(
@@ -151,6 +153,7 @@ export function Tasks() {
             <label>
               Приоритет
               <Select
+                fullWidth
                 value={priority}
                 onChange={(event) =>
                   setPriority(
@@ -178,6 +181,7 @@ export function Tasks() {
             <label>
               Статус
               <Select
+                fullWidth
                 value={status}
                 onChange={(event) =>
                   setStatus(
@@ -209,6 +213,7 @@ export function Tasks() {
             <label>
               Срок выполнения
               <Input
+                fullWidth
                 type="date"
                 value={dueDate}
                 onChange={(event) =>
