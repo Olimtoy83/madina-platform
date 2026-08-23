@@ -143,35 +143,6 @@
 }
 
 /* =========================================================
-   Status
-   ========================================================= */
-
-.sales-page__status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 0 10px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.sales-page__status--draft {
-  background: #fff7ed;
-  color: var(--color-status-warning-bg)
-}
-
-.sales-page__status--completed {
-  background: #ecfdf5;
-  color: var(--color-status-success-bg)
-}
-
-.sales-page__status--cancelled {
-  background: #fef2f2;
-  color: var(--color-status-danger-bg)
-}
-
-/* =========================================================
    Actions
    ========================================================= */
 
