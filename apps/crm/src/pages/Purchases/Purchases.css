@@ -290,39 +290,6 @@
   font-weight: 500;
 }
 
-.purchases__form input,
-.purchases__form select,
-.purchases__form textarea {
-  box-sizing: border-box;
-  width: 100%;
-  border: 1px solid var(--color-border-input);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-size: 14px;
-}
-
-.purchases__form input,
-.purchases__form select {
-  min-height: 40px;
-  padding: 0 12px;
-}
-
-.purchases__form textarea {
-  min-height: 100px;
-  padding: 10px 12px;
-  resize: vertical;
-}
-
-.purchases__form input:focus,
-.purchases__form select:focus,
-.purchases__form textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
-}
-
 /* =========================================================
    Form items
    ========================================================= */

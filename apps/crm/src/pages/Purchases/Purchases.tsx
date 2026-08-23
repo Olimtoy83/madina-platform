@@ -705,6 +705,7 @@ export function Purchases() {
                 <span>Дата поступления</span>
 
                 <Input
+                  fullWidth
                   type="date"
                   value={purchaseDate}
                   onChange={(event) => {
@@ -720,6 +721,7 @@ export function Purchases() {
                 <span>Поставщик</span>
 
                 <Input
+                  fullWidth
                   type="text"
                   value={supplierName}
                   onChange={(event) => {
@@ -755,6 +757,7 @@ export function Purchases() {
                         <span>Товар</span>
 
                         <Select
+                          fullWidth
                           value={item.productId}
                           onChange={(event) =>
                             updateFormItem(
@@ -792,6 +795,7 @@ export function Purchases() {
                         </span>
 
                         <Input
+                          fullWidth
                           type="number"
                           min="0"
                           step="0.01"
@@ -820,6 +824,7 @@ export function Purchases() {
                         </span>
 
                         <Input
+                          fullWidth
                           type="number"
                           min="0"
                           step="0.01"
@@ -866,6 +871,7 @@ export function Purchases() {
                 <span>Примечание</span>
 
                 <Textarea
+                  fullWidth
                   value={note}
                   onChange={(event) => {
                     setError(null)
