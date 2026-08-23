@@ -252,7 +252,7 @@ export function Clients() {
         </Card>
       </div>
 
-      <div className="clients-page__table-wrapper">
+      <Card className="clients-page__table-wrapper">
         <table className="clients-page__table">
           <thead>
             <tr>
@@ -365,7 +365,7 @@ export function Clients() {
             )}
           </tbody>
         </table>
-      </div >
-    </section >
+      </Card>
+    </section>
   )
 }
