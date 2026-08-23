@@ -42,20 +42,6 @@
 
 .accounting-filters select {
   min-width: 170px;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  font-size: 14px;
-}
-
-.accounting-filters select:focus {
-  outline: none;
-  border-color: #00695c;
-  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
 }
 
 /* =========================================================
