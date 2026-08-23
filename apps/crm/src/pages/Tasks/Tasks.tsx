@@ -312,6 +312,7 @@ export function Tasks() {
 
                   <td>
                     <Select
+                      size="sm"
                       value={task.status}
                       onChange={(event) =>
                         updateTask(

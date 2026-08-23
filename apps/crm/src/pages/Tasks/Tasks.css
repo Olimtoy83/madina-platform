@@ -200,20 +200,6 @@
 
 .tasks-page__table select {
   min-width: 150px;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  font-size: 13px;
-}
-
-.tasks-page__table select:focus {
-  outline: none;
-  border-color: #00695c;
-  box-shadow: 0 0 0 2px rgba(0, 105, 92, 0.08);
 }
 
 /* =========================================================
