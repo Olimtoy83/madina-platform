@@ -145,7 +145,10 @@ export function ClientDetails() {
         </article>
       </Card>
 
-      <Card className="client-details-page__info">
+      <Card
+        className="client-details-page__info"
+        padding="lg"
+      >
         <h2>Информация о клиенте</h2>
 
         <div>
