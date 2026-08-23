@@ -173,7 +173,7 @@ export function Income() {
         </Button>
       </div>
 
-      <div className="income-table-wrapper">
+      <Card className="income-table-wrapper">
         <table className="income-table">
           <thead>
             <tr>
@@ -261,7 +261,7 @@ export function Income() {
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
     </section>
   )
 }
