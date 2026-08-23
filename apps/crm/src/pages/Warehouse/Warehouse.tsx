@@ -924,17 +924,17 @@ export function Warehouse() {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={cancelAdjustment}
+                      onClick={cancelDeactivation}
                     >
                       Отмена
                     </Button>
 
                     <Button
                       type="button"
-                      variant="primary"
-                      onClick={handleAdjustment}
+                      variant="danger"
+                      onClick={confirmDeactivation}
                     >
-                      Сохранить корректировку
+                      Деактивировать
                     </Button>
                   </div>
                 </div>
