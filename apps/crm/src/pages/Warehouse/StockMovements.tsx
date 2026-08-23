@@ -3,6 +3,7 @@ import { getStockMovementTotals } from '@madina/core'
 import { useStockMovements } from '../../context/useStockMovements'
 import { useProducts } from '../../context/useProducts'
 import {
+  Badge,
   Card,
   Input,
   Select,
@@ -108,20 +109,6 @@ export function StockMovements() {
     }
 
     return 'Корректировка'
-  }
-
-  function getMovementTypeClass(
-    type: string,
-  ) {
-    if (type === 'purchase') {
-      return 'stock-movements__badge stock-movements__badge--income'
-    }
-
-    if (type === 'sale') {
-      return 'stock-movements__badge stock-movements__badge--expense'
-    }
-
-    return 'stock-movements__badge stock-movements__badge--adjustment'
   }
 
   function getUnitLabel(unit: string) {
@@ -320,15 +307,20 @@ export function StockMovements() {
                         </td>
 
                         <td>
-                          <span
-                            className={getMovementTypeClass(
-                              movement.type,
-                            )}
+                          <Badge
+                            size="sm"
+                            variant={
+                              movement.type === 'purchase'
+                                ? 'success'
+                                : movement.type === 'sale'
+                                  ? 'danger'
+                                  : 'default'
+                            }
                           >
                             {getMovementType(
                               movement.type,
                             )}
-                          </span>
+                          </Badge>
                         </td>
 
                         <td>

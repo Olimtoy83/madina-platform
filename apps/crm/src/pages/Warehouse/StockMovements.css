@@ -139,32 +139,6 @@
   background: #f9fafb;
 }
 
-/* Movement badge */
-
-.stock-movements__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border-radius: var(--radius-pill);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.stock-movements__badge--income {
-  background: #ecfdf3;
-  color: #15803d;
-}
-
-.stock-movements__badge--expense {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-.stock-movements__badge--adjustment {
-  background: #f3f4f6;
-  color: #4b5563;
-}
-
 /* Table values */
 
 .stock-movements__product-name {
