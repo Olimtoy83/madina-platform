@@ -138,10 +138,10 @@ export function Income() {
       <div className="income-filters">
         <Button
           type="button"
-          className={
+          variant={
             filter === 'all'
-              ? 'income-filter income-filter--active'
-              : 'income-filter'
+              ? 'primary'
+              : 'secondary'
           }
           onClick={() => setFilter('all')}
         >
@@ -150,10 +150,10 @@ export function Income() {
 
         <Button
           type="button"
-          className={
+          variant={
             filter === 'income'
-              ? 'income-filter income-filter--active'
-              : 'income-filter'
+              ? 'primary'
+              : 'secondary'
           }
           onClick={() => setFilter('income')}
         >
@@ -162,10 +162,10 @@ export function Income() {
 
         <Button
           type="button"
-          className={
+          variant={
             filter === 'expense'
-              ? 'income-filter income-filter--active'
-              : 'income-filter'
+              ? 'primary'
+              : 'secondary'
           }
           onClick={() => setFilter('expense')}
         >

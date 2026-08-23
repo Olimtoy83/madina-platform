@@ -63,41 +63,6 @@
   margin-bottom: 16px;
 }
 
-
-.income-filter {
-  padding: 9px 16px;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-
-.income-filter:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-
-.income-filter--active {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  color: var(--color-surface);
-}
-
-
-.income-filter--active:hover {
-  background: var(--color-primary-hover);
-  color: var(--color-surface);
-}
-
-
 .income-table-wrapper {
   width: 100%;
   overflow-x: auto;
