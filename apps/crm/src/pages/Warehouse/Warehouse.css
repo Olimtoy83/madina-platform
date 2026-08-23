@@ -28,20 +28,6 @@
   font-size: var(--font-size-page-description);
 }
 
-.warehouse__add-button {
-  padding: 10px 18px;
-  border: 1px solid #00695c;
-  border-radius: var(--radius-md);
-  background: #00695c;
-  color: #ffffff;
-  font: inherit;
-  cursor: pointer;
-}
-
-.warehouse__add-button:hover {
-  background: #00574d;
-}
-
 /* =========================================================
    Toolbar
    ========================================================= */
@@ -129,21 +115,6 @@
 .warehouse__table td strong {
   color: #111827;
   font-weight: 600;
-}
-
-.warehouse__table td button {
-  padding: 7px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  color: #334155;
-  font: inherit;
-  cursor: pointer;
-}
-
-.warehouse__table td button:hover {
-  border-color: #00695c;
-  color: #00695c;
 }
 
 /* =========================================================
@@ -247,36 +218,6 @@
   margin-top: 24px;
 }
 
-.warehouse__secondary-button,
-.warehouse__primary-button {
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.warehouse__secondary-button {
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #334155;
-}
-
-.warehouse__secondary-button:hover {
-  border-color: #94a3b8;
-  background: #f8fafc;
-}
-
-.warehouse__primary-button {
-  border: 1px solid #00695c;
-  background: #00695c;
-  color: #ffffff;
-}
-
-.warehouse__primary-button:hover {
-  background: #00574d;
-}
-
 /* =========================================================
    Responsive
    ========================================================= */
@@ -321,10 +262,5 @@
 
   .warehouse__product-card-actions {
     flex-direction: column;
-  }
-
-  .warehouse__secondary-button,
-  .warehouse__primary-button {
-    width: 100%;
   }
 }

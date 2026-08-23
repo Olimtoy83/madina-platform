@@ -452,6 +452,8 @@ export function Warehouse() {
                   <td>
                     <Button
                       type="button"
+                      variant="secondary"
+                      size="sm"
                       onClick={() =>
                         openProduct(product)
                       }
@@ -662,7 +664,7 @@ export function Warehouse() {
           <div className="warehouse__product-card-actions">
             <Button
               type="button"
-              className="warehouse__secondary-button"
+              variant="secondary"
               onClick={cancelAdding}
             >
               Отмена
@@ -670,7 +672,7 @@ export function Warehouse() {
 
             <Button
               type="button"
-              className="warehouse__primary-button"
+              variant="primary"
               onClick={handleAddProduct}
               disabled={!addForm.name.trim()}
             >
@@ -793,7 +795,7 @@ export function Warehouse() {
               <div className="warehouse__product-card-actions">
                 <Button
                   type="button"
-                  className="warehouse__secondary-button"
+                  variant="secondary"
                   onClick={closeProduct}
                 >
                   Закрыть
@@ -801,7 +803,7 @@ export function Warehouse() {
 
                 <Button
                   type="button"
-                  className="warehouse__secondary-button"
+                  variant="danger"
                   onClick={startDeactivation}
                 >
                   Деактивировать
@@ -809,7 +811,7 @@ export function Warehouse() {
 
                 <Button
                   type="button"
-                  className="warehouse__secondary-button"
+                  variant="secondary"
                   onClick={startAdjustment}
                 >
                   Корректировка
@@ -817,7 +819,7 @@ export function Warehouse() {
 
                 <Button
                   type="button"
-                  className="warehouse__primary-button"
+                  variant="primary"
                   onClick={startEditing}
                 >
                   Редактировать
@@ -888,7 +890,7 @@ export function Warehouse() {
                   <div className="warehouse__product-card-actions">
                     <Button
                       type="button"
-                      className="warehouse__secondary-button"
+                      variant="secondary"
                       onClick={cancelAdjustment}
                     >
                       Отмена
@@ -896,7 +898,7 @@ export function Warehouse() {
 
                     <Button
                       type="button"
-                      className="warehouse__primary-button"
+                      variant="primary"
                       onClick={handleAdjustment}
                       disabled={
                         !adjustmentQuantity ||
@@ -921,7 +923,7 @@ export function Warehouse() {
                   <div className="warehouse__product-card-actions">
                     <Button
                       type="button"
-                      className="warehouse__secondary-button"
+                      variant="secondary"
                       onClick={cancelAdjustment}
                     >
                       Отмена
@@ -929,7 +931,7 @@ export function Warehouse() {
 
                     <Button
                       type="button"
-                      className="warehouse__primary-button"
+                      variant="primary"
                       onClick={handleAdjustment}
                     >
                       Сохранить корректировку
@@ -1161,7 +1163,7 @@ export function Warehouse() {
                   <div className="warehouse__product-card-actions">
                     <Button
                       type="button"
-                      className="warehouse__secondary-button"
+                      variant="secondary"
                       onClick={cancelDeactivation}
                     >
                       Отмена
@@ -1169,7 +1171,7 @@ export function Warehouse() {
 
                     <Button
                       type="button"
-                      className="warehouse__primary-button"
+                      variant="danger"
                       onClick={confirmDeactivation}
                     >
                       Деактивировать
@@ -1181,7 +1183,7 @@ export function Warehouse() {
               <div className="warehouse__product-card-actions">
                 <Button
                   type="button"
-                  className="warehouse__secondary-button"
+                  variant="secondary"
                   onClick={() =>
                     setIsEditing(false)
                   }
@@ -1191,7 +1193,7 @@ export function Warehouse() {
 
                 <Button
                   type="button"
-                  className="warehouse__primary-button"
+                  variant="primary"
                   onClick={handleSaveEdit}
                   disabled={!editForm.name.trim()}
                 >
