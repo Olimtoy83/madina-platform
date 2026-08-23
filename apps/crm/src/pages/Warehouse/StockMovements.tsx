@@ -174,6 +174,7 @@ export function StockMovements() {
           </label>
 
           <Select
+            fullWidth
             id="movement-type"
             value={typeFilter}
             onChange={(event) =>
@@ -206,6 +207,7 @@ export function StockMovements() {
           </label>
 
           <Select
+            fullWidth
             id="movement-product"
             value={productFilter}
             onChange={(event) =>
@@ -235,6 +237,7 @@ export function StockMovements() {
           </label>
 
           <Input
+            fullWidth
             id="movement-date-from"
             type="date"
             value={dateFrom}
@@ -252,6 +255,7 @@ export function StockMovements() {
           </label>
 
           <Input
+            fullWidth
             id="movement-date-to"
             type="date"
             value={dateTo}
