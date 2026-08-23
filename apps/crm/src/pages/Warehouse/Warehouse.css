@@ -138,24 +138,6 @@
   font-size: 14px;
 }
 
-.warehouse__product-card-close {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid #cbd5e1;
-  border-radius: var(--radius-md);
-  background: #ffffff;
-  color: #374151;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.warehouse__product-card-close:hover {
-  background: #f8fafc;
-  border-color: #9ca3af;
-}
-
 /* =========================================================
    Product details
    ========================================================= */

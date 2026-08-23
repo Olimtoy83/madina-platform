@@ -481,7 +481,8 @@ export function Warehouse() {
 
             <Button
               type="button"
-              className="warehouse__product-card-close"
+              variant="secondary"
+              size="sm"
               onClick={cancelAdding}
               aria-label="Закрыть форму"
             >
@@ -693,7 +694,8 @@ export function Warehouse() {
 
             <Button
               type="button"
-              className="warehouse__product-card-close"
+              variant="secondary"
+              size="sm"
               onClick={closeProduct}
               aria-label="Закрыть карточку"
             >
