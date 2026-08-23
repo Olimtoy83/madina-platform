@@ -469,7 +469,10 @@ export function Warehouse() {
       </Card>
 
       {isAdding && (
-        <Card className="warehouse__product-card">
+        <Card
+          className="warehouse__product-card"
+          padding="lg"
+        >
           <div className="warehouse__product-card-header">
             <div>
               <h2>Добавить товар</h2>
@@ -684,7 +687,10 @@ export function Warehouse() {
       )}
 
       {selectedProduct && (
-        <Card className="warehouse__product-card">
+        <Card
+          className="warehouse__product-card"
+          padding="lg"
+        >
           <div className="warehouse__product-card-header">
             <div>
               <h2>{selectedProduct.name}</h2>
