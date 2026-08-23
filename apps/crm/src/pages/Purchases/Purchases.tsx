@@ -460,7 +460,10 @@ export function Purchases() {
       </Card>
 
       {selectedPurchase && (
-        <Card className="purchases__purchase-card">
+        <Card
+          className="purchases__purchase-card"
+          padding="lg"
+        >
           <div className="purchases__purchase-card-header">
             <div>
               <h2>
