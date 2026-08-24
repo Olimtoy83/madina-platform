@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
+import { useToast } from '../../context/ToastProvider'
 import {
   getClientSalesStats,
   type ClientStatus,
@@ -32,6 +33,8 @@ export function Clients() {
   } = useClients()
 
   const { sales } = useSales()
+
+  const { showToast } = useToast()
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
@@ -86,6 +89,12 @@ export function Clients() {
         company.trim() || undefined,
       note: note.trim() || undefined,
       status,
+    })
+
+    showToast({
+      variant: 'success',
+      title: 'Клиент добавлен',
+      message: trimmedName,
     })
 
     resetForm()
@@ -349,7 +358,7 @@ export function Clients() {
                       <Select
                         size="sm"
                         value={client.status}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           updateClient(
                             client.id,
                             {
@@ -357,7 +366,13 @@ export function Clients() {
                                 event.target.value as ClientStatus,
                             },
                           )
-                        }
+
+                          showToast({
+                            variant: 'success',
+                            title: 'Статус клиента изменён',
+                            message: client.name,
+                          })
+                        }}
                       >
                         <option value="active">
                           Активен
@@ -410,6 +425,12 @@ export function Clients() {
               variant="danger"
               onClick={() => {
                 deactivateClient(clientToDeactivate)
+
+                showToast({
+                  variant: 'success',
+                  title: 'Клиент деактивирован',
+                })
+
                 setClientToDeactivate(null)
               }}
             >
