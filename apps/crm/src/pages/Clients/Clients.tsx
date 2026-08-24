@@ -20,6 +20,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  EmptyState,
 } from '@madina/ui'
 
 export function Clients() {
@@ -288,11 +289,11 @@ export function Clients() {
           <TableBody>
             {sortedClients.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={9}
-                  className="clients-page__empty"
-                >
-                  Клиентов пока нет
+                <TableCell colSpan={9}>
+                  <EmptyState
+                    title="Клиентов пока нет"
+                    description="Добавьте первого клиента, чтобы начать работу с CRM."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
