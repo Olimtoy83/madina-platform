@@ -3,6 +3,12 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   Alert,
   Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 import { SaleValidationError } from '@madina/core'
 import { useProducts } from '../../context/useProducts'
@@ -146,18 +152,18 @@ export function SaleDetails() {
 
       <h2>Товары</h2>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Товар</th>
-            <th>Количество</th>
-            <th>Единица</th>
-            <th>Цена</th>
-            <th>Сумма</th>
-          </tr>
-        </thead>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableHeader>Товар</TableHeader>
+            <TableHeader>Количество</TableHeader>
+            <TableHeader>Единица</TableHeader>
+            <TableHeader>Цена</TableHeader>
+            <TableHeader>Сумма</TableHeader>
+          </TableRow>
+        </TableHead>
 
-        <tbody>
+        <TableBody>
           {sale.items.map((item) => {
             const product = products.find(
               (currentProduct) =>
@@ -165,27 +171,31 @@ export function SaleDetails() {
             )
 
             return (
-              <tr key={item.productId}>
-                <td>
+              <TableRow key={item.productId}>
+                <TableCell>
                   {product?.name ?? item.productId}
-                </td>
+                </TableCell>
 
-                <td>{item.quantity}</td>
+                <TableCell>
+                  {item.quantity}
+                </TableCell>
 
-                <td>{item.unit}</td>
+                <TableCell>
+                  {item.unit}
+                </TableCell>
 
-                <td>
+                <TableCell>
                   {item.unitPrice.toLocaleString('ru-RU')} SAR
-                </td>
+                </TableCell>
 
-                <td>
+                <TableCell>
                   {item.totalAmount.toLocaleString('ru-RU')} SAR
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
 
       <h2>
         Итого:{' '}
