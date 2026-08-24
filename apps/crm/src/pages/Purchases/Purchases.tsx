@@ -21,6 +21,12 @@ import {
   Input,
   Modal,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Textarea,
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
@@ -388,61 +394,59 @@ export function Purchases() {
       )}
 
       <Card className="purchases__table-wrapper">
-        <table className="purchases__table">
-          <thead>
-            <tr>
-              <th>Номер</th>
-              <th>Дата</th>
-              <th>Поставщик</th>
-              <th>Товаров</th>
-              <th>Сумма</th>
-              <th>Статус</th>
-              <th>Действие</th>
-            </tr>
-          </thead>
+        <Table className="purchases__table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Номер</TableHeader>
+              <TableHeader>Дата</TableHeader>
+              <TableHeader>Поставщик</TableHeader>
+              <TableHeader>Товаров</TableHeader>
+              <TableHeader>Сумма</TableHeader>
+              <TableHeader>Статус</TableHeader>
+              <TableHeader>Действие</TableHeader>
+            </TableRow>
+          </TableHead>
 
-          <tbody>
+          <TableBody>
             {purchases.length === 0 ? (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={7}
                   className="purchases__empty"
                 >
                   Поступлений пока нет.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               purchases.map((purchase) => (
-                <tr key={purchase.id}>
-                  <td>
+                <TableRow key={purchase.id}>
+                  <TableCell>
                     {purchase.purchaseNumber}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {purchase.purchaseDate.toLocaleDateString(
                       'ru-RU',
                     )}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {purchase.supplierName}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {purchase.items.length}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {purchase.totalAmount} SAR
-                  </td>
+                  </TableCell>
 
-                  <td>
-                    {statusLabels[
-                      purchase.status
-                    ]}
-                  </td>
+                  <TableCell>
+                    {statusLabels[purchase.status]}
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     <Button
                       type="button"
                       variant="secondary"
@@ -456,12 +460,12 @@ export function Purchases() {
                     >
                       Открыть
                     </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </Card>
 
       {selectedPurchase && (
@@ -553,50 +557,51 @@ export function Purchases() {
             <h3>Товары</h3>
 
             <div className="purchases__items-table-wrapper">
-              <table className="purchases__items-table">
-                <thead>
-                  <tr>
-                    <th>Товар</th>
-                    <th>Количество</th>
-                    <th>Цена закупки</th>
-                    <th>Сумма</th>
-                  </tr>
-                </thead>
+              <Table className="purchases__items-table">
+                <TableHead>
+                  <TableRow>
+                    <TableHeader>Товар</TableHeader>
+                    <TableHeader>Количество</TableHeader>
+                    <TableHeader>Цена закупки</TableHeader>
+                    <TableHeader>Сумма</TableHeader>
+                  </TableRow>
+                </TableHead>
 
-                <tbody>
+                <TableBody>
                   {selectedPurchase.items.map(
                     (item, index) => (
-                      <tr key={`${item.productId}-${index}`}>
-                        <td>
+                      <TableRow
+                        key={`${item.productId}-${index}`}
+                      >
+                        <TableCell>
                           {getProductName(
                             item.productId,
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           {item.quantity}{' '}
-                          {unitLabels[
-                            item.unit
-                          ]}
-                        </td>
+                          {unitLabels[item.unit]}
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           {item.unitCost} SAR
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           {
                             getPurchaseItemTotal(
                               item.quantity,
                               item.unitCost,
-                            )}{' '}
+                            )
+                          }{' '}
                           SAR
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ),
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
 
