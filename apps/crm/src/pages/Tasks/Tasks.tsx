@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   Input,
+  Modal,
   Select,
   Textarea,
 } from '@madina/ui'
@@ -115,8 +116,13 @@ export function Tasks() {
       </div>
 
       {isFormOpen && (
-        <Card className="tasks-page__form">
-          <h2>Новая задача</h2>
+        <Modal
+          open={isFormOpen}
+          onClose={() => setIsFormOpen(false)}
+          title="Новая задача"
+          description="Создание новой рабочей задачи"
+          size="lg"
+        >
 
           <div>
             <label>
@@ -246,7 +252,7 @@ export function Tasks() {
               Отмена
             </Button>
           </div>
-        </Card>
+        </Modal>
       )}
 
       <div className="tasks-page__summary">
