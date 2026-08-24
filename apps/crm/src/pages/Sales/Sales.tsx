@@ -24,6 +24,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Input,
   Modal,
   Select,
@@ -712,34 +713,19 @@ export function Sales() {
       )}
 
       {saleToCancel && (
-        <Modal
-          open={true}
+        <ConfirmDialog
+          open={saleToCancel !== null}
           onClose={() => setSaleToCancel(null)}
-          title="Отмена продажи"
-          description="Вы действительно хотите отменить эту продажу?"
-          size="sm"
-        >
-          <div className="sales-modal__footer">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setSaleToCancel(null)}
-            >
-              Назад
-            </Button>
-
-            <Button
-              type="button"
-              variant="danger"
-              onClick={() => {
-                cancelSale(saleToCancel)
-                setSaleToCancel(null)
-              }}
-            >
-              Отменить продажу
-            </Button>
-          </div>
-        </Modal>
+          onConfirm={() => {
+            cancelSale(saleToCancel)
+            setSaleToCancel(null)
+          }}
+          title="Отменить продажу?"
+          description="Продажа будет переведена в статус отменено."
+          confirmLabel="Отменить продажу"
+          cancelLabel="Назад"
+          variant="danger"
+        />
       )}
 
     </section>
