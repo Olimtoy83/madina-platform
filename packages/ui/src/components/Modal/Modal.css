@@ -57,6 +57,20 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.mb-modal__header-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.mb-modal__description {
+  margin: 0;
+
+  color: var(--color-text-muted);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
 .mb-modal__title {
   margin: 0;
 

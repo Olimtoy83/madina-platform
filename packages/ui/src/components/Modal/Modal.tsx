@@ -16,6 +16,7 @@ export interface ModalProps
   open: boolean
   onClose: () => void
   title?: ReactNode
+  description?: ReactNode
   size?: ModalSize
   closeOnOverlayClick?: boolean
   closeOnEscape?: boolean
@@ -25,6 +26,7 @@ export function Modal({
   open,
   onClose,
   title,
+  description,
   size = 'md',
   closeOnOverlayClick = true,
   closeOnEscape = true,
@@ -96,13 +98,23 @@ export function Modal({
         {...props}
       >
         <div className="mb-modal__header">
-          {title && (
-            <h2
-              id="mb-modal-title"
-              className="mb-modal__title"
-            >
-              {title}
-            </h2>
+          {(title || description) && (
+            <div className="mb-modal__header-content">
+              {title && (
+                <h2
+                  id="mb-modal-title"
+                  className="mb-modal__title"
+                >
+                  {title}
+                </h2>
+              )}
+
+              {description && (
+                <p className="mb-modal__description">
+                  {description}
+                </p>
+              )}
+            </div>
           )}
 
           <button
