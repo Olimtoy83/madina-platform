@@ -12,6 +12,12 @@ import {
   Input,
   Modal,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Textarea,
 } from '@madina/ui'
 import './Tasks.css'
@@ -273,41 +279,43 @@ export function Tasks() {
       </div>
 
       <Card className="tasks-page__table-wrapper">
-        <table className="tasks-page__table">
-          <thead>
-            <tr>
-              <th>Задача</th>
-              <th>Приоритет</th>
-              <th>Статус</th>
-              <th>Срок</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
+        <Table className="tasks-page__table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Задача</TableHeader>
+              <TableHeader>Приоритет</TableHeader>
+              <TableHeader>Статус</TableHeader>
+              <TableHeader>Срок</TableHeader>
+              <TableHeader>Действия</TableHeader>
+            </TableRow>
+          </TableHead>
 
-          <tbody>
+          <TableBody>
             {sortedTasks.length === 0 ? (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={5}
                   className="tasks-page__empty"
                 >
                   Задач пока нет
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               sortedTasks.map((task) => (
-                <tr key={task.id}>
-                  <td>
-                    <strong>{task.title}</strong>
+                <TableRow key={task.id}>
+                  <TableCell>
+                    <strong>
+                      {task.title}
+                    </strong>
 
                     {task.description && (
                       <p>
                         {task.description}
                       </p>
                     )}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     <Badge
                       variant={
                         task.priority === 'high'
@@ -319,9 +327,9 @@ export function Tasks() {
                     >
                       {priorityLabels[task.priority]}
                     </Badge>
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     <Select
                       size="sm"
                       value={task.status}
@@ -330,8 +338,7 @@ export function Tasks() {
                           task.id,
                           {
                             status:
-                              event.target
-                                .value as TaskStatus,
+                              event.target.value as TaskStatus,
                           },
                         )
                       }
@@ -352,17 +359,17 @@ export function Tasks() {
                         Отменено
                       </option>
                     </Select>
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {task.dueDate
                       ? task.dueDate.toLocaleDateString(
                         'ru-RU',
                       )
                       : '—'}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     <Button
                       type="button"
                       variant="danger"
@@ -372,12 +379,12 @@ export function Tasks() {
                     >
                       Удалить
                     </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </Card>
     </section>
   )
