@@ -9,6 +9,7 @@ export type ModalSize =
   | 'sm'
   | 'md'
   | 'lg'
+  | 'xl'
 
 export interface ModalProps
   extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
