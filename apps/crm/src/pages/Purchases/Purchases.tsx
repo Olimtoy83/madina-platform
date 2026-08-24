@@ -32,6 +32,7 @@ import {
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
+import { useToast } from '../../context/ToastProvider'
 
 import './Purchases.css'
 
@@ -56,6 +57,7 @@ interface FormItem {
 }
 
 export function Purchases() {
+  const { showToast } = useToast()
 
   const { products } = useProducts()
 
@@ -322,6 +324,12 @@ export function Purchases() {
     })
 
     addPurchase(newPurchase)
+
+    showToast({
+      variant: 'success',
+      title: 'Закупка создана',
+      message: 'Новая закупка успешно добавлена',
+    })
 
     setError(null)
     setSelectedPurchaseId(newPurchase.id)
@@ -621,7 +629,16 @@ export function Purchases() {
                           result.message ??
                           'Не удалось завершить поступление.',
                         )
+
+                        return
                       }
+
+                      showToast({
+                        variant: 'success',
+                        title: 'Закупка завершена',
+                        message: 'Товары добавлены на склад',
+                      })
+
                     } catch (error) {
                       if (
                         error instanceof
@@ -915,7 +932,15 @@ export function Purchases() {
           }
 
           setError(null)
+
           cancelPurchase(purchaseToCancel)
+
+          showToast({
+            variant: 'success',
+            title: 'Закупка отменена',
+            message: 'Статус закупки изменён на отменённую',
+          })
+
           setPurchaseToCancel(null)
         }}
       />
