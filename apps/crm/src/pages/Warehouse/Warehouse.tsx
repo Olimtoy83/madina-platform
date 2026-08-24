@@ -470,9 +470,12 @@ export function Warehouse() {
       </Card>
 
       {isAdding && (
-        <Card
-          className="warehouse__product-card"
-          padding="lg"
+        <Modal
+          open={isAdding}
+          onClose={cancelAdding}
+          title="Добавить товар"
+          description="Создание нового товара на складе"
+          size="lg"
         >
           <div className="warehouse__product-card-header">
             <div>
@@ -684,7 +687,7 @@ export function Warehouse() {
               Сохранить товар
             </Button>
           </div>
-        </Card>
+        </Modal>
       )}
 
       {selectedProduct && (
