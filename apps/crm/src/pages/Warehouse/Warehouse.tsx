@@ -3,6 +3,7 @@ import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
 import { useSales } from '../../context/useSales'
 import { useStockMovements } from '../../context/useStockMovements'
+import { useToast } from '../../context/ToastProvider'
 
 import {
   adjustStock,
@@ -47,6 +48,7 @@ const unitLabels: Record<ProductUnit, string> = {
 }
 
 export function Warehouse() {
+  const { showToast } = useToast()
 
   const {
     products,
@@ -186,6 +188,14 @@ export function Warehouse() {
 
     setSelectedProduct(updatedProduct)
 
+    showToast({
+      variant: 'success',
+      title: 'Остаток изменён',
+      message: `Количество товара обновлено`,
+    })
+
+    cancelAdjustment()
+
     cancelAdjustment()
   }
 
@@ -244,6 +254,12 @@ export function Warehouse() {
       setSelectedProduct(savedProduct)
       setValidationError(null)
       setIsEditing(false)
+
+      showToast({
+        variant: 'success',
+        title: 'Товар обновлён',
+      })
+
     } catch (error) {
       if (error instanceof ProductValidationError) {
         setValidationError(error.message)
@@ -299,6 +315,12 @@ export function Warehouse() {
 
     addProduct(newProduct)
 
+    showToast({
+      variant: 'success',
+      title: 'Товар добавлен',
+      message: newProduct.name,
+    })
+
     setIsAdding(false)
   }
 
@@ -323,6 +345,11 @@ export function Warehouse() {
 
     setSelectedProduct(deactivatedProduct)
     setIsDeactivateConfirmOpen(false)
+
+    showToast({
+      variant: 'success',
+      title: 'Товар отключён',
+    })
   }
 
   return (
