@@ -10,8 +10,13 @@ import {
 import {
   Card,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
-
 import './Accounting.css'
 
 type TypeFilter = 'all' | Transaction['type']
@@ -246,34 +251,33 @@ export function Accounting() {
           </div>
         ) : (
           <div className="accounting-table-wrapper">
-            <table className="accounting-table">
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Тип</th>
-                  <th>Категория</th>
-                  <th>Описание</th>
-                  <th>Оплата</th>
-                  <th>Сумма</th>
-                </tr>
-              </thead>
+            <Table className="accounting-table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Дата</TableHeader>
+                  <TableHeader>Тип</TableHeader>
+                  <TableHeader>Категория</TableHeader>
+                  <TableHeader>Описание</TableHeader>
+                  <TableHeader>Оплата</TableHeader>
+                  <TableHeader>Сумма</TableHeader>
+                </TableRow>
+              </TableHead>
 
-              <tbody>
+              <TableBody>
                 {filteredTransactions.map(
                   (transaction) => {
                     const isIncome =
-                      transaction.type ===
-                      'income'
+                      transaction.type === 'income'
 
                     return (
-                      <tr key={transaction.id}>
-                        <td>
+                      <TableRow key={transaction.id}>
+                        <TableCell>
                           {formatDate(
                             transaction.transactionDate,
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           <span
                             className={
                               isIncome
@@ -285,30 +289,29 @@ export function Accounting() {
                               ? 'Доход'
                               : 'Расход'}
                           </span>
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           {
                             categoryLabels[
                             transaction.category
                             ]
                           }
-                        </td>
+                        </TableCell>
 
-                        <td>
-                          {transaction.description ??
-                            '—'}
-                        </td>
+                        <TableCell>
+                          {transaction.description ?? '—'}
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           {
                             paymentMethodLabels[
                             transaction.paymentMethod
                             ]
                           }
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           <strong
                             className={
                               isIncome
@@ -316,20 +319,18 @@ export function Accounting() {
                                 : 'accounting-amount accounting-amount--expense'
                             }
                           >
-                            {isIncome
-                              ? '+'
-                              : '-'}
+                            {isIncome ? '+' : '-'}
                             {formatAmount(
                               transaction.amount,
                             )}
                           </strong>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     )
                   },
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>
