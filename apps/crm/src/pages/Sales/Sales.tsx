@@ -11,6 +11,7 @@ import './Sales.css'
 import { useProducts } from '../../context/useProducts'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
+import { useToast } from '../../context/ToastProvider'
 import {
   getSaleStats,
   getSaleItemTotal,
@@ -38,6 +39,8 @@ import {
 } from '@madina/ui'
 
 export function Sales() {
+  const { showToast } = useToast()
+
   const navigate = useNavigate()
 
   const [searchParams] = useSearchParams()
@@ -231,7 +234,16 @@ export function Sales() {
           result.message ??
           'Не удалось завершить продажу.',
         )
+
+        return
       }
+
+      showToast({
+        variant: 'success',
+        title: 'Продажа завершена',
+        message: 'Статус продажи изменён на завершённую',
+      })
+
     } catch (error) {
       if (error instanceof SaleValidationError) {
         setError(error.message)
@@ -276,6 +288,13 @@ export function Sales() {
     }
 
     addSale(sale)
+
+    showToast({
+      variant: 'success',
+      title: 'Продажа создана',
+      message: 'Новая продажа успешно добавлена',
+    })
+
     closeModal()
   }
 
@@ -729,8 +748,16 @@ export function Sales() {
           onClose={() => setSaleToCancel(null)}
           onConfirm={() => {
             cancelSale(saleToCancel)
+
+            showToast({
+              variant: 'success',
+              title: 'Продажа отменена',
+              message: 'Статус продажи изменён на отменённую',
+            })
+
             setSaleToCancel(null)
           }}
+
           title="Отменить продажу?"
           description="Продажа будет переведена в статус отменено."
           confirmLabel="Отменить продажу"
