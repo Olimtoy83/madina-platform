@@ -1,7 +1,6 @@
-﻿import { useState } from 'react'
+﻿import { } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  Alert,
   Button,
   Table,
   TableBody,
@@ -13,6 +12,7 @@ import {
 import { SaleValidationError } from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
+import { useToast } from '../../context/ToastProvider'
 
 export function SaleDetails() {
   const { saleId } = useParams()
@@ -26,8 +26,7 @@ export function SaleDetails() {
 
   const { products } = useProducts()
 
-  const [actionMessage, setActionMessage] =
-    useState<string | null>(null)
+  const { showToast } = useToast()
 
   const sale = sales.find(
     (item) => item.id === saleId,
@@ -64,16 +63,28 @@ export function SaleDetails() {
       const result = completeSale(saleIdValue)
 
       if (!result.success) {
-        setActionMessage(
-          result.message ?? 'Не удалось завершить продажу.',
-        )
+        showToast({
+          variant: 'error',
+          title: 'Ошибка',
+          message:
+            result.message ??
+            'Не удалось завершить продажу.',
+        })
         return
       }
 
-      setActionMessage(null)
+      showToast({
+        variant: 'success',
+        title: 'Продажа завершена',
+      })
+
     } catch (error) {
       if (error instanceof SaleValidationError) {
-        setActionMessage(error.message)
+        showToast({
+          variant: 'error',
+          title: 'Ошибка',
+          message: error.message,
+        })
         return
       }
 
@@ -83,7 +94,11 @@ export function SaleDetails() {
 
   function handleCancel() {
     cancelSale(saleIdValue)
-    setActionMessage(null)
+
+    showToast({
+      variant: 'warning',
+      title: 'Продажа отменена',
+    })
   }
 
   return (
@@ -118,17 +133,6 @@ export function SaleDetails() {
             ? 'Завершено'
             : 'Отменено'}
       </p>
-
-      {actionMessage && (
-        <Alert
-          variant="danger"
-          title="Ошибка"
-          dismissible
-          onDismiss={() => setActionMessage(null)}
-        >
-          {actionMessage}
-        </Alert>
-      )}
 
       {isDraft && (
         <div>
