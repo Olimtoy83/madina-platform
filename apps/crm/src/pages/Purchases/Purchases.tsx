@@ -18,6 +18,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EmptyState,
   Input,
   Modal,
   Select,
@@ -409,14 +410,10 @@ export function Purchases() {
 
           <TableBody>
             {purchases.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="purchases__empty"
-                >
-                  Поступлений пока нет.
-                </TableCell>
-              </TableRow>
+              <EmptyState
+                title="Поступлений пока нет"
+                description="Создайте первое поступление товара, чтобы оно появилось в списке."
+              />
             ) : (
               purchases.map((purchase) => (
                 <TableRow key={purchase.id}>
