@@ -962,7 +962,13 @@ export function Warehouse() {
               )}
             </>
           ) : (
-            <>
+            <Modal
+              open={isEditing}
+              onClose={() => setIsEditing(false)}
+              title="Редактирование товара"
+              description="Изменение данных товара на складе"
+              size="lg"
+            >
               <div className="warehouse__edit-form">
                 <div className="warehouse__form-field">
                   <label htmlFor="edit-product-name">
@@ -1221,7 +1227,7 @@ export function Warehouse() {
                   Сохранить
                 </Button>
               </div>
-            </>
+            </Modal>
           )}
         </Card>
       )}
