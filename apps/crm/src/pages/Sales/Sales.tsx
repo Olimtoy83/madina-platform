@@ -25,6 +25,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EmptyState,
   Input,
   Modal,
   Select,
@@ -350,9 +351,10 @@ export function Sales() {
         </div>
 
         {sales.length === 0 ? (
-          <div className="sales-page__empty">
-            Продаж пока нет
-          </div>
+          <EmptyState
+            title="Продаж пока нет"
+            description="Создайте первую продажу, чтобы она появилась в списке."
+          />
         ) : (
           <div className="sales-page__table-wrapper">
             <Table className="sales-page__table">
