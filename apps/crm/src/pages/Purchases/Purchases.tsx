@@ -75,6 +75,9 @@ export function Purchases() {
   const [isCreateOpen, setIsCreateOpen] =
     useState(false)
 
+  const [purchaseToCancel, setPurchaseToCancel] =
+    useState<string | null>(null)
+
   const [error, setError] = useState<string | null>(
     null,
   )
@@ -638,16 +641,7 @@ export function Purchases() {
                 type="button"
                 variant="secondary"
                 onClick={() => {
-                  if (
-                    !window.confirm(
-                      'Отменить это поступление?',
-                    )
-                  ) {
-                    return
-                  }
-
-                  setError(null)
-                  cancelPurchase(selectedPurchase.id)
+                  setPurchaseToCancel(selectedPurchase.id)
                 }}
               >
                 Отменить поступление
@@ -899,6 +893,38 @@ export function Purchases() {
               onClick={savePurchase}
             >
               Создать поступление
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {purchaseToCancel && (
+        <Modal
+          open={true}
+          onClose={() => setPurchaseToCancel(null)}
+          title="Отмена поступления"
+          description="Вы действительно хотите отменить это поступление?"
+          size="sm"
+        >
+          <div className="purchases__modal-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setPurchaseToCancel(null)}
+            >
+              Назад
+            </Button>
+
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => {
+                setError(null)
+                cancelPurchase(purchaseToCancel)
+                setPurchaseToCancel(null)
+              }}
+            >
+              Отменить поступление
             </Button>
           </div>
         </Modal>
