@@ -927,14 +927,17 @@ export function Warehouse() {
               )}
 
               {isDeactivateConfirmOpen && (
-                <div className="warehouse__delete-confirm">
-                  <h3>Деактивировать товар?</h3>
-
-                  <p>
-                    Товар «{selectedProduct.name}» останется
-                    доступным в истории, но станет неактивным.
-                  </p>
-
+                <Modal
+                  open={isDeactivateConfirmOpen}
+                  onClose={cancelDeactivation}
+                  title="Деактивировать товар?"
+                  description={
+                    selectedProduct
+                      ? `Товар «${selectedProduct.name}» останется доступным в истории, но станет неактивным.`
+                      : undefined
+                  }
+                  size="sm"
+                >
                   <div className="warehouse__product-card-actions">
                     <Button
                       type="button"
@@ -952,7 +955,7 @@ export function Warehouse() {
                       Деактивировать
                     </Button>
                   </div>
-                </div>
+                </Modal>
               )}
             </>
           ) : (
