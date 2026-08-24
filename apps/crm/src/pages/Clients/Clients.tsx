@@ -14,6 +14,12 @@ import {
   Modal,
   Textarea,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 
 export function Clients() {
@@ -264,38 +270,38 @@ export function Clients() {
       </div>
 
       <Card className="clients-page__table-wrapper">
-        <table className="clients-page__table">
-          <thead>
-            <tr>
-              <th>Клиент</th>
-              <th>Телефон</th>
-              <th>Email</th>
-              <th>Компания</th>
-              <th>Продажи</th>
-              <th>Сумма</th>
-              <th>Последняя покупка</th>
-              <th>Статус</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
+        <Table className="clients-page__table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Клиент</TableHeader>
+              <TableHeader>Телефон</TableHeader>
+              <TableHeader>Email</TableHeader>
+              <TableHeader>Компания</TableHeader>
+              <TableHeader>Продажи</TableHeader>
+              <TableHeader>Сумма</TableHeader>
+              <TableHeader>Последняя покупка</TableHeader>
+              <TableHeader>Статус</TableHeader>
+              <TableHeader>Действия</TableHeader>
+            </TableRow>
+          </TableHead>
 
-          <tbody>
+          <TableBody>
             {sortedClients.length === 0 ? (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={9}
                   className="clients-page__empty"
                 >
                   Клиентов пока нет
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               sortedClients.map((client) => {
                 const stats = clientStats[client.id]
 
                 return (
-                  <tr key={client.id}>
-                    <td>
+                  <TableRow key={client.id}>
+                    <TableCell>
                       <strong>
                         <Link to={`/clients/${client.id}`}>
                           {client.name}
@@ -305,40 +311,40 @@ export function Clients() {
                       {client.note && (
                         <p>{client.note}</p>
                       )}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {client.phone ?? '—'}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {client.email ?? '—'}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {client.company ?? '—'}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {stats?.salesCount ?? 0}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {(stats?.totalAmount ?? 0).toLocaleString(
                         'ru-RU',
                       )}{' '}
                       SAR
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {stats?.lastSaleDate
                         ? stats.lastSaleDate.toLocaleDateString(
                           'ru-RU',
                         )
                         : '—'}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       <Select
                         size="sm"
                         value={client.status}
@@ -360,9 +366,9 @@ export function Clients() {
                           Неактивен
                         </option>
                       </Select>
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       <Button
                         type="button"
                         variant="secondary"
@@ -372,13 +378,13 @@ export function Clients() {
                       >
                         Деактивировать
                       </Button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )
               })
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </Card>
 
       {clientToDeactivate && (
