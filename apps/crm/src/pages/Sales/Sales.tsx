@@ -49,6 +49,7 @@ export function Sales() {
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>('cash')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [saleToCancel, setSaleToCancel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(
     null,
   )
@@ -422,13 +423,7 @@ export function Sales() {
                             type="button"
                             variant="danger"
                             onClick={() => {
-                              if (
-                                window.confirm(
-                                  'Отменить эту продажу?',
-                                )
-                              ) {
-                                cancelSale(sale.id)
-                              }
+                              setSaleToCancel(sale.id)
                             }}
                           >
                             Отменить
@@ -715,6 +710,38 @@ export function Sales() {
           </div>
         </Modal>
       )}
-    </section >
+
+      {saleToCancel && (
+        <Modal
+          open={true}
+          onClose={() => setSaleToCancel(null)}
+          title="Отмена продажи"
+          description="Вы действительно хотите отменить эту продажу?"
+          size="sm"
+        >
+          <div className="sales-modal__footer">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setSaleToCancel(null)}
+            >
+              Назад
+            </Button>
+
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => {
+                cancelSale(saleToCancel)
+                setSaleToCancel(null)
+              }}
+            >
+              Отменить продажу
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+    </section>
   )
 }
