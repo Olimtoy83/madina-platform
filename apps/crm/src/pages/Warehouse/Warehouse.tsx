@@ -21,6 +21,12 @@ import {
   Input,
   Modal,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 
 import './Warehouse.css'
@@ -390,54 +396,58 @@ export function Warehouse() {
       </div>
 
       <Card className="warehouse__table-wrapper">
-        <table className="warehouse__table">
-          <thead>
-            <tr>
-              <th>Товар</th>
-              <th>Категория</th>
-              <th>Количество</th>
-              <th>Единица</th>
-              <th>Себестоимость</th>
-              <th>Цена продажи</th>
-              <th>Статус</th>
-              <th>Действия</th>
-            </tr>
-          </thead>
+        <Table className="warehouse__table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Товар</TableHeader>
+              <TableHeader>Категория</TableHeader>
+              <TableHeader>Количество</TableHeader>
+              <TableHeader>Единица</TableHeader>
+              <TableHeader>Себестоимость</TableHeader>
+              <TableHeader>Цена продажи</TableHeader>
+              <TableHeader>Статус</TableHeader>
+              <TableHeader>Действия</TableHeader>
+            </TableRow>
+          </TableHead>
 
-          <tbody>
+          <TableBody>
             {filteredProducts.length === 0 ? (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={8}
                   className="warehouse__empty"
                 >
                   Товары не найдены.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               filteredProducts.map((product) => (
-                <tr key={product.id}>
-                  <td>{product.name}</td>
+                <TableRow key={product.id}>
+                  <TableCell>
+                    {product.name}
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {categoryLabels[product.category]}
-                  </td>
+                  </TableCell>
 
-                  <td>{product.quantity}</td>
+                  <TableCell>
+                    {product.quantity}
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {unitLabels[product.unit]}
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {product.costPrice} SAR
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     {product.salePrice} SAR
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     <Badge
                       variant={
                         product.status === 'active'
@@ -449,9 +459,9 @@ export function Warehouse() {
                         ? 'Активен'
                         : 'Неактивен'}
                     </Badge>
-                  </td>
+                  </TableCell>
 
-                  <td>
+                  <TableCell>
                     <Button
                       type="button"
                       variant="secondary"
@@ -462,12 +472,12 @@ export function Warehouse() {
                     >
                       Открыть
                     </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </Card>
 
       {isAdding && (
