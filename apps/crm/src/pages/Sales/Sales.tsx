@@ -28,6 +28,12 @@ import {
   Input,
   Modal,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 
 export function Sales() {
@@ -349,23 +355,23 @@ export function Sales() {
           </div>
         ) : (
           <div className="sales-page__table-wrapper">
-            <table className="sales-page__table">
-              <thead>
-                <tr>
-                  <th>Номер</th>
-                  <th>Дата</th>
-                  <th>Клиент</th>
-                  <th>Сумма</th>
-                  <th>Статус</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
+            <Table className="sales-page__table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Номер</TableHeader>
+                  <TableHeader>Дата</TableHeader>
+                  <TableHeader>Клиент</TableHeader>
+                  <TableHeader>Сумма</TableHeader>
+                  <TableHeader>Статус</TableHeader>
+                  <TableHeader>Действия</TableHeader>
+                </TableRow>
+              </TableHead>
 
-              <tbody>
+              <TableBody>
                 {sales.map((sale) => (
-                  <tr key={sale.id}>
+                  <TableRow key={sale.id}>
 
-                    <td>
+                    <TableCell>
                       <Button
                         type="button"
                         className="sales-page__sale-link"
@@ -373,41 +379,44 @@ export function Sales() {
                       >
                         {sale.saleNumber}
                       </Button>
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {sale.saleDate.toLocaleDateString(
                         'ru-RU',
                       )}
-                    </td>
+                    </TableCell>
 
-                    <td>{sale.clientName}</td>
+                    <TableCell>
+                      {sale.clientName}
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {sale.totalAmount.toLocaleString(
                         'ru-RU',
                       )}{' '}
                       SAR
-                    </td>
+                    </TableCell>
 
-                    <td>                  <Badge
-                      variant={
-                        sale.status === 'draft'
-                          ? 'warning'
+                    <TableCell>
+                      <Badge
+                        variant={
+                          sale.status === 'draft'
+                            ? 'warning'
+                            : sale.status === 'completed'
+                              ? 'success'
+                              : 'danger'
+                        }
+                      >
+                        {sale.status === 'draft'
+                          ? 'Черновик'
                           : sale.status === 'completed'
-                            ? 'success'
-                            : 'danger'
-                      }
-                    >
-                      {sale.status === 'draft'
-                        ? 'Черновик'
-                        : sale.status === 'completed'
-                          ? 'Завершено'
-                          : 'Отменено'}
-                    </Badge>
-                    </td>
+                            ? 'Завершено'
+                            : 'Отменено'}
+                      </Badge>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {sale.status === 'draft' && (
                         <div className="sales-page__actions">
                           <Button
@@ -431,11 +440,11 @@ export function Sales() {
                           </Button>
                         </div>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>
