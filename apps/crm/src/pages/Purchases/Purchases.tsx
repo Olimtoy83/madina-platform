@@ -17,6 +17,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Input,
   Modal,
   Select,
@@ -898,37 +899,24 @@ export function Purchases() {
         </Modal>
       )}
 
-      {purchaseToCancel && (
-        <Modal
-          open={true}
-          onClose={() => setPurchaseToCancel(null)}
-          title="Отмена поступления"
-          description="Вы действительно хотите отменить это поступление?"
-          size="sm"
-        >
-          <div className="purchases__modal-actions">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setPurchaseToCancel(null)}
-            >
-              Назад
-            </Button>
+      <ConfirmDialog
+        open={Boolean(purchaseToCancel)}
+        onClose={() => setPurchaseToCancel(null)}
+        title="Отмена поступления"
+        description="Вы действительно хотите отменить это поступление?"
+        confirmLabel="Отменить поступление"
+        cancelLabel="Назад"
+        variant="danger"
+        onConfirm={() => {
+          if (!purchaseToCancel) {
+            return
+          }
 
-            <Button
-              type="button"
-              variant="danger"
-              onClick={() => {
-                setError(null)
-                cancelPurchase(purchaseToCancel)
-                setPurchaseToCancel(null)
-              }}
-            >
-              Отменить поступление
-            </Button>
-          </div>
-        </Modal>
-      )}
+          setError(null)
+          cancelPurchase(purchaseToCancel)
+          setPurchaseToCancel(null)
+        }}
+      />
     </section >
   )
 }
