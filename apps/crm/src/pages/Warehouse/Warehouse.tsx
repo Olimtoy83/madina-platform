@@ -18,6 +18,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  EmptyState,
   Input,
   Modal,
   Select,
@@ -413,11 +414,11 @@ export function Warehouse() {
           <TableBody>
             {filteredProducts.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={8}
-                  className="warehouse__empty"
-                >
-                  Товары не найдены.
+                <TableCell colSpan={8}>
+                  <EmptyState
+                    title="Товары не найдены"
+                    description="Добавьте первый товар, чтобы он появился в складе."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
