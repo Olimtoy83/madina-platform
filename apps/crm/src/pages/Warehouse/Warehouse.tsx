@@ -18,6 +18,7 @@ import {
   Button,
   Card,
   Input,
+  Modal,
   Select,
 } from '@madina/ui'
 
@@ -835,7 +836,13 @@ export function Warehouse() {
               </div>
 
               {isAdjustmentOpen && (
-                <div className="warehouse__edit-form">
+                <Modal
+                  open={isAdjustmentOpen}
+                  onClose={cancelAdjustment}
+                  title="Корректировка склада"
+                  description="Изменение количества товара"
+                  size="md"
+                >
                   <div className="warehouse__form-field">
                     <label htmlFor="adjustment-type">
                       Тип корректировки
@@ -916,7 +923,7 @@ export function Warehouse() {
                       Сохранить корректировку
                     </Button>
                   </div>
-                </div>
+                </Modal>
               )}
 
               {isDeactivateConfirmOpen && (
