@@ -29,6 +29,9 @@ export function Clients() {
   const [isFormOpen, setIsFormOpen] =
     useState(false)
 
+  const [clientToDeactivate, setClientToDeactivate] =
+    useState<string | null>(null)
+
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -363,7 +366,9 @@ export function Clients() {
                       <Button
                         type="button"
                         variant="secondary"
-                        onClick={() => deactivateClient(client.id)}
+                        onClick={() => {
+                          setClientToDeactivate(client.id)
+                        }}
                       >
                         Деактивировать
                       </Button>
@@ -375,6 +380,38 @@ export function Clients() {
           </tbody>
         </table>
       </Card>
+
+      {clientToDeactivate && (
+        <Modal
+          open={true}
+          onClose={() => setClientToDeactivate(null)}
+          title="Деактивация клиента"
+          description="Вы действительно хотите деактивировать этого клиента?"
+          size="sm"
+        >
+          <div className="clients-page__form-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setClientToDeactivate(null)}
+            >
+              Назад
+            </Button>
+
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => {
+                deactivateClient(clientToDeactivate)
+                setClientToDeactivate(null)
+              }}
+            >
+              Деактивировать
+            </Button>
+          </div>
+        </Modal>
+      )}
+
     </section>
   )
 }
