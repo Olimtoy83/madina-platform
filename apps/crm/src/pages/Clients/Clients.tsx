@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   Input,
+  Modal,
   Textarea,
   Select,
 } from '@madina/ui'
@@ -123,111 +124,118 @@ export function Clients() {
         </Button>
       </div>
 
-      {isFormOpen && (
-        <Card className="clients-page__form">
-          <h2>Новый клиент</h2>
+      <Modal
+        open={isFormOpen}
+        onClose={() => {
+          resetForm()
+          setIsFormOpen(false)
+        }}
+        title="Новый клиент"
+        description="Создание нового клиента"
+        size="md"
+      >
+        <h2>Новый клиент</h2>
 
-          <label>
-            Имя
-            <Input
-              type="text"
-              value={name}
-              onChange={(event) =>
-                setName(event.target.value)
-              }
-              placeholder="Введите имя клиента"
-            />
-          </label>
+        <label>
+          Имя
+          <Input
+            type="text"
+            value={name}
+            onChange={(event) =>
+              setName(event.target.value)
+            }
+            placeholder="Введите имя клиента"
+          />
+        </label>
 
-          <label>
-            Телефон
-            <Input
-              type="text"
-              value={phone}
-              onChange={(event) =>
-                setPhone(event.target.value)
-              }
-              placeholder="+966..."
-            />
-          </label>
+        <label>
+          Телефон
+          <Input
+            type="text"
+            value={phone}
+            onChange={(event) =>
+              setPhone(event.target.value)
+            }
+            placeholder="+966..."
+          />
+        </label>
 
-          <label>
-            Email
-            <Input
-              type="email"
-              value={email}
-              onChange={(event) =>
-                setEmail(event.target.value)
-              }
-              placeholder="example@email.com"
-            />
-          </label>
+        <label>
+          Email
+          <Input
+            type="email"
+            value={email}
+            onChange={(event) =>
+              setEmail(event.target.value)
+            }
+            placeholder="example@email.com"
+          />
+        </label>
 
-          <label>
-            Компания
-            <Input
-              type="text"
-              value={company}
-              onChange={(event) =>
-                setCompany(event.target.value)
-              }
-              placeholder="Название компании"
-            />
-          </label>
+        <label>
+          Компания
+          <Input
+            type="text"
+            value={company}
+            onChange={(event) =>
+              setCompany(event.target.value)
+            }
+            placeholder="Название компании"
+          />
+        </label>
 
-          <label>
-            Примечание
-            <Textarea
-              value={note}
-              onChange={(event) =>
-                setNote(event.target.value)
-              }
-              placeholder="Дополнительная информация"
-            />
-          </label>
+        <label>
+          Примечание
+          <Textarea
+            value={note}
+            onChange={(event) =>
+              setNote(event.target.value)
+            }
+            placeholder="Дополнительная информация"
+          />
+        </label>
 
-          <label>
-            Статус
-            <Select
-              value={status}
-              onChange={(event) =>
-                setStatus(
-                  event.target.value as ClientStatus,
-                )
-              }
-            >
-              <option value="active">
-                Активен
-              </option>
-              <option value="inactive">
-                Неактивен
-              </option>
-            </Select>
-          </label>
+        <label>
+          Статус
+          <Select
+            value={status}
+            onChange={(event) =>
+              setStatus(
+                event.target.value as ClientStatus,
+              )
+            }
+          >
+            <option value="active">
+              Активен
+            </option>
+            <option value="inactive">
+              Неактивен
+            </option>
+          </Select>
+        </label>
 
-          <div className="clients-page__form-actions">
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleCreateClient}
-              disabled={!name.trim()}
-            >
-              Создать клиента
-            </Button>
+        <div className="clients-page__form-actions">
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleCreateClient}
+            disabled={!name.trim()}
+          >
+            Создать клиента
+          </Button>
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                resetForm()
-                setIsFormOpen(false)
-              }}
-            >
-              Отмена
-            </Button>
-          </div>
-        </Card>
-      )}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              resetForm()
+              setIsFormOpen(false)
+            }}
+          >
+            Отмена
+          </Button>
+        </div>
+      </Modal>
 
       <div className="clients-page__summary">
         <Card className="clients-page__summary-card">
