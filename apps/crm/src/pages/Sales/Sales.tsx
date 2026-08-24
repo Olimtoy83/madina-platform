@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useMemo,
   useState,
@@ -25,6 +25,7 @@ import {
   Button,
   Card,
   Input,
+  Modal,
   Select,
 } from '@madina/ui'
 
@@ -444,308 +445,276 @@ export function Sales() {
       </Card>
 
       {isModalOpen && (
-        <div
-          className="sales-modal"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget
-            ) {
-              closeModal()
-            }
-          }}
+        <Modal
+          open={isModalOpen}
+          onClose={closeModal}
+          title="Новая продажа"
+          description="Создание нового черновика продажи"
+          size="xl"
         >
-          <div
-            className="sales-modal__content"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="new-sale-title"
-          >
-            <div className="sales-modal__header">
-              <div>
-                <h2 id="new-sale-title">
-                  Новая продажа
-                </h2>
 
-                <p>
-                  Создание нового черновика продажи
-                </p>
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={closeModal}
-                aria-label="Закрыть"
+          <div className="sales-modal__body">
+            {error && (
+              <Alert
+                variant="danger"
+                title="Ошибка"
+                dismissible
+                onDismiss={() => setError(null)}
               >
-                ×
-              </Button>
-            </div>
+                {error}
+              </Alert>
+            )}
 
-            <div className="sales-modal__body">
-              {error && (
-                <Alert
-                  variant="danger"
-                  title="Ошибка"
-                  dismissible
-                  onDismiss={() => setError(null)}
-                >
-                  {error}
-                </Alert>
-              )}
+            <label className="sales-modal__field">
+              <span>Клиент</span>
 
-              <label className="sales-modal__field">
-                <span>Клиент</span>
-
-                <Select
-                  fullWidth
-                  value={clientId}
-                  onChange={(event) =>
-                    setClientId(event.target.value)
-                  }
-                >
-                  <option value="">
-                    Выберите клиента
-                  </option>
-
-                  {clients
-                    .filter(
-                      (client) =>
-                        client.status === 'active',
-                    )
-                    .map((client) => (
-                      <option
-                        key={client.id}
-                        value={client.id}
-                      >
-                        {client.name}
-                        {client.phone
-                          ? ` — ${client.phone}`
-                          : ''}
-                      </option>
-                    ))}
-                </Select>
-              </label>
-
-              <label className="sales-modal__field">
-                <span>Способ оплаты</span>
-
-                <Select
-                  fullWidth
-                  value={paymentMethod}
-                  onChange={(event) =>
-                    setPaymentMethod(
-                      event.target.value as PaymentMethod,
-                    )
-                  }
-                >
-                  <option value="cash">
-                    Наличные
-                  </option>
-
-                  <option value="card">
-                    Банковская карта
-                  </option>
-
-                  <option value="bank-transfer">
-                    Банковский перевод
-                  </option>
-
-                  <option value="other">
-                    Другое
-                  </option>
-                </Select>
-              </label>
-
-              <label className="sales-modal__field">
-                <span>Товар</span>
-
-                <Select
-                  fullWidth
-                  value={productId}
-                  onChange={(event) =>
-                    handleProductChange(
-                      event.target.value,
-                    )
-                  }
-                >
-                  <option value="">
-                    Выберите товар
-                  </option>
-
-                  {products
-                    .filter(
-                      (product) =>
-                        product.status === 'active',
-                    )
-                    .map((product) => (
-                      <option
-                        key={product.id}
-                        value={product.id}
-                      >
-                        {product.name} — остаток:{' '}
-                        {product.quantity}{' '}
-                        {product.unit}
-                      </option>
-                    ))}
-                </Select>
-              </label>
-
-              {selectedProduct && (
-                <div className="sales-modal__stock">
-                  Доступно на складе:{' '}
-                  <strong>
-                    {selectedProduct.quantity}{' '}
-                    {selectedProduct.unit}
-                  </strong>
-                </div>
-              )}
-
-              <div className="sales-modal__row">
-                <label className="sales-modal__field">
-                  <span>
-                    Количество (
-                    {selectedProduct?.unit || 'ед.'})
-                  </span>
-
-                  <Input
-                    fullWidth
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={quantity}
-                    onChange={(event) =>
-                      setQuantity(event.target.value)
-                    }
-                    placeholder="0"
-                  />
-                </label>
-
-                <label className="sales-modal__field">
-                  <span>Цена за единицу</span>
-
-                  <Input
-                    fullWidth
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={unitPrice}
-                    onChange={(event) =>
-                      setUnitPrice(event.target.value)
-                    }
-                    placeholder="0"
-                  />
-                </label>
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleAddItem}
-                disabled={
-                  !selectedProduct ||
-                  Number(quantity) <= 0 ||
-                  Number(unitPrice) < 0
+              <Select
+                fullWidth
+                value={clientId}
+                onChange={(event) =>
+                  setClientId(event.target.value)
                 }
               >
-                Добавить товар
-              </Button>
+                <option value="">
+                  Выберите клиента
+                </option>
 
-              {saleItems.length > 0 && (
-                <div className="sales-modal__items">
-                  <strong>Позиции продажи</strong>
+                {clients
+                  .filter(
+                    (client) =>
+                      client.status === 'active',
+                  )
+                  .map((client) => (
+                    <option
+                      key={client.id}
+                      value={client.id}
+                    >
+                      {client.name}
+                      {client.phone
+                        ? ` — ${client.phone}`
+                        : ''}
+                    </option>
+                  ))}
+              </Select>
+            </label>
 
-                  {saleItems.map((item) => {
-                    const product = products.find(
-                      (currentProduct) =>
-                        currentProduct.id ===
-                        item.productId,
-                    )
+            <label className="sales-modal__field">
+              <span>Способ оплаты</span>
 
-                    return (
-                      <div
-                        key={item.productId}
-                        className="sales-modal__item"
-                      >
-                        <div>
-                          <strong>
-                            {product?.name ||
-                              item.productId}
-                          </strong>
+              <Select
+                fullWidth
+                value={paymentMethod}
+                onChange={(event) =>
+                  setPaymentMethod(
+                    event.target.value as PaymentMethod,
+                  )
+                }
+              >
+                <option value="cash">
+                  Наличные
+                </option>
 
-                          <span>
-                            {item.quantity}{' '}
-                            {item.unit} ×{' '}
-                            {item.unitPrice.toLocaleString(
-                              'ru-RU',
-                            )}{' '}
-                            SAR
-                          </span>
-                        </div>
+                <option value="card">
+                  Банковская карта
+                </option>
 
-                        <div>
-                          <strong>
-                            {item.totalAmount.toLocaleString(
-                              'ru-RU',
-                            )}{' '}
-                            SAR
-                          </strong>
+                <option value="bank-transfer">
+                  Банковский перевод
+                </option>
 
-                          <Button
-                            type="button"
-                            variant="danger"
-                            onClick={() =>
-                              handleRemoveItem(
-                                item.productId,
-                              )
-                            }
-                          >
-                            Удалить
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                <option value="other">
+                  Другое
+                </option>
+              </Select>
+            </label>
 
-              <div className="sales-modal__total">
-                <span>Итого</span>
+            <label className="sales-modal__field">
+              <span>Товар</span>
 
+              <Select
+                fullWidth
+                value={productId}
+                onChange={(event) =>
+                  handleProductChange(
+                    event.target.value,
+                  )
+                }
+              >
+                <option value="">
+                  Выберите товар
+                </option>
+
+                {products
+                  .filter(
+                    (product) =>
+                      product.status === 'active',
+                  )
+                  .map((product) => (
+                    <option
+                      key={product.id}
+                      value={product.id}
+                    >
+                      {product.name} — остаток:{' '}
+                      {product.quantity}{' '}
+                      {product.unit}
+                    </option>
+                  ))}
+              </Select>
+            </label>
+
+            {selectedProduct && (
+              <div className="sales-modal__stock">
+                Доступно на складе:{' '}
                 <strong>
-                  {calculatedTotal.toLocaleString(
-                    'ru-RU',
-                  )}{' '}
-                  SAR
+                  {selectedProduct.quantity}{' '}
+                  {selectedProduct.unit}
                 </strong>
               </div>
+            )}
+
+            <div className="sales-modal__row">
+              <label className="sales-modal__field">
+                <span>
+                  Количество (
+                  {selectedProduct?.unit || 'ед.'})
+                </span>
+
+                <Input
+                  fullWidth
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={quantity}
+                  onChange={(event) =>
+                    setQuantity(event.target.value)
+                  }
+                  placeholder="0"
+                />
+              </label>
+
+              <label className="sales-modal__field">
+                <span>Цена за единицу</span>
+
+                <Input
+                  fullWidth
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={unitPrice}
+                  onChange={(event) =>
+                    setUnitPrice(event.target.value)
+                  }
+                  placeholder="0"
+                />
+              </label>
             </div>
 
-            <div className="sales-modal__footer">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={closeModal}
-              >
-                Отмена
-              </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleAddItem}
+              disabled={
+                !selectedProduct ||
+                Number(quantity) <= 0 ||
+                Number(unitPrice) < 0
+              }
+            >
+              Добавить товар
+            </Button>
 
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleSaveDraft}
-                disabled={
-                  !clientId ||
-                  saleItems.length === 0
-                }
-              >
-                Сохранить черновик
-              </Button>
+            {saleItems.length > 0 && (
+              <div className="sales-modal__items">
+                <strong>Позиции продажи</strong>
+
+                {saleItems.map((item) => {
+                  const product = products.find(
+                    (currentProduct) =>
+                      currentProduct.id ===
+                      item.productId,
+                  )
+
+                  return (
+                    <div
+                      key={item.productId}
+                      className="sales-modal__item"
+                    >
+                      <div>
+                        <strong>
+                          {product?.name ||
+                            item.productId}
+                        </strong>
+
+                        <span>
+                          {item.quantity}{' '}
+                          {item.unit} ×{' '}
+                          {item.unitPrice.toLocaleString(
+                            'ru-RU',
+                          )}{' '}
+                          SAR
+                        </span>
+                      </div>
+
+                      <div>
+                        <strong>
+                          {item.totalAmount.toLocaleString(
+                            'ru-RU',
+                          )}{' '}
+                          SAR
+                        </strong>
+
+                        <Button
+                          type="button"
+                          variant="danger"
+                          onClick={() =>
+                            handleRemoveItem(
+                              item.productId,
+                            )
+                          }
+                        >
+                          Удалить
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div className="sales-modal__total">
+              <span>Итого</span>
+
+              <strong>
+                {calculatedTotal.toLocaleString(
+                  'ru-RU',
+                )}{' '}
+                SAR
+              </strong>
             </div>
           </div>
-        </div>
+
+          <div className="sales-modal__footer">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={closeModal}
+            >
+              Отмена
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleSaveDraft}
+              disabled={
+                !clientId ||
+                saleItems.length === 0
+              }
+            >
+              Сохранить черновик
+            </Button>
+          </div>
+        </Modal>
       )}
-    </section>
+    </section >
   )
 }
