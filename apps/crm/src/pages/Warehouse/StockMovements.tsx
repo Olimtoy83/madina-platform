@@ -7,6 +7,12 @@ import {
   Card,
   Input,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 
 import './StockMovements.css'
@@ -274,39 +280,36 @@ export function StockMovements() {
           </div>
         ) : (
           <div className="stock-movements__table-wrapper">
-            <table className="stock-movements__table">
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Тип</th>
-                  <th>Товар</th>
-                  <th>Количество</th>
-                  <th>Единица</th>
-                  <th>Основание</th>
-                </tr>
-              </thead>
+            <Table className="stock-movements__table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Дата</TableHeader>
+                  <TableHeader>Тип</TableHeader>
+                  <TableHeader>Товар</TableHeader>
+                  <TableHeader>Количество</TableHeader>
+                  <TableHeader>Единица</TableHeader>
+                  <TableHeader>Основание</TableHeader>
+                </TableRow>
+              </TableHead>
 
-              <tbody>
+              <TableBody>
                 {filteredMovements.map(
                   (movement) => {
                     const product =
                       products.find(
                         (item) =>
-                          item.id ===
-                          movement.productId,
+                          item.id === movement.productId,
                       )
 
                     return (
-                      <tr
-                        key={movement.id}
-                      >
-                        <td>
+                      <TableRow key={movement.id}>
+                        <TableCell>
                           {movement.createdAt.toLocaleDateString(
                             'ru-RU',
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           <Badge
                             size="sm"
                             variant={
@@ -321,50 +324,48 @@ export function StockMovements() {
                               movement.type,
                             )}
                           </Badge>
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           <span className="stock-movements__product-name">
                             {product?.name ??
                               movement.productId}
                           </span>
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           <strong
                             className={
-                              movement.type ===
-                                'sale'
+                              movement.type === 'sale'
                                 ? 'stock-movements__quantity stock-movements__quantity--expense'
                                 : 'stock-movements__quantity stock-movements__quantity--income'
                             }
                           >
-                            {movement.type ===
-                              'sale'
+                            {movement.type === 'sale'
                               ? movement.quantity
                               : `+${movement.quantity}`}
                           </strong>
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           {getUnitLabel(
                             movement.unit,
                           )}
-                        </td>
+                        </TableCell>
 
-                        <td>
+                        <TableCell>
                           <span className="stock-movements__reference">
                             {movement.note ??
                               movement.referenceId ??
                               '—'}
                           </span>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     )
                   },
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>
