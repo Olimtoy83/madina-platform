@@ -17,6 +17,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   Input,
   Modal,
   Select,
@@ -929,37 +930,20 @@ export function Warehouse() {
                 </Modal>
               )}
 
-              {isDeactivateConfirmOpen && (
-                <Modal
-                  open={isDeactivateConfirmOpen}
-                  onClose={cancelDeactivation}
-                  title="Деактивировать товар?"
-                  description={
-                    selectedProduct
-                      ? `Товар «${selectedProduct.name}» останется доступным в истории, но станет неактивным.`
-                      : undefined
-                  }
-                  size="sm"
-                >
-                  <div className="warehouse__product-card-actions">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={cancelDeactivation}
-                    >
-                      Отмена
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={confirmDeactivation}
-                    >
-                      Деактивировать
-                    </Button>
-                  </div>
-                </Modal>
-              )}
+              <ConfirmDialog
+                open={isDeactivateConfirmOpen}
+                onClose={cancelDeactivation}
+                title="Деактивировать товар?"
+                description={
+                  selectedProduct
+                    ? `Товар «${selectedProduct.name}» останется доступным в истории, но станет неактивным.`
+                    : undefined
+                }
+                confirmLabel="Деактивировать"
+                cancelLabel="Отмена"
+                variant="danger"
+                onConfirm={confirmDeactivation}
+              />
             </>
           ) : (
             <Modal
