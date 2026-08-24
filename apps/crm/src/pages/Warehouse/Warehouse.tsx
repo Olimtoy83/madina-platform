@@ -1,8 +1,8 @@
-﻿import { useState } from 'react'
+﻿import { useTransactionalState } from '../../context/useTransactionalState'
+import { useState } from 'react'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
 import { useSales } from '../../context/useSales'
-import { useStockMovements } from '../../context/useStockMovements'
 import { useToast } from '../../context/ToastProvider'
 
 import {
@@ -49,17 +49,14 @@ const unitLabels: Record<ProductUnit, string> = {
 
 export function Warehouse() {
   const { showToast } = useToast()
+  const { commitUpdate } = useTransactionalState()
 
   const {
     products,
     addProduct,
     deactivateProduct,
     updateProduct,
-    replaceProducts,
   } = useProducts()
-
-  const { addMovement } =
-    useStockMovements()
 
   const { sales } = useSales()
   const { purchases } = usePurchases()
@@ -182,9 +179,16 @@ export function Warehouse() {
     }
 
     const updatedProduct = result.product
+    const movement = result.movement
 
-    replaceProducts(result.products)
-    addMovement(result.movement)
+    commitUpdate((snapshot) => ({
+      ...snapshot,
+      products: result.products,
+      stockMovements: [
+        ...snapshot.stockMovements,
+        movement,
+      ],
+    }))
 
     setSelectedProduct(updatedProduct)
 

@@ -54,11 +54,41 @@ export function TransactionalStateProvider({
     setState({ snapshot, persistenceError: null })
   }, [state.persistenceError])
 
+  const commitUpdate = useCallback(
+    (
+      updater: (
+        snapshot: TransactionalSnapshot,
+      ) => TransactionalSnapshot,
+    ) => {
+      if (state.persistenceError) {
+        throw state.persistenceError
+      }
+
+      const nextSnapshot = updater(state.snapshot)
+
+      commitTransactionalSnapshot(nextSnapshot)
+
+      setState({
+        snapshot: nextSnapshot,
+        persistenceError: null,
+      })
+    },
+    [
+      state.persistenceError,
+      state.snapshot,
+    ],
+  )
+
   const value = useMemo(() => ({
     snapshot: state.snapshot,
     persistenceError: state.persistenceError,
     commit,
-  }), [state, commit])
+    commitUpdate,
+  }), [
+    state,
+    commit,
+    commitUpdate,
+  ])
 
   if (state.persistenceError) {
     return (
