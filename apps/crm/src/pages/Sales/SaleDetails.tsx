@@ -1,7 +1,8 @@
-﻿import { } from 'react'
+﻿import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Button,
+  ConfirmDialog,
   Table,
   TableBody,
   TableCell,
@@ -27,6 +28,9 @@ export function SaleDetails() {
   const { products } = useProducts()
 
   const { showToast } = useToast()
+
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] =
+    useState(false)
 
   const sale = sales.find(
     (item) => item.id === saleId,
@@ -147,7 +151,7 @@ export function SaleDetails() {
           <Button
             type="button"
             variant="danger"
-            onClick={handleCancel}
+            onClick={() => setIsCancelConfirmOpen(true)}
           >
             Отменить продажу
           </Button>
@@ -205,6 +209,23 @@ export function SaleDetails() {
         Итого:{' '}
         {sale.totalAmount.toLocaleString('ru-RU')} SAR
       </h2>
+
+      {isCancelConfirmOpen && (
+        <ConfirmDialog
+          open={isCancelConfirmOpen}
+          onClose={() => setIsCancelConfirmOpen(false)}
+          title="Отмена продажи"
+          description="Вы действительно хотите отменить эту продажу?"
+          confirmLabel="Отменить продажу"
+          cancelLabel="Назад"
+          variant="danger"
+          onConfirm={() => {
+            handleCancel()
+            setIsCancelConfirmOpen(false)
+          }}
+        />
+      )}
+
     </section>
   )
 }
