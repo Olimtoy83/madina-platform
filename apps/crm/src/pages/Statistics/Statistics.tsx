@@ -15,6 +15,12 @@ import {
 import {
   Card,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
@@ -300,62 +306,60 @@ export function Statistics() {
           </div>
         ) : (
           <div className="statistics-table-wrapper">
-            <table className="statistics-table">
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Тип</th>
-                  <th>Категория</th>
-                  <th>Описание</th>
-                  <th>Сумма</th>
-                </tr>
-              </thead>
+            <Table className="statistics-table">
+              <TableHead>
+                <TableRow>
+                  <TableHeader>Дата</TableHeader>
+                  <TableHeader>Тип</TableHeader>
+                  <TableHeader>Категория</TableHeader>
+                  <TableHeader>Описание</TableHeader>
+                  <TableHeader>Сумма</TableHeader>
+                </TableRow>
+              </TableHead>
 
-              <tbody>
+              <TableBody>
                 {eligibleTransactions.map(
                   (transaction) => (
-                    <tr
+                    <TableRow
                       key={transaction.id}
                     >
-                      <td>
+                      <TableCell>
                         {new Date(
                           transaction.transactionDate,
                         ).toLocaleDateString(
                           'ru-RU',
                         )}
-                      </td>
+                      </TableCell>
 
-                      <td>
-                        {transaction.type ===
-                          'income'
+                      <TableCell>
+                        {transaction.type === 'income'
                           ? 'Доход'
                           : 'Расход'}
-                      </td>
+                      </TableCell>
 
-                      <td>
+                      <TableCell>
                         {
                           categoryLabels[
                           transaction.category
                           ]
                         }
-                      </td>
+                      </TableCell>
 
-                      <td>
-                        {transaction.description ??
-                          '—'}
-                      </td>
+                      <TableCell>
+                        {transaction.description ?? '—'}
+                      </TableCell>
 
-                      <td>
+                      <TableCell>
                         {formatAmount(
                           transaction.amount,
                         )}{' '}
                         SAR
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ),
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>
