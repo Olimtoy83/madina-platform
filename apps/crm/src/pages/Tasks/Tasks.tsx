@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTasks } from '../../context/useTasks'
+import { useToast } from '../../context/ToastProvider'
 import {
   getTaskStats,
   type TaskPriority,
@@ -36,6 +37,7 @@ export function Tasks() {
     updateTask,
     deleteTask,
   } = useTasks()
+  const { showToast } = useToast()
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
@@ -97,6 +99,11 @@ export function Tasks() {
 
     resetForm()
     setIsFormOpen(false)
+
+    showToast({
+      variant: 'success',
+      title: 'Задача создана',
+    })
   }
 
   return (
@@ -334,7 +341,7 @@ export function Tasks() {
                     <Select
                       size="sm"
                       value={task.status}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         updateTask(
                           task.id,
                           {
@@ -342,7 +349,12 @@ export function Tasks() {
                               event.target.value as TaskStatus,
                           },
                         )
-                      }
+
+                        showToast({
+                          variant: 'info',
+                          title: 'Статус задачи изменён',
+                        })
+                      }}
                     >
                       <option value="todo">
                         К выполнению
@@ -374,9 +386,14 @@ export function Tasks() {
                     <Button
                       type="button"
                       variant="danger"
-                      onClick={() =>
+                      onClick={() => {
                         deleteTask(task.id)
-                      }
+
+                        showToast({
+                          variant: 'warning',
+                          title: 'Задача удалена',
+                        })
+                      }}
                     >
                       Удалить
                     </Button>
