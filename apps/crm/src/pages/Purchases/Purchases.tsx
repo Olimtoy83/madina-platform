@@ -18,6 +18,7 @@ import {
   Button,
   Card,
   Input,
+  Modal,
   Select,
   Textarea,
 } from '@madina/ui'
@@ -668,260 +669,240 @@ export function Purchases() {
       )}
 
       {isCreateOpen && (
-        <div className="purchases__modal-backdrop">
-          <div className="purchases__modal">
-            <div className="purchases__modal-header">
-              <div>
-                <h2>
-                  Новое поступление
-                </h2>
+        <Modal
+          open={isCreateOpen}
+          onClose={() => setIsCreateOpen(false)}
+          title="Новое поступление"
+          description="Создайте черновик поступления."
+          size="xl"
+        >
+          <div className="purchases__form">
+            {error && (
+              <Alert
+                variant="danger"
+                title="Ошибка"
+                dismissible
+                onDismiss={() => setError(null)}
+              >
+                {error}
+              </Alert>
+            )}
 
-                <p>
-                  Создайте черновик поступления.
-                </p>
+            <label>
+              <span>Дата поступления</span>
+
+              <Input
+                fullWidth
+                type="date"
+                value={purchaseDate}
+                onChange={(event) => {
+                  setError(null)
+                  setPurchaseDate(
+                    event.target.value,
+                  )
+                }}
+              />
+            </label>
+
+            <label>
+              <span>Поставщик</span>
+
+              <Input
+                fullWidth
+                type="text"
+                value={supplierName}
+                onChange={(event) => {
+                  setError(null)
+                  setSupplierName(
+                    event.target.value,
+                  )
+                }}
+                placeholder="Введите поставщика"
+              />
+            </label>
+
+            <div className="purchases__form-items">
+              <div className="purchases__form-items-header">
+                <h3>Товары</h3>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={addFormItem}
+                >
+                  Добавить товар
+                </Button>
               </div>
 
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  setIsCreateOpen(false)
-                }
-                aria-label="Закрыть"
-              >
-                ×
-              </Button>
-            </div>
-
-            <div className="purchases__form">
-              {error && (
-                <Alert
-                  variant="danger"
-                  title="Ошибка"
-                  dismissible
-                  onDismiss={() => setError(null)}
-                >
-                  {error}
-                </Alert>
-              )}
-
-              <label>
-                <span>Дата поступления</span>
-
-                <Input
-                  fullWidth
-                  type="date"
-                  value={purchaseDate}
-                  onChange={(event) => {
-                    setError(null)
-                    setPurchaseDate(
-                      event.target.value,
-                    )
-                  }}
-                />
-              </label>
-
-              <label>
-                <span>Поставщик</span>
-
-                <Input
-                  fullWidth
-                  type="text"
-                  value={supplierName}
-                  onChange={(event) => {
-                    setError(null)
-                    setSupplierName(
-                      event.target.value,
-                    )
-                  }}
-                  placeholder="Введите поставщика"
-                />
-              </label>
-
-              <div className="purchases__form-items">
-                <div className="purchases__form-items-header">
-                  <h3>Товары</h3>
-
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={addFormItem}
+              {formItems.map(
+                (item, index) => (
+                  <div
+                    className="purchases__form-item"
+                    key={index}
                   >
-                    Добавить товар
-                  </Button>
-                </div>
+                    <label>
+                      <span>Товар</span>
 
-                {formItems.map(
-                  (item, index) => (
-                    <div
-                      className="purchases__form-item"
-                      key={index}
-                    >
-                      <label>
-                        <span>Товар</span>
-
-                        <Select
-                          fullWidth
-                          value={item.productId}
-                          onChange={(event) =>
-                            updateFormItem(
-                              index,
-                              {
-                                productId:
-                                  event.target
-                                    .value,
-                              },
-                            )
-                          }
-                        >
-                          {activeProducts.map(
-                            (product) => (
-                              <option
-                                key={
-                                  product.id
-                                }
-                                value={
-                                  product.id
-                                }
-                              >
-                                {
-                                  product.name
-                                }
-                              </option>
-                            ),
-                          )}
-                        </Select>
-                      </label>
-
-                      <label>
-                        <span>
-                          Количество
-                        </span>
-
-                        <Input
-                          fullWidth
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={
-                            item.quantity
-                          }
-                          onChange={(event) =>
-                            updateFormItem(
-                              index,
-                              {
-                                quantity:
-                                  Number(
-                                    event
-                                      .target
-                                      .value,
-                                  ),
-                              },
-                            )
-                          }
-                        />
-                      </label>
-
-                      <label>
-                        <span>
-                          Цена закупки
-                        </span>
-
-                        <Input
-                          fullWidth
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={
-                            item.unitCost
-                          }
-                          onChange={(event) =>
-                            updateFormItem(
-                              index,
-                              {
-                                unitCost:
-                                  Number(
-                                    event
-                                      .target
-                                      .value,
-                                  ),
-                              },
-                            )
-                          }
-                        />
-                      </label>
-
-                      <Button
-                        type="button"
-                        variant="danger"
-                        onClick={() =>
-                          removeFormItem(
+                      <Select
+                        fullWidth
+                        value={item.productId}
+                        onChange={(event) =>
+                          updateFormItem(
                             index,
+                            {
+                              productId:
+                                event.target
+                                  .value,
+                            },
                           )
                         }
-                        disabled={
-                          formItems.length ===
-                          1
-                        }
                       >
-                        Удалить
-                      </Button>
-                    </div>
-                  ),
-                )}
-              </div>
+                        {activeProducts.map(
+                          (product) => (
+                            <option
+                              key={
+                                product.id
+                              }
+                              value={
+                                product.id
+                              }
+                            >
+                              {
+                                product.name
+                              }
+                            </option>
+                          ),
+                        )}
+                      </Select>
+                    </label>
 
-              <label>
-                <span>Примечание</span>
+                    <label>
+                      <span>
+                        Количество
+                      </span>
 
-                <Textarea
-                  fullWidth
-                  value={note}
-                  onChange={(event) => {
-                    setError(null)
-                    setNote(
-                      event.target.value,
-                    )
-                  }}
-                  placeholder="Дополнительная информация"
-                  rows={4}
-                />
-              </label>
+                      <Input
+                        fullWidth
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={
+                          item.quantity
+                        }
+                        onChange={(event) =>
+                          updateFormItem(
+                            index,
+                            {
+                              quantity:
+                                Number(
+                                  event
+                                    .target
+                                    .value,
+                                ),
+                            },
+                          )
+                        }
+                      />
+                    </label>
 
-              <div className="purchases__form-total">
-                <span>
-                  Итого
-                </span>
+                    <label>
+                      <span>
+                        Цена закупки
+                      </span>
 
-                <strong>
-                  {totalAmount} SAR
-                </strong>
-              </div>
+                      <Input
+                        fullWidth
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={
+                          item.unitCost
+                        }
+                        onChange={(event) =>
+                          updateFormItem(
+                            index,
+                            {
+                              unitCost:
+                                Number(
+                                  event
+                                    .target
+                                    .value,
+                                ),
+                            },
+                          )
+                        }
+                      />
+                    </label>
+
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() =>
+                        removeFormItem(
+                          index,
+                        )
+                      }
+                      disabled={
+                        formItems.length ===
+                        1
+                      }
+                    >
+                      Удалить
+                    </Button>
+                  </div>
+                ),
+              )}
             </div>
 
-            <div className="purchases__modal-actions">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() =>
-                  setIsCreateOpen(false)
-                }
-              >
-                Отмена
-              </Button>
+            <label>
+              <span>Примечание</span>
 
-              <Button
-                type="button"
-                variant="primary"
-                onClick={savePurchase}
-              >
-                Создать поступление
-              </Button>
+              <Textarea
+                fullWidth
+                value={note}
+                onChange={(event) => {
+                  setError(null)
+                  setNote(
+                    event.target.value,
+                  )
+                }}
+                placeholder="Дополнительная информация"
+                rows={4}
+              />
+            </label>
+
+            <div className="purchases__form-total">
+              <span>
+                Итого
+              </span>
+
+              <strong>
+                {totalAmount} SAR
+              </strong>
             </div>
           </div>
-        </div>
+
+          <div className="purchases__modal-actions">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                setIsCreateOpen(false)
+              }
+            >
+              Отмена
+            </Button>
+
+            <Button
+              type="button"
+              variant="primary"
+              onClick={savePurchase}
+            >
+              Создать поступление
+            </Button>
+          </div>
+        </Modal>
       )}
-    </section>
+    </section >
   )
 }
