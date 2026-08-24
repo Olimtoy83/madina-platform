@@ -9,6 +9,7 @@ import {
   Badge,
   Button,
   Card,
+  EmptyState,
   Input,
   Modal,
   Select,
@@ -293,11 +294,11 @@ export function Tasks() {
           <TableBody>
             {sortedTasks.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="tasks-page__empty"
-                >
-                  Задач пока нет
+                <TableCell colSpan={5}>
+                  <EmptyState
+                    title="Задач пока нет"
+                    description="Создайте первую задачу, чтобы начать управление работой."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
