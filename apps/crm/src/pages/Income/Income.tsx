@@ -10,6 +10,12 @@ import {
   Badge,
   Button,
   Card,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@madina/ui'
 
 import './Income.css'
@@ -174,71 +180,71 @@ export function Income() {
       </div>
 
       <Card className="income-table-wrapper">
-        <table className="income-table">
-          <thead>
-            <tr>
-              <th>Дата</th>
-              <th>Тип</th>
-              <th>Категория</th>
-              <th>Описание</th>
-              <th>Оплата</th>
-              <th>Сумма</th>
-              <th>Статус</th>
-            </tr>
-          </thead>
+        <Table className="income-table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Дата</TableHeader>
+              <TableHeader>Тип</TableHeader>
+              <TableHeader>Категория</TableHeader>
+              <TableHeader>Описание</TableHeader>
+              <TableHeader>Оплата</TableHeader>
+              <TableHeader>Сумма</TableHeader>
+              <TableHeader>Статус</TableHeader>
+            </TableRow>
+          </TableHead>
 
-          <tbody>
+          <TableBody>
             {filteredTransactions.length === 0 ? (
-              <tr>
-                <td
+              <TableRow>
+                <TableCell
                   colSpan={7}
                   className="income-table__empty"
                 >
                   Операций пока нет
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : (
               filteredTransactions.map(
                 (transaction) => (
-                  <tr key={transaction.id}>
-                    <td>
+                  <TableRow key={transaction.id}>
+                    <TableCell>
                       {formatDate(
                         transaction.transactionDate,
                       )}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {typeLabels[transaction.type]}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {
                         categoryLabels[
                         transaction.category
                         ]
                       }
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {transaction.description ?? '—'}
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {
                         paymentMethodLabels[
                         transaction.paymentMethod
                         ]
                       }
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       {formatAmount(
                         transaction.amount,
                       )}{' '}
                       SAR
-                    </td>
+                    </TableCell>
 
-                    <td>
+                    <TableCell>
                       <Badge
                         variant={
                           transaction.status === 'completed'
@@ -254,13 +260,13 @@ export function Income() {
                           ]
                         }
                       </Badge>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ),
               )
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </Card>
     </section>
   )
