@@ -427,9 +427,33 @@ export function Warehouse() {
           variant="danger"
           title="Обнаружено расхождение остатков"
         >
-          Найдено товаров с расхождением:{' '}
-          {stockIntegrityDiscrepancies.length}.
-          Проверьте остатки и историю движений склада.
+          <p className="warehouse__integrity-summary">
+            Найдено товаров с расхождением:{' '}
+            {stockIntegrityDiscrepancies.length}.
+            Проверьте остатки и историю движений склада.
+          </p>
+
+          <ul className="warehouse__integrity-list">
+            {stockIntegrityDiscrepancies.map(
+              (discrepancy) => (
+                <li key={discrepancy.productId}>
+                  <strong>
+                    {discrepancy.productName}
+                  </strong>
+                  {' — '}
+                  фактически:{' '}
+                  {discrepancy.actualQuantity},
+                  по движениям:{' '}
+                  {discrepancy.calculatedQuantity},
+                  разница:{' '}
+                  {discrepancy.difference > 0
+                    ? '+'
+                    : ''}
+                  {discrepancy.difference}
+                </li>
+              ),
+            )}
+          </ul>
         </Alert>
       )}
 
