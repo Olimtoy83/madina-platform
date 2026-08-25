@@ -193,14 +193,28 @@ export function Warehouse() {
     const updatedProduct = result.product
     const movement = result.movement
 
-    commitUpdate((snapshot) => ({
-      ...snapshot,
-      products: result.products,
-      stockMovements: [
-        ...snapshot.stockMovements,
-        movement,
-      ],
-    }))
+    try {
+      commitUpdate((snapshot) => ({
+        ...snapshot,
+        products: result.products,
+        stockMovements: [
+          ...snapshot.stockMovements,
+          movement,
+        ],
+      }))
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        showToast({
+          variant: 'error',
+          title: 'Не удалось изменить остаток',
+          message: error.message,
+        })
+
+        return
+      }
+
+      throw error
+    }
 
     setSelectedProduct(updatedProduct)
 
