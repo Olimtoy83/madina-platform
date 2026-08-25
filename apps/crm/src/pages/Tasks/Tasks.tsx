@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   Input,
   Modal,
@@ -41,6 +42,9 @@ export function Tasks() {
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
+
+  const [taskToDelete, setTaskToDelete] =
+    useState<string | null>(null)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] =
@@ -386,14 +390,7 @@ export function Tasks() {
                     <Button
                       type="button"
                       variant="danger"
-                      onClick={() => {
-                        deleteTask(task.id)
-
-                        showToast({
-                          variant: 'warning',
-                          title: 'Задача удалена',
-                        })
-                      }}
+                      onClick={() => setTaskToDelete(task.id)}
                     >
                       Удалить
                     </Button>
@@ -404,6 +401,29 @@ export function Tasks() {
           </TableBody>
         </Table>
       </Card>
+      <ConfirmDialog
+        open={taskToDelete !== null}
+        onClose={() => setTaskToDelete(null)}
+        title="Удаление задачи"
+        description="Вы действительно хотите удалить эту задачу?"
+        confirmLabel="Удалить задачу"
+        cancelLabel="Назад"
+        variant="danger"
+        onConfirm={() => {
+          if (!taskToDelete) {
+            return
+          }
+
+          deleteTask(taskToDelete)
+
+          showToast({
+            variant: 'warning',
+            title: 'Задача удалена',
+          })
+
+          setTaskToDelete(null)
+        }}
+      />
     </section>
   )
 }
