@@ -589,3 +589,42 @@ test('client is not published when persistence fails', async ({
     }),
   ).toHaveCount(0)
 })
+
+test('task is not published when persistence fails', async ({
+  page,
+}) => {
+  const taskTitle =
+    'E2E Persistence Failure Task'
+
+  await page.goto('/tasks')
+
+  await page.getByRole('button', {
+    name: 'Новая задача',
+  }).click()
+
+  await page
+    .getByLabel('Название')
+    .fill(taskTitle)
+
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error(
+        'E2E forced persistence failure',
+      )
+    }
+  })
+
+  await page.getByRole('button', {
+    name: 'Создать задачу',
+  }).click()
+
+  await expect(
+    page.getByText('Ошибка сохранения'),
+  ).toBeVisible()
+
+  await expect(
+    page.getByRole('row').filter({
+      hasText: taskTitle,
+    }),
+  ).toHaveCount(0)
+})
