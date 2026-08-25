@@ -78,27 +78,35 @@ export function Clients() {
 
     const now = new Date()
 
-    addClient({
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-      name: trimmedName,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      company:
-        company.trim() || undefined,
-      note: note.trim() || undefined,
-      status,
-    })
+    try {
+      addClient({
+        id: crypto.randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        name: trimmedName,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        company:
+          company.trim() || undefined,
+        note: note.trim() || undefined,
+        status,
+      })
 
-    showToast({
-      variant: 'success',
-      title: 'Клиент добавлен',
-      message: trimmedName,
-    })
+      showToast({
+        variant: 'success',
+        title: 'Клиент добавлен',
+        message: trimmedName,
+      })
 
-    resetForm()
-    setIsFormOpen(false)
+      resetForm()
+      setIsFormOpen(false)
+    } catch {
+      showToast({
+        variant: 'error',
+        title: 'Ошибка сохранения',
+        message: 'Не удалось сохранить клиента.',
+      })
+    }
   }
 
   const clientStats = useMemo(() => {
@@ -359,19 +367,27 @@ export function Clients() {
                         size="sm"
                         value={client.status}
                         onChange={(event) => {
-                          updateClient(
-                            client.id,
-                            {
-                              status:
-                                event.target.value as ClientStatus,
-                            },
-                          )
+                          try {
+                            updateClient(
+                              client.id,
+                              {
+                                status:
+                                  event.target.value as ClientStatus,
+                              },
+                            )
 
-                          showToast({
-                            variant: 'success',
-                            title: 'Статус клиента изменён',
-                            message: client.name,
-                          })
+                            showToast({
+                              variant: 'success',
+                              title: 'Статус клиента изменён',
+                              message: client.name,
+                            })
+                          } catch {
+                            showToast({
+                              variant: 'error',
+                              title: 'Ошибка сохранения',
+                              message: 'Не удалось изменить статус клиента.',
+                            })
+                          }
                         }}
                       >
                         <option value="active">
@@ -424,14 +440,22 @@ export function Clients() {
               type="button"
               variant="danger"
               onClick={() => {
-                deactivateClient(clientToDeactivate)
+                try {
+                  deactivateClient(clientToDeactivate)
 
-                showToast({
-                  variant: 'success',
-                  title: 'Клиент деактивирован',
-                })
+                  showToast({
+                    variant: 'success',
+                    title: 'Клиент деактивирован',
+                  })
 
-                setClientToDeactivate(null)
+                  setClientToDeactivate(null)
+                } catch {
+                  showToast({
+                    variant: 'error',
+                    title: 'Ошибка сохранения',
+                    message: 'Не удалось деактивировать клиента.',
+                  })
+                }
               }}
             >
               Деактивировать

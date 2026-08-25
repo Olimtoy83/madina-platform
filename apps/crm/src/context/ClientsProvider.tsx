@@ -85,10 +85,10 @@ export function ClientsProvider({
           currentClients.map((client) =>
             client.id === clientId
               ? {
-                  ...client,
-                  ...updates,
-                  updatedAt: new Date(),
-                }
+                ...client,
+                ...updates,
+                updatedAt: new Date(),
+              }
               : client,
           )
 
@@ -124,8 +124,8 @@ export function ClientsProvider({
             : currentClient,
       )
 
-      setClients(nextClients)
       saveStorage(STORAGE_KEY, nextClients)
+      setClients(nextClients)
     },
     [clients],
   )

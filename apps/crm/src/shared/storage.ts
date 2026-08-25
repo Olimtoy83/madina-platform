@@ -23,14 +23,10 @@ export function saveStorage<T>(
   key: string,
   value: T,
 ) {
-  try {
-    localStorage.setItem(
-      `${STORAGE_PREFIX}${key}`,
-      JSON.stringify(value),
-    )
-  } catch {
-    // Storage may be unavailable or full.
-  }
+  localStorage.setItem(
+    `${STORAGE_PREFIX}${key}`,
+    JSON.stringify(value),
+  )
 }
 
 export function removeStorage(key: string) {

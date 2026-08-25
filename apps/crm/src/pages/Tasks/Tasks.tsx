@@ -87,27 +87,35 @@ export function Tasks() {
 
     const now = new Date()
 
-    addTask({
-      id: crypto.randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-      title: trimmedTitle,
-      description:
-        description.trim() || undefined,
-      status,
-      priority,
-      dueDate: dueDate
-        ? new Date(`${dueDate}T00:00:00`)
-        : undefined,
-    })
+    try {
+      addTask({
+        id: crypto.randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        title: trimmedTitle,
+        description:
+          description.trim() || undefined,
+        status,
+        priority,
+        dueDate: dueDate
+          ? new Date(`${dueDate}T00:00:00`)
+          : undefined,
+      })
 
-    resetForm()
-    setIsFormOpen(false)
+      resetForm()
+      setIsFormOpen(false)
 
-    showToast({
-      variant: 'success',
-      title: 'Задача создана',
-    })
+      showToast({
+        variant: 'success',
+        title: 'Задача создана',
+      })
+    } catch {
+      showToast({
+        variant: 'error',
+        title: 'Ошибка сохранения',
+        message: 'Не удалось сохранить задачу.',
+      })
+    }
   }
 
   return (
@@ -346,18 +354,26 @@ export function Tasks() {
                       size="sm"
                       value={task.status}
                       onChange={(event) => {
-                        updateTask(
-                          task.id,
-                          {
-                            status:
-                              event.target.value as TaskStatus,
-                          },
-                        )
+                        try {
+                          updateTask(
+                            task.id,
+                            {
+                              status:
+                                event.target.value as TaskStatus,
+                            },
+                          )
 
-                        showToast({
-                          variant: 'info',
-                          title: 'Статус задачи изменён',
-                        })
+                          showToast({
+                            variant: 'info',
+                            title: 'Статус задачи изменён',
+                          })
+                        } catch {
+                          showToast({
+                            variant: 'error',
+                            title: 'Ошибка сохранения',
+                            message: 'Не удалось изменить статус задачи.',
+                          })
+                        }
                       }}
                     >
                       <option value="todo">
@@ -414,14 +430,22 @@ export function Tasks() {
             return
           }
 
-          deleteTask(taskToDelete)
+          try {
+            deleteTask(taskToDelete)
 
-          showToast({
-            variant: 'warning',
-            title: 'Задача удалена',
-          })
+            showToast({
+              variant: 'warning',
+              title: 'Задача удалена',
+            })
 
-          setTaskToDelete(null)
+            setTaskToDelete(null)
+          } catch {
+            showToast({
+              variant: 'error',
+              title: 'Ошибка сохранения',
+              message: 'Не удалось удалить задачу.',
+            })
+          }
         }}
       />
     </section>
