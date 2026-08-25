@@ -11,6 +11,7 @@ import {
   type Product,
   type ProductCategory,
   type ProductUnit,
+  type StockMovement,
 } from '@madina/core'
 
 import {
@@ -317,7 +318,32 @@ export function Warehouse() {
       updatedAt: now,
     }
 
-    addProduct(newProduct)
+    if (newProduct.quantity > 0) {
+      const initialMovement: StockMovement = {
+        id: `movement-${Date.now()}`,
+        productId: newProduct.id,
+        type: 'adjustment',
+        quantity: newProduct.quantity,
+        unit: newProduct.unit,
+        note: 'Начальный остаток',
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      commitUpdate((snapshot) => ({
+        ...snapshot,
+        products: [
+          newProduct,
+          ...snapshot.products,
+        ],
+        stockMovements: [
+          ...snapshot.stockMovements,
+          initialMovement,
+        ],
+      }))
+    } else {
+      addProduct(newProduct)
+    }
 
     showToast({
       variant: 'success',
