@@ -7,6 +7,7 @@ import { useToast } from '../../context/ToastProvider'
 
 import {
   adjustStock,
+  getStockIntegrityDiscrepancies,
   ProductValidationError,
   type Product,
   type ProductCategory,
@@ -50,7 +51,10 @@ const unitLabels: Record<ProductUnit, string> = {
 
 export function Warehouse() {
   const { showToast } = useToast()
-  const { commitUpdate } = useTransactionalState()
+  const {
+    snapshot,
+    commitUpdate,
+  } = useTransactionalState()
 
   const {
     products,
@@ -111,6 +115,12 @@ export function Warehouse() {
     salePrice: 0,
     status: 'active' as 'active' | 'inactive',
   })
+
+  const stockIntegrityDiscrepancies =
+    getStockIntegrityDiscrepancies(
+      products,
+      snapshot.stockMovements,
+    )
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name
@@ -410,6 +420,17 @@ export function Warehouse() {
           onDismiss={() => setValidationError(null)}
         >
           {validationError}
+        </Alert>
+      )}
+
+      {stockIntegrityDiscrepancies.length > 0 && (
+        <Alert
+          variant="danger"
+          title="Обнаружено расхождение остатков"
+        >
+          Найдено товаров с расхождением:{' '}
+          {stockIntegrityDiscrepancies.length}.
+          Проверьте остатки и историю движений склада.
         </Alert>
       )}
 
