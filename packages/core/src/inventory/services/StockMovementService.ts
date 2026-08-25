@@ -20,15 +20,17 @@ export function getStockMovementTotals(
         0,
       ),
 
-    totalSales: movements
-      .filter(
-        (movement) =>
-          movement.type === 'sale',
-      )
-      .reduce(
-        (total, movement) =>
-          total + movement.quantity,
-        0,
-      ),
+    totalSales: Math.abs(
+      movements
+        .filter(
+          (movement) =>
+            movement.type === 'sale',
+        )
+        .reduce(
+          (total, movement) =>
+            total + movement.quantity,
+          0,
+        ),
+    ),
   }
 }

@@ -33,7 +33,7 @@ describe('getStockMovementTotals', () => {
       getStockMovementTotals(movements),
     ).toEqual({
       totalPurchases: 15,
-      totalSales: -7,
+      totalSales: 7,
     })
   })
 
