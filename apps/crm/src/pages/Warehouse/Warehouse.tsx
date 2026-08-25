@@ -211,7 +211,6 @@ export function Warehouse() {
 
     cancelAdjustment()
 
-    cancelAdjustment()
   }
 
   function startEditing() {
