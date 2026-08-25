@@ -628,3 +628,119 @@ test('task is not published when persistence fails', async ({
     }),
   ).toHaveCount(0)
 })
+
+test('sale is not completed when persistence fails', async ({
+  page,
+}) => {
+  const clientName = 'E2E Failure Sale Client'
+  const productName = 'E2E Failure Sale Product'
+
+  await page.goto('/clients')
+
+  await page.getByRole('button', {
+    name: 'Новый клиент',
+  }).click()
+
+  await page.getByLabel('Имя').fill(clientName)
+
+  await page.getByRole('button', {
+    name: 'Создать клиента',
+  }).click()
+
+  await expect(
+    page.getByRole('link', {
+      name: clientName,
+    }),
+  ).toBeVisible()
+
+  await page.goto('/warehouse')
+
+  await page.getByRole('button', {
+    name: 'Добавить товар',
+  }).click()
+
+  await page
+    .getByLabel('Название товара')
+    .fill(productName)
+
+  await page
+    .getByLabel('Количество')
+    .fill('2')
+
+  await page
+    .getByLabel('Себестоимость')
+    .fill('5')
+
+  await page
+    .getByLabel('Цена продажи')
+    .fill('8')
+
+  await page.getByRole('button', {
+    name: 'Сохранить товар',
+  }).click()
+
+  await expect(
+    page.getByText('Товар добавлен'),
+  ).toBeVisible()
+
+  await page.goto('/sales')
+
+  await page.getByRole('button', {
+    name: 'Новая продажа',
+  }).click()
+
+  await page
+    .getByLabel('Клиент')
+    .selectOption({
+      label: clientName,
+    })
+
+  await page
+    .getByLabel('Товар')
+    .selectOption({
+      label: `${productName} — остаток: 2 kg`,
+    })
+
+  await page
+    .getByLabel(/Количество/)
+    .fill('1')
+
+  await page
+    .getByLabel('Цена за единицу')
+    .fill('8')
+
+  await page.getByRole('button', {
+    name: 'Добавить товар',
+  }).click()
+
+  await page.getByRole('button', {
+    name: 'Сохранить черновик',
+  }).click()
+
+  const saleRow =
+    page.getByRole('row').filter({
+      hasText: clientName,
+    })
+
+  await expect(saleRow).toBeVisible()
+
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error(
+        'E2E forced persistence failure',
+      )
+    }
+  })
+
+  await saleRow.getByRole('button', {
+    name: 'Завершить',
+  }).click()
+
+  await expect(
+    page.getByText('Ошибка завершения продажи'),
+  ).toBeVisible()
+
+  await expect(
+    saleRow,
+  ).toContainText('Черновик')
+})
