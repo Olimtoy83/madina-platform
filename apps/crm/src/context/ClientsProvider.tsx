@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useMemo,
   useState,
@@ -58,21 +58,19 @@ export function ClientsProvider({
 
   const addClient = useCallback(
     (client: Client) => {
-      setClients((currentClients) => {
-        const nextClients = [
-          client,
-          ...currentClients,
-        ]
+      const nextClients = [
+        client,
+        ...clients,
+      ]
 
-        saveStorage(
-          STORAGE_KEY,
-          nextClients,
-        )
+      saveStorage(
+        STORAGE_KEY,
+        nextClients,
+      )
 
-        return nextClients
-      })
+      setClients(nextClients)
     },
-    [],
+    [clients],
   )
 
   const updateClient = useCallback(
@@ -80,27 +78,25 @@ export function ClientsProvider({
       clientId: string,
       updates: Partial<Client>,
     ) => {
-      setClients((currentClients) => {
-        const nextClients =
-          currentClients.map((client) =>
-            client.id === clientId
-              ? {
+      const nextClients =
+        clients.map((client) =>
+          client.id === clientId
+            ? {
                 ...client,
                 ...updates,
                 updatedAt: new Date(),
               }
-              : client,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextClients,
+            : client,
         )
 
-        return nextClients
-      })
+      saveStorage(
+        STORAGE_KEY,
+        nextClients,
+      )
+
+      setClients(nextClients)
     },
-    [],
+    [clients],
   )
 
   const deactivateClient = useCallback(
