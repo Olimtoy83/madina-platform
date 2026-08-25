@@ -281,3 +281,139 @@ test('completed sale updates stock and income', async ({
     }),
   ).toBeVisible()
 })
+
+test('completed purchase updates stock and expense', async ({
+  page,
+}) => {
+  const productName = 'E2E Purchase Product'
+  const supplierName = 'E2E Supplier'
+
+  await page.goto('/warehouse')
+
+  await page.getByRole('button', {
+    name: 'Добавить товар',
+  }).click()
+
+  await page
+    .getByLabel('Название товара')
+    .fill(productName)
+
+  await page
+    .getByLabel('Количество')
+    .fill('0')
+
+  await page
+    .getByLabel('Себестоимость')
+    .fill('5')
+
+  await page
+    .getByLabel('Цена продажи')
+    .fill('8')
+
+  await page.getByRole('button', {
+    name: 'Сохранить товар',
+  }).click()
+
+  await expect(
+    page.getByText('Товар добавлен'),
+  ).toBeVisible()
+
+  await page.goto('/purchases')
+
+  await page.getByRole('button', {
+    name: 'Добавить поступление',
+  }).click()
+
+  await page
+    .getByLabel('Дата поступления')
+    .fill('2026-08-25')
+
+  await page
+    .getByLabel('Поставщик')
+    .fill(supplierName)
+
+  await page
+    .getByLabel('Товар')
+    .selectOption({
+      label: productName,
+    })
+
+  await page
+    .getByLabel('Количество')
+    .fill('3')
+
+  await page
+    .getByLabel('Цена закупки')
+    .fill('5')
+
+  await page.getByRole('button', {
+    name: 'Создать поступление',
+  }).click()
+
+  await expect(
+    page.getByText('Закупка создана'),
+  ).toBeVisible()
+
+  await page.getByRole('button', {
+    name: 'Завершить поступление',
+  }).click()
+
+  await expect(
+    page.getByText('Закупка завершена'),
+  ).toBeVisible()
+
+  await page.goto('/warehouse')
+
+  const productRow =
+    page.getByRole('row').filter({
+      hasText: productName,
+    })
+
+  await expect(productRow).toBeVisible()
+
+  await expect(
+    productRow,
+  ).toContainText('3')
+
+  await page.goto('/warehouse/movements')
+
+  const purchaseMovementRow =
+    page.getByRole('row').filter({
+      hasText: productName,
+    }).filter({
+      hasText: 'Поступление',
+    })
+
+  await expect(
+    purchaseMovementRow,
+  ).toBeVisible()
+
+  await expect(
+    purchaseMovementRow.getByText('+3', {
+      exact: true,
+    }),
+  ).toBeVisible()
+
+  await page.goto('/income')
+
+  const expenseRow =
+    page.getByRole('row').filter({
+      hasText: 'Закупка',
+    }).filter({
+      hasText: '15,00 SAR',
+    })
+
+  await expect(expenseRow).toBeVisible()
+
+  await expect(
+    expenseRow.getByText('Расход', {
+      exact: true,
+    }),
+  ).toBeVisible()
+
+  await expect(
+    expenseRow.getByText('Завершено', {
+      exact: true,
+    }),
+  ).toBeVisible()
+})
