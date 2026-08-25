@@ -520,26 +520,6 @@ export function Warehouse() {
           description="Создание нового товара на складе"
           size="lg"
         >
-          <div className="warehouse__product-card-header">
-            <div>
-              <h2>Добавить товар</h2>
-
-              <p>
-                Создание нового товара на складе
-              </p>
-            </div>
-
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={cancelAdding}
-              aria-label="Закрыть форму"
-            >
-              ×
-            </Button>
-          </div>
-
           <div className="warehouse__edit-form">
             <div className="warehouse__form-field">
               <label htmlFor="add-product-name">
