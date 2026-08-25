@@ -1,4 +1,5 @@
 ﻿import { useTransactionalState } from '../../context/useTransactionalState'
+import { TransactionalPersistenceError } from '../../shared/transactionalStorage'
 import { useState } from 'react'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
@@ -247,7 +248,7 @@ export function Warehouse() {
     }
 
     try {
-      const savedProduct = updateProduct(
+      const result = updateProduct(
         updatedProduct.id,
         {
           name: updatedProduct.name,
@@ -261,9 +262,19 @@ export function Warehouse() {
         purchases,
       )
 
-      if (!savedProduct) {
+      if (!result.success || !result.product) {
+        showToast({
+          variant: 'error',
+          title: 'Не удалось обновить товар',
+          message:
+            result.message ??
+            'Не удалось сохранить изменение товара.',
+        })
+
         return
       }
+
+      const savedProduct = result.product
 
       setSelectedProduct(savedProduct)
       setValidationError(null)
@@ -339,19 +350,45 @@ export function Warehouse() {
         updatedAt: now,
       }
 
-      commitUpdate((snapshot) => ({
-        ...snapshot,
-        products: [
-          newProduct,
-          ...snapshot.products,
-        ],
-        stockMovements: [
-          ...snapshot.stockMovements,
-          initialMovement,
-        ],
-      }))
+      try {
+        commitUpdate((snapshot) => ({
+          ...snapshot,
+          products: [
+            newProduct,
+            ...snapshot.products,
+          ],
+          stockMovements: [
+            ...snapshot.stockMovements,
+            initialMovement,
+          ],
+        }))
+      } catch (error) {
+        if (error instanceof TransactionalPersistenceError) {
+          showToast({
+            variant: 'error',
+            title: 'Не удалось добавить товар',
+            message: error.message,
+          })
+
+          return
+        }
+
+        throw error
+      }
     } else {
-      addProduct(newProduct)
+      const result = addProduct(newProduct)
+
+      if (!result.success) {
+        showToast({
+          variant: 'error',
+          title: 'Не удалось добавить товар',
+          message:
+            result.message ??
+            'Не удалось сохранить товар.',
+        })
+
+        return
+      }
     }
 
     showToast({
@@ -374,15 +411,23 @@ export function Warehouse() {
   function confirmDeactivation() {
     if (!selectedProduct) return
 
-    const deactivatedProduct = deactivateProduct(
+    const result = deactivateProduct(
       selectedProduct.id,
     )
 
-    if (!deactivatedProduct) {
+    if (!result.success || !result.product) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось отключить товар',
+        message:
+          result.message ??
+          'Не удалось сохранить изменение товара.',
+      })
+
       return
     }
 
-    setSelectedProduct(deactivatedProduct)
+    setSelectedProduct(result.product)
     setIsDeactivateConfirmOpen(false)
 
     showToast({

@@ -8,18 +8,31 @@ import type {
 export interface ProductsContextValue {
   products: Product[]
 
-  addProduct: (product: Product) => void
+  addProduct: (
+    product: Product,
+  ) => {
+    success: boolean
+    message?: string
+  }
 
   deactivateProduct: (
     productId: string,
-  ) => Product | undefined
+  ) => {
+    success: boolean
+    product?: Product
+    message?: string
+  }
 
   updateProduct: (
     productId: string,
     updates: Partial<Product>,
     sales: Sale[],
     purchases: Purchase[],
-  ) => Product | undefined
+  ) => {
+    success: boolean
+    product?: Product
+    message?: string
+  }
 
   replaceProducts: (
     products: Product[],

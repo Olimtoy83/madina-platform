@@ -3,6 +3,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
+
 import {
   deactivateProduct as deactivateProductCore,
   updateProduct as updateProductCore,
@@ -10,7 +11,12 @@ import {
   type Purchase,
   type Sale,
 } from '@madina/core'
-import { getNextSnapshot } from '../shared/transactionalStorage'
+
+import {
+  getNextSnapshot,
+  TransactionalPersistenceError,
+} from '../shared/transactionalStorage'
+
 import { ProductsContext } from './ProductsContext'
 import { useTransactionalState } from './useTransactionalState'
 
@@ -23,19 +29,67 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
   const { products } = snapshot
 
   const addProduct = useCallback((product: Product) => {
-    commit(getNextSnapshot(snapshot, { products: [...products, product] }))
+    try {
+      commit(
+        getNextSnapshot(snapshot, {
+          products: [...products, product],
+        }),
+      )
+
+      return {
+        success: true,
+      }
+    } catch (error) {
+      if (
+        error instanceof
+        TransactionalPersistenceError
+      ) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, products, snapshot])
 
   const deactivateProduct = useCallback((productId: string) => {
     const product = products.find((item) => item.id === productId)
-    if (!product) return undefined
 
-    const deactivatedProduct = deactivateProductCore(product)
-    const nextProducts = products.map((item) =>
-      item.id === productId ? deactivatedProduct : item,
-    )
-    commit(getNextSnapshot(snapshot, { products: nextProducts }))
-    return deactivatedProduct
+    if (!product) {
+      return {
+        success: false,
+        message: 'Товар не найден.',
+      }
+    }
+
+    try {
+      const deactivatedProduct = deactivateProductCore(product)
+      const nextProducts = products.map((item) =>
+        item.id === productId ? deactivatedProduct : item,
+      )
+
+      commit(
+        getNextSnapshot(snapshot, {
+          products: nextProducts,
+        }),
+      )
+
+      return {
+        success: true,
+        product: deactivatedProduct,
+      }
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, products, snapshot])
 
   const updateProduct = useCallback((
@@ -45,14 +99,46 @@ export function ProductsProvider({ children }: ProductsProviderProps) {
     purchases: Purchase[],
   ) => {
     const product = products.find((item) => item.id === productId)
-    if (!product) return undefined
 
-    const updatedProduct = updateProductCore(product, updates, sales, purchases)
-    const nextProducts = products.map((item) =>
-      item.id === productId ? updatedProduct : item,
-    )
-    commit(getNextSnapshot(snapshot, { products: nextProducts }))
-    return updatedProduct
+    if (!product) {
+      return {
+        success: false,
+        message: 'Товар не найден.',
+      }
+    }
+
+    try {
+      const updatedProduct = updateProductCore(
+        product,
+        updates,
+        sales,
+        purchases,
+      )
+
+      const nextProducts = products.map((item) =>
+        item.id === productId ? updatedProduct : item,
+      )
+
+      commit(
+        getNextSnapshot(snapshot, {
+          products: nextProducts,
+        }),
+      )
+
+      return {
+        success: true,
+        product: updatedProduct,
+      }
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, products, snapshot])
 
   const replaceProducts = useCallback((nextProducts: Product[]) => {
