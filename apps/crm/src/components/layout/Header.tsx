@@ -1,16 +1,17 @@
 import { useLocation } from 'react-router-dom'
 
 const pageTitles: Record<string, string> = {
-  '/': 'Dashboard',
-  '/clients': 'Clients',
-  '/warehouse': 'Warehouse',
+  '/': 'Главная',
+  '/clients': 'Клиенты',
+  '/warehouse': 'Склад',
   '/warehouse/movements': 'Движение склада',
-  '/purchases': 'Purchases',
-  '/sales': 'Sales',
-  '/income': 'Income',
-  '/accounting': 'Accounting',
-  '/tasks': 'Tasks',
-  '/statistics': 'Statistics',
+  '/purchases': 'Поступления',
+  '/sales': 'Продажи',
+  '/reports/sales': 'Отчёт по продажам',
+  '/income': 'Доходы',
+  '/accounting': 'Учёт',
+  '/tasks': 'Задачи',
+  '/statistics': 'Статистика',
 }
 
 export function Header() {
