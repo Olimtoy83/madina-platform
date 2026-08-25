@@ -127,7 +127,7 @@ export function Sales() {
 
     if (
       parsedQuantity <= 0 ||
-      parsedUnitPrice < 0
+      parsedUnitPrice <= 0
     ) {
       return
     }
@@ -624,7 +624,7 @@ export function Sales() {
                 <Input
                   fullWidth
                   type="number"
-                  min="0"
+                  min="0.01"
                   step="0.01"
                   value={unitPrice}
                   onChange={(event) =>
@@ -642,7 +642,7 @@ export function Sales() {
               disabled={
                 !selectedProduct ||
                 Number(quantity) <= 0 ||
-                Number(unitPrice) < 0
+                Number(unitPrice) <= 0
               }
             >
               Добавить товар
