@@ -629,10 +629,13 @@ export function Purchases() {
                       )
 
                       if (!result.success) {
-                        setError(
-                          result.message ??
-                          'Не удалось завершить поступление.',
-                        )
+                        showToast({
+                          variant: 'error',
+                          title: 'Ошибка завершения поступления',
+                          message:
+                            result.message ??
+                            'Не удалось завершить поступление.',
+                        })
 
                         return
                       }
@@ -648,7 +651,11 @@ export function Purchases() {
                         error instanceof
                         PurchaseValidationError
                       ) {
-                        setError(error.message)
+                        showToast({
+                          variant: 'error',
+                          title: 'Ошибка завершения поступления',
+                          message: error.message,
+                        })
                         return
                       }
 

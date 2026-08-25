@@ -230,10 +230,13 @@ export function Sales() {
       const result = completeSale(saleId)
 
       if (!result.success) {
-        setError(
-          result.message ??
-          'Не удалось завершить продажу.',
-        )
+        showToast({
+          variant: 'error',
+          title: 'Ошибка завершения продажи',
+          message:
+            result.message ??
+            'Не удалось завершить продажу.',
+        })
 
         return
       }
@@ -246,7 +249,11 @@ export function Sales() {
 
     } catch (error) {
       if (error instanceof SaleValidationError) {
-        setError(error.message)
+        showToast({
+          variant: 'error',
+          title: 'Ошибка завершения продажи',
+          message: error.message,
+        })
         return
       }
 
