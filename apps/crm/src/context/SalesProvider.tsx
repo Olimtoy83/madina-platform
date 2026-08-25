@@ -29,8 +29,28 @@ export function SalesProvider({ children }: SalesProviderProps) {
   const completionGuard = useRef(createCompletionGuard())
 
   const addSale = useCallback((sale: Sale) => {
-    const normalizedSale = normalizeSale(sale)
-    commit(getNextSnapshot(snapshot, { sales: [...sales, normalizedSale] }))
+    try {
+      const normalizedSale = normalizeSale(sale)
+
+      commit(
+        getNextSnapshot(snapshot, {
+          sales: [...sales, normalizedSale],
+        }),
+      )
+
+      return {
+        success: true,
+      }
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, sales, snapshot])
 
   const updateSale = useCallback((saleId: string, updates: Partial<Sale>) => {
@@ -65,10 +85,37 @@ export function SalesProvider({ children }: SalesProviderProps) {
   }, [commit, persistenceError, snapshot])
 
   const cancelSale = useCallback((saleId: string) => {
-    const nextSales = sales.map((sale) => sale.id === saleId && sale.status === 'draft'
-      ? { ...sale, status: 'cancelled' as SaleStatus, updatedAt: new Date() }
-      : sale)
-    commit(getNextSnapshot(snapshot, { sales: nextSales }))
+    try {
+      const nextSales = sales.map((sale) =>
+        sale.id === saleId &&
+          sale.status === 'draft'
+          ? {
+            ...sale,
+            status: 'cancelled' as SaleStatus,
+            updatedAt: new Date(),
+          }
+          : sale,
+      )
+
+      commit(
+        getNextSnapshot(snapshot, {
+          sales: nextSales,
+        }),
+      )
+
+      return {
+        success: true,
+      }
+    } catch (error) {
+      if (error instanceof TransactionalPersistenceError) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, sales, snapshot])
 
   const value = useMemo(() => ({ sales, addSale, updateSale, completeSale, cancelSale }), [sales, addSale, updateSale, completeSale, cancelSale])

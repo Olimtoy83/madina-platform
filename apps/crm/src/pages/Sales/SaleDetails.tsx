@@ -97,7 +97,19 @@ export function SaleDetails() {
   }
 
   function handleCancel() {
-    cancelSale(saleIdValue)
+    const result = cancelSale(saleIdValue)
+
+    if (!result.success) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось отменить продажу',
+        message:
+          result.message ??
+          'Не удалось сохранить изменение продажи.',
+      })
+
+      return
+    }
 
     showToast({
       variant: 'warning',

@@ -4,7 +4,12 @@ import type { Sale } from '@madina/core'
 export interface SalesContextValue {
   sales: Sale[]
 
-  addSale: (sale: Sale) => void
+  addSale: (
+    sale: Sale,
+  ) => {
+    success: boolean
+    message?: string
+  }
 
   updateSale: (
     saleId: string,
@@ -18,7 +23,12 @@ export interface SalesContextValue {
     message?: string
   }
 
-  cancelSale: (saleId: string) => void
+  cancelSale: (
+    saleId: string,
+  ) => {
+    success: boolean
+    message?: string
+  }
 }
 
 export const SalesContext =

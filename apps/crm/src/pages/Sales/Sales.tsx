@@ -294,7 +294,19 @@ export function Sales() {
       status: 'draft',
     }
 
-    addSale(sale)
+    const result = addSale(sale)
+
+    if (!result.success) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось создать продажу',
+        message:
+          result.message ??
+          'Не удалось сохранить продажу.',
+      })
+
+      return
+    }
 
     showToast({
       variant: 'success',
@@ -754,7 +766,19 @@ export function Sales() {
           open={saleToCancel !== null}
           onClose={() => setSaleToCancel(null)}
           onConfirm={() => {
-            cancelSale(saleToCancel)
+            const result = cancelSale(saleToCancel)
+
+            if (!result.success) {
+              showToast({
+                variant: 'error',
+                title: 'Не удалось отменить продажу',
+                message:
+                  result.message ??
+                  'Не удалось сохранить изменение продажи.',
+              })
+
+              return
+            }
 
             showToast({
               variant: 'success',
