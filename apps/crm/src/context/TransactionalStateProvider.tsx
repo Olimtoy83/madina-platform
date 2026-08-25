@@ -17,7 +17,7 @@ interface TransactionalStateProviderProps {
 }
 
 const emptySnapshot: TransactionalSnapshot = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   revision: 0,
   products: [],
   sales: [],
