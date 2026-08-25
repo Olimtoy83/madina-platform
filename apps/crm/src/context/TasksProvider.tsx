@@ -57,21 +57,19 @@ export function TasksProvider({
 
   const addTask = useCallback(
     (task: Task) => {
-      setTasks((currentTasks) => {
-        const nextTasks = [
-          task,
-          ...currentTasks,
-        ]
+      const nextTasks = [
+        task,
+        ...tasks,
+      ]
 
-        saveStorage(
-          STORAGE_KEY,
-          nextTasks,
-        )
+      saveStorage(
+        STORAGE_KEY,
+        nextTasks,
+      )
 
-        return nextTasks
-      })
+      setTasks(nextTasks)
     },
-    [],
+    [tasks],
   )
 
   const updateTask = useCallback(
@@ -79,46 +77,42 @@ export function TasksProvider({
       taskId: string,
       updates: Partial<Task>,
     ) => {
-      setTasks((currentTasks) => {
-        const nextTasks =
-          currentTasks.map((task) =>
-            task.id === taskId
-              ? {
-                  ...task,
-                  ...updates,
-                  updatedAt: new Date(),
-                }
-              : task,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextTasks,
+      const nextTasks =
+        tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                ...updates,
+                updatedAt: new Date(),
+              }
+            : task,
         )
 
-        return nextTasks
-      })
+      saveStorage(
+        STORAGE_KEY,
+        nextTasks,
+      )
+
+      setTasks(nextTasks)
     },
-    [],
+    [tasks],
   )
 
   const deleteTask = useCallback(
     (taskId: string) => {
-      setTasks((currentTasks) => {
-        const nextTasks =
-          currentTasks.filter(
-            (task) => task.id !== taskId,
-          )
-
-        saveStorage(
-          STORAGE_KEY,
-          nextTasks,
+      const nextTasks =
+        tasks.filter(
+          (task) => task.id !== taskId,
         )
 
-        return nextTasks
-      })
+      saveStorage(
+        STORAGE_KEY,
+        nextTasks,
+      )
+
+      setTasks(nextTasks)
     },
-    [],
+    [tasks],
   )
 
   const getTasksByStatus = useCallback(
