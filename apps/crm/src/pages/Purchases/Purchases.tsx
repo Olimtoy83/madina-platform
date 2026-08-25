@@ -323,7 +323,19 @@ export function Purchases() {
       note: note.trim() || undefined,
     })
 
-    addPurchase(newPurchase)
+    const result = addPurchase(newPurchase)
+
+    if (!result.success) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось создать закупку',
+        message:
+          result.message ??
+          'Не удалось сохранить закупку.',
+      })
+
+      return
+    }
 
     showToast({
       variant: 'success',
@@ -944,7 +956,20 @@ export function Purchases() {
 
           setError(null)
 
-          cancelPurchase(purchaseToCancel)
+          const result =
+            cancelPurchase(purchaseToCancel)
+
+          if (!result.success) {
+            showToast({
+              variant: 'error',
+              title: 'Не удалось отменить закупку',
+              message:
+                result.message ??
+                'Не удалось сохранить изменение закупки.',
+            })
+
+            return
+          }
 
           showToast({
             variant: 'success',

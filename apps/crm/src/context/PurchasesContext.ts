@@ -4,7 +4,12 @@ import type { Purchase } from '@madina/core'
 export interface PurchasesContextValue {
   purchases: Purchase[]
 
-  addPurchase: (purchase: Purchase) => void
+  addPurchase: (
+    purchase: Purchase,
+  ) => {
+    success: boolean
+    message?: string
+  }
 
   updatePurchase: (
     purchaseId: string,
@@ -18,7 +23,12 @@ export interface PurchasesContextValue {
     message?: string
   }
 
-  cancelPurchase: (purchaseId: string) => void
+  cancelPurchase: (
+    purchaseId: string,
+  ) => {
+    success: boolean
+    message?: string
+  }
 }
 
 export const PurchasesContext =

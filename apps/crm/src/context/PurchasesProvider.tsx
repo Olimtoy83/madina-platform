@@ -21,10 +21,35 @@ export function PurchasesProvider({ children }: PurchasesProviderProps) {
   const completionGuard = useRef(createCompletionGuard())
 
   const addPurchase = useCallback((purchase: Purchase) => {
-    const normalizedPurchase = normalizePurchase(purchase)
-    commit(getNextSnapshot(snapshot, {
-      purchases: [normalizedPurchase, ...purchases],
-    }))
+    try {
+      const normalizedPurchase =
+        normalizePurchase(purchase)
+
+      commit(
+        getNextSnapshot(snapshot, {
+          purchases: [
+            normalizedPurchase,
+            ...purchases,
+          ],
+        }),
+      )
+
+      return {
+        success: true,
+      }
+    } catch (error) {
+      if (
+        error instanceof
+        TransactionalPersistenceError
+      ) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, purchases, snapshot])
 
   const updatePurchase = useCallback((purchaseId: string, updates: Partial<Purchase>) => {
@@ -57,11 +82,42 @@ export function PurchasesProvider({ children }: PurchasesProviderProps) {
   }, [commit, persistenceError, snapshot])
 
   const cancelPurchase = useCallback((purchaseId: string) => {
-    const nextPurchases = purchases.map((purchase) =>
-      purchase.id === purchaseId && purchase.status === 'draft'
-        ? { ...purchase, status: 'cancelled' as PurchaseStatus, updatedAt: new Date() }
-        : purchase)
-    commit(getNextSnapshot(snapshot, { purchases: nextPurchases }))
+    try {
+      const nextPurchases = purchases.map(
+        (purchase) =>
+          purchase.id === purchaseId &&
+            purchase.status === 'draft'
+            ? {
+              ...purchase,
+              status:
+                'cancelled' as PurchaseStatus,
+              updatedAt: new Date(),
+            }
+            : purchase,
+      )
+
+      commit(
+        getNextSnapshot(snapshot, {
+          purchases: nextPurchases,
+        }),
+      )
+
+      return {
+        success: true,
+      }
+    } catch (error) {
+      if (
+        error instanceof
+        TransactionalPersistenceError
+      ) {
+        return {
+          success: false,
+          message: error.message,
+        }
+      }
+
+      throw error
+    }
   }, [commit, purchases, snapshot])
 
   const value = useMemo(() => ({ purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase }), [purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase])
