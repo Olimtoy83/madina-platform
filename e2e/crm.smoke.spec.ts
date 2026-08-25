@@ -350,9 +350,16 @@ test('completed purchase updates stock and expense', async ({
     name: 'Создать поступление',
   }).click()
 
+  const purchaseRow =
+    page.getByRole('row').filter({
+      hasText: supplierName,
+    })
+
+  await expect(purchaseRow).toBeVisible()
+
   await expect(
-    page.getByText('Закупка создана'),
-  ).toBeVisible()
+    purchaseRow,
+  ).toContainText('Черновик')
 
   await page.getByRole('button', {
     name: 'Завершить поступление',
@@ -743,4 +750,108 @@ test('sale is not completed when persistence fails', async ({
   await expect(
     saleRow,
   ).toContainText('Черновик')
+})
+
+test('purchase is not completed when persistence fails', async ({
+  page,
+}) => {
+  const productName = 'E2E Failure Purchase Product'
+  const supplierName = 'E2E Failure Supplier'
+
+  await page.goto('/warehouse')
+
+  await page.getByRole('button', {
+    name: 'Добавить товар',
+  }).click()
+
+  await page
+    .getByLabel('Название товара')
+    .fill(productName)
+
+  await page
+    .getByLabel('Количество')
+    .fill('0')
+
+  await page
+    .getByLabel('Себестоимость')
+    .fill('5')
+
+  await page
+    .getByLabel('Цена продажи')
+    .fill('8')
+
+  await page.getByRole('button', {
+    name: 'Сохранить товар',
+  }).click()
+
+  await expect(
+    page.getByText('Товар добавлен'),
+  ).toBeVisible()
+
+  await page.goto('/purchases')
+
+  await page.getByRole('button', {
+    name: 'Добавить поступление',
+  }).click()
+
+  await page
+    .getByLabel('Дата поступления')
+    .fill('2026-08-25')
+
+  await page
+    .getByLabel('Поставщик')
+    .fill(supplierName)
+
+  await page
+    .getByLabel('Товар')
+    .selectOption({
+      label: productName,
+    })
+
+  await page
+    .getByLabel('Количество')
+    .fill('3')
+
+  await page
+    .getByLabel('Цена закупки')
+    .fill('5')
+
+  await page.getByRole('button', {
+    name: 'Создать поступление',
+  }).click()
+
+  const purchaseRow =
+    page.getByRole('row').filter({
+      hasText: supplierName,
+    })
+
+  await expect(purchaseRow).toBeVisible()
+
+  await purchaseRow.getByRole('button', {
+    name: 'Открыть',
+  }).click()
+
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error(
+        'E2E forced persistence failure',
+      )
+    }
+  })
+
+  await page.getByRole('button', {
+    name: 'Завершить поступление',
+  }).click()
+
+  await expect(
+    page.getByText(
+      'Ошибка завершения поступления',
+    ),
+  ).toBeVisible()
+
+  await expect(
+    page.locator('.mb-badge__content', {
+      hasText: 'Черновик',
+    }),
+  ).toBeVisible()
 })
