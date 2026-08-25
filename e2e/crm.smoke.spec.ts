@@ -504,3 +504,49 @@ test('task can be created updated and deleted', async ({
 
   await expect(taskRow).toHaveCount(0)
 })
+
+test('modal keeps keyboard focus and restores it on close', async ({
+  page,
+}) => {
+  await page.goto('/tasks')
+
+  const trigger = page.getByRole('button', {
+    name: 'Новая задача',
+  })
+
+  await trigger.focus()
+
+  await expect(trigger).toBeFocused()
+
+  await trigger.click()
+
+  const dialog = page.getByRole('dialog', {
+    name: 'Новая задача',
+  })
+
+  await expect(dialog).toBeVisible()
+
+  const closeButton = dialog.getByRole('button', {
+    name: 'Закрыть модальное окно',
+  })
+
+  await expect(closeButton).toBeFocused()
+
+  await page.keyboard.press('Shift+Tab')
+
+  await expect(
+    dialog.getByRole('button', {
+      name: 'Отмена',
+    }),
+  ).toBeFocused()
+
+  await page.keyboard.press('Tab')
+
+  await expect(closeButton).toBeFocused()
+
+  await page.keyboard.press('Escape')
+
+  await expect(dialog).toHaveCount(0)
+
+  await expect(trigger).toBeFocused()
+})
