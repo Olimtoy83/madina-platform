@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+﻿import { NavLink } from 'react-router-dom'
 
 interface SidebarItem {
   label: string
@@ -7,11 +7,11 @@ interface SidebarItem {
 
 const sidebarItems: SidebarItem[] = [
   {
-    label: 'Dashboard',
+    label: 'Главная',
     path: '/',
   },
   {
-    label: 'Warehouse',
+    label: 'Склад',
     path: '/warehouse',
   },
   {
@@ -19,11 +19,11 @@ const sidebarItems: SidebarItem[] = [
     path: '/warehouse/movements',
   },
   {
-    label: 'Purchases',
+    label: 'Поступления',
     path: '/purchases',
   },
   {
-    label: 'Sales',
+    label: 'Продажи',
     path: '/sales',
   },
   {
@@ -31,23 +31,23 @@ const sidebarItems: SidebarItem[] = [
     path: '/reports/sales',
   },
   {
-    label: 'Clients',
+    label: 'Клиенты',
     path: '/clients',
   },
   {
-    label: 'Income',
+    label: 'Доходы',
     path: '/income',
   },
   {
-    label: 'Accounting',
+    label: 'Учёт',
     path: '/accounting',
   },
   {
-    label: 'Tasks',
+    label: 'Задачи',
     path: '/tasks',
   },
   {
-    label: 'Statistics',
+    label: 'Статистика',
     path: '/statistics',
   },
 ]
@@ -65,7 +65,7 @@ export function Sidebar() {
 
       <nav
         className="sidebar__nav"
-        aria-label="Main navigation"
+        aria-label="Основная навигация"
       >
         {sidebarItems.map((item) => (
           <NavLink
