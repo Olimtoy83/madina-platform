@@ -417,3 +417,90 @@ test('completed purchase updates stock and expense', async ({
     }),
   ).toBeVisible()
 })
+
+test('task can be created updated and deleted', async ({
+  page,
+}) => {
+  const taskTitle = 'E2E Test Task'
+
+  await page.goto('/tasks')
+
+  await page.getByRole('button', {
+    name: 'Новая задача',
+  }).click()
+
+  await page
+    .getByLabel('Название')
+    .fill(taskTitle)
+
+  await page
+    .getByLabel('Описание')
+    .fill('E2E task description')
+
+  await page
+    .getByLabel('Приоритет')
+    .selectOption('high')
+
+  await page
+    .getByLabel('Срок выполнения')
+    .fill('2026-08-30')
+
+  await page.getByRole('button', {
+    name: 'Создать задачу',
+  }).click()
+
+  await expect(
+    page.getByText('Задача создана'),
+  ).toBeVisible()
+
+  const taskRow =
+    page.getByRole('row').filter({
+      hasText: taskTitle,
+    })
+
+  await expect(taskRow).toBeVisible()
+
+  await expect(
+    taskRow.getByText('Высокий', {
+      exact: true,
+    }),
+  ).toBeVisible()
+
+  await taskRow
+    .getByRole('combobox')
+    .selectOption('in-progress')
+
+  await expect(
+    page.getByText(
+      'Статус задачи изменён',
+    ),
+  ).toBeVisible()
+
+  await expect(
+    taskRow.getByRole('combobox'),
+  ).toHaveValue('in-progress')
+
+  await taskRow.getByRole('button', {
+    name: 'Удалить',
+  }).click()
+
+  const dialog =
+    page.getByRole('dialog').filter({
+      has: page.getByRole('heading', {
+        name: 'Удаление задачи',
+        exact: true,
+      }),
+    })
+
+  await expect(dialog).toBeVisible()
+
+  await dialog.getByRole('button', {
+    name: 'Удалить задачу',
+  }).click()
+
+  await expect(
+    page.getByText('Задача удалена'),
+  ).toBeVisible()
+
+  await expect(taskRow).toHaveCount(0)
+})
