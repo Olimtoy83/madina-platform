@@ -418,10 +418,14 @@ export function Purchases() {
 
           <TableBody>
             {purchases.length === 0 ? (
-              <EmptyState
-                title="Поступлений пока нет"
-                description="Создайте первое поступление товара, чтобы оно появилось в списке."
-              />
+              <TableRow>
+                <TableCell colSpan={7}>
+                  <EmptyState
+                    title="Поступлений пока нет"
+                    description="Создайте первое поступление товара, чтобы оно появилось в списке."
+                  />
+                </TableCell>
+              </TableRow>
             ) : (
               purchases.map((purchase) => (
                 <TableRow key={purchase.id}>
