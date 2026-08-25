@@ -550,3 +550,42 @@ test('modal keeps keyboard focus and restores it on close', async ({
 
   await expect(trigger).toBeFocused()
 })
+
+test('client is not published when persistence fails', async ({
+  page,
+}) => {
+  const clientName =
+    'E2E Persistence Failure Client'
+
+  await page.goto('/clients')
+
+  await page.getByRole('button', {
+    name: 'Новый клиент',
+  }).click()
+
+  await page
+    .getByLabel('Имя')
+    .fill(clientName)
+
+  await page.evaluate(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error(
+        'E2E forced persistence failure',
+      )
+    }
+  })
+
+  await page.getByRole('button', {
+    name: 'Создать клиента',
+  }).click()
+
+  await expect(
+    page.getByText('Ошибка сохранения'),
+  ).toBeVisible()
+
+  await expect(
+    page.getByRole('link', {
+      name: clientName,
+    }),
+  ).toHaveCount(0)
+})
