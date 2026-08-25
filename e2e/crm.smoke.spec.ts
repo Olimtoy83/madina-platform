@@ -56,3 +56,69 @@ test('client can be created', async ({ page }) => {
     page.getByText('Клиент добавлен'),
   ).toBeVisible()
 })
+
+test('product creation records initial stock movement', async ({
+  page,
+}) => {
+  const productName = 'E2E Test Product'
+
+  await page.goto('/warehouse')
+
+  await page.getByRole('button', {
+    name: 'Добавить товар',
+  }).click()
+
+  await page
+    .getByLabel('Название товара')
+    .fill(productName)
+
+  await page
+    .getByLabel('Количество')
+    .fill('2')
+
+  await page
+    .getByLabel('Себестоимость')
+    .fill('5')
+
+  await page
+    .getByLabel('Цена продажи')
+    .fill('8')
+
+  await page.getByRole('button', {
+    name: 'Сохранить товар',
+  }).click()
+
+  await expect(
+    page.getByText('Товар добавлен'),
+  ).toBeVisible()
+
+  await expect(
+    page.getByRole('row').filter({
+      hasText: productName,
+    }),
+  ).toBeVisible()
+
+  await page.goto('/warehouse/movements')
+
+  const movementRow =
+    page.getByRole('row').filter({
+      hasText: productName,
+    })
+
+  await expect(movementRow).toBeVisible()
+
+  await expect(
+    movementRow.getByText('+2', {
+      exact: true,
+    }),
+  ).toBeVisible()
+
+  await expect(
+    movementRow.getByText(
+      'Начальный остаток',
+      {
+        exact: true,
+      },
+    ),
+  ).toBeVisible()
+})
