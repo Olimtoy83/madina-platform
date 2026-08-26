@@ -2,11 +2,11 @@ import type { Purchase } from '../types/purchase'
 import type { Product } from '../../inventory/types/product'
 import type { StockMovement } from '../../inventory/types/stockMovement'
 import type { Transaction } from '../../transactions/types/transaction'
-import { receiveStock } from '../../inventory/services/StockService'
+import { receiveStock } from '../../inventory/services/StockService.js'
 import {
   getPurchaseItemTotal,
   getPurchaseTotal,
-} from './PurchaseCalculationService'
+} from './PurchaseCalculationService.js'
 
 export interface CompletePurchaseResult {
   success: boolean

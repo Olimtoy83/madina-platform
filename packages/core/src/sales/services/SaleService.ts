@@ -2,11 +2,11 @@ import type { Sale } from '../types/sale'
 import type { Product } from '../../inventory/types/product'
 import type { StockMovement } from '../../inventory/types/stockMovement'
 import type { Transaction } from '../../transactions/types/transaction'
-import { issueStock } from '../../inventory/services/StockService'
+import { issueStock } from '../../inventory/services/StockService.js'
 import {
   getSaleItemTotal,
   getSaleItemsTotal,
-} from './SaleCalculationService'
+} from './SaleCalculationService.js'
 
 export interface CompleteSaleResult {
   success: boolean

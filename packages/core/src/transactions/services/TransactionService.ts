@@ -2,7 +2,7 @@ import type { Transaction } from '../types/transaction'
 import {
   filterByReportingPeriod,
   type PresetReportingPeriod,
-} from '../../reporting/services/ReportingService'
+} from '../../reporting/services/ReportingService.js'
 
 export type TransactionPeriod = PresetReportingPeriod
 

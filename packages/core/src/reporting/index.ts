@@ -1,1 +1,1 @@
-export * from './services/ReportingService'
+export * from './services/ReportingService.js'

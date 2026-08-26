@@ -1,3 +1,3 @@
-export * from './types/client'
-export * from './services/ClientService'
-export * from './repositories/ClientRepository'
+export * from './types/client.js'
+export * from './services/ClientService.js'
+export * from './repositories/ClientRepository.js'

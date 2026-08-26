@@ -21,7 +21,7 @@ function createProduct(
     createdAt: now,
     updatedAt: now,
     name: 'Test Product',
-    category: 'Dry Fruits',
+    category: 'dry-fruits',
     quantity,
     unit: 'kg',
     costPrice: 100,
