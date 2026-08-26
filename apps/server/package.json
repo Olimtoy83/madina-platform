@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@madina/api": "workspace:*",
+    "@madina/database": "workspace:*",
     "fastify": "^5.12.1"
   }
 }
