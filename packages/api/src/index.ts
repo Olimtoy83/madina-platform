@@ -1,3 +1,1 @@
-export interface HealthResponse {
-  status: 'ok'
-}
+export type { HealthResponse } from './health/index.js'
