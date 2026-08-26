@@ -2,10 +2,13 @@ import type {
   ApiErrorResponse,
   ClientResponse,
   ClientsListResponse,
+  CreateClientRequest,
 } from '@madina/api'
-import type {
-  Client,
-  ClientRepository,
+import {
+  ClientValidationError,
+  createClient,
+  type Client,
+  type ClientRepository,
 } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
 
@@ -41,6 +44,45 @@ export async function clientsRoutes(
 
       return {
         clients: clients.map(toClientResponse),
+      }
+    },
+  )
+
+  app.post<{
+    Body: CreateClientRequest
+  }>(
+    '/',
+    async (
+      request,
+      reply,
+    ): Promise<
+      ClientResponse | ApiErrorResponse
+    > => {
+      try {
+        const client = createClient(
+          request.body,
+        )
+
+        await clientRepository.save(client)
+
+        reply.code(201)
+
+        return toClientResponse(client)
+      } catch (error) {
+        if (
+          error instanceof
+          ClientValidationError
+        ) {
+          reply.code(400)
+
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: error.message,
+          }
+        }
+
+        throw error
       }
     },
   )
