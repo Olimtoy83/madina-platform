@@ -14,4 +14,12 @@ export class InMemoryClientRepository
   async findAll(): Promise<Client[]> {
     return [...this.clients]
   }
+
+  async findById(
+    clientId: string,
+  ): Promise<Client | undefined> {
+    return this.clients.find(
+      (client) => client.id === clientId,
+    )
+  }
 }
