@@ -2,16 +2,19 @@ import type {
   ClientResponse,
   ClientsListResponse,
 } from '@madina/api'
+import type {
+  Client,
+  ClientRepository,
+} from '@madina/core'
 import { InMemoryClientRepository } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 
-const clientRepository =
-  new InMemoryClientRepository()
+interface ClientsRoutesOptions {
+  clientRepository?: ClientRepository
+}
 
 function toClientResponse(
-  client: Awaited<
-    ReturnType<typeof clientRepository.findAll>
-  >[number],
+  client: Client,
 ): ClientResponse {
   return {
     ...client,
@@ -22,7 +25,12 @@ function toClientResponse(
 
 export async function clientsRoutes(
   app: FastifyInstance,
+  options: ClientsRoutesOptions = {},
 ) {
+  const clientRepository =
+    options.clientRepository ??
+    new InMemoryClientRepository()
+
   app.get(
     '/',
     async (): Promise<ClientsListResponse> => {
