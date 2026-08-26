@@ -4,6 +4,9 @@ export type { ApiErrorResponse } from './errors/index.js'
 export type {
   CreateClientRequest,
   UpdateClientRequest,
+  ImportClientRequest,
+  ImportClientsRequest,
+  ImportClientsResponse,
   ClientResponse,
   ClientsListResponse,
   ClientStatus,
