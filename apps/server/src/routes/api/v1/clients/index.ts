@@ -1,4 +1,5 @@
 import type {
+  ApiErrorResponse,
   ClientResponse,
   ClientsListResponse,
 } from '@madina/api'
@@ -10,6 +11,10 @@ import type { FastifyInstance } from 'fastify'
 
 interface ClientsRoutesOptions {
   clientRepository: ClientRepository
+}
+
+interface ClientParams {
+  clientId: string
 }
 
 function toClientResponse(
@@ -37,6 +42,35 @@ export async function clientsRoutes(
       return {
         clients: clients.map(toClientResponse),
       }
+    },
+  )
+
+  app.get<{
+    Params: ClientParams
+  }>(
+    '/:clientId',
+    async (
+      request,
+      reply,
+    ): Promise<
+      ClientResponse | ApiErrorResponse
+    > => {
+      const client =
+        await clientRepository.findById(
+          request.params.clientId,
+        )
+
+      if (!client) {
+        reply.code(404)
+
+        return {
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'Client not found',
+        }
+      }
+
+      return toClientResponse(client)
     },
   )
 }
