@@ -1,10 +1,11 @@
-﻿import './Clients.css'
+import './Clients.css'
 import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
 import { useToast } from '../../context/ToastProvider'
 import {
+  createClient,
   getClientSalesStats,
   type ClientStatus,
 } from '@madina/core'
@@ -76,26 +77,22 @@ export function Clients() {
       return
     }
 
-    const now = new Date()
-
     try {
-      addClient({
-        id: crypto.randomUUID(),
-        createdAt: now,
-        updatedAt: now,
-        name: trimmedName,
-        phone: phone.trim() || undefined,
-        email: email.trim() || undefined,
-        company:
-          company.trim() || undefined,
-        note: note.trim() || undefined,
+      const client = createClient({
+        name,
+        phone,
+        email,
+        company,
+        note,
         status,
       })
+
+      addClient(client)
 
       showToast({
         variant: 'success',
         title: 'Клиент добавлен',
-        message: trimmedName,
+        message: client.name,
       })
 
       resetForm()
