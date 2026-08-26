@@ -1,15 +1,6 @@
-import type { HealthResponse } from '@madina/api'
-import Fastify from 'fastify'
+import { buildApp } from './app.js'
 
-const app = Fastify({
-  logger: true,
-})
-
-app.get('/health', async (): Promise<HealthResponse> => {
-  return {
-    status: 'ok',
-  }
-})
+const app = buildApp()
 
 const port = Number(process.env.PORT ?? 3000)
 const host = process.env.HOST ?? '127.0.0.1'
