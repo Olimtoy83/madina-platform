@@ -13,3 +13,7 @@ export interface ClientResponse {
   note?: string
   status: ClientStatus
 }
+
+export interface ClientsListResponse {
+  clients: ClientResponse[]
+}
