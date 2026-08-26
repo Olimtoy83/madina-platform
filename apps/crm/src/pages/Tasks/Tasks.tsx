@@ -7,6 +7,7 @@ import {
   type TaskStatus,
 } from '@madina/core'
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -34,6 +35,8 @@ const priorityLabels: Record<TaskPriority, string> = {
 export function Tasks() {
   const {
     tasks,
+    isLoading,
+    loadError,
     addTask,
     updateTask,
     deleteTask,
@@ -78,7 +81,7 @@ export function Tasks() {
     setDueDate('')
   }
 
-  function handleCreateTask() {
+  async function handleCreateTask() {
     const trimmedTitle = title.trim()
 
     if (!trimmedTitle) {
@@ -88,7 +91,7 @@ export function Tasks() {
     const now = new Date()
 
     try {
-      addTask({
+      await addTask({
         id: crypto.randomUUID(),
         createdAt: now,
         updatedAt: now,
@@ -281,6 +284,15 @@ export function Tasks() {
         </Modal>
       )}
 
+      {loadError && (
+        <Alert
+          variant="danger"
+          title="Не удалось загрузить задачи"
+        >
+          {loadError.message}
+        </Alert>
+      )}
+
       <div className="tasks-page__summary">
         <Card className="tasks-page__card">
           <span>Всего задач</span>
@@ -311,7 +323,13 @@ export function Tasks() {
           </TableHead>
 
           <TableBody>
-            {sortedTasks.length === 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  Загрузка задач...
+                </TableCell>
+              </TableRow>
+            ) : sortedTasks.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5}>
                   <EmptyState
@@ -354,26 +372,26 @@ export function Tasks() {
                       size="sm"
                       value={task.status}
                       onChange={(event) => {
-                        try {
-                          updateTask(
+                        void updateTask(
                             task.id,
                             {
                               status:
                                 event.target.value as TaskStatus,
                             },
                           )
-
+                          .then(() => {
                           showToast({
                             variant: 'info',
                             title: 'Статус задачи изменён',
                           })
-                        } catch {
+                          })
+                          .catch(() => {
                           showToast({
                             variant: 'error',
                             title: 'Ошибка сохранения',
                             message: 'Не удалось изменить статус задачи.',
                           })
-                        }
+                          })
                       }}
                     >
                       <option value="todo">
@@ -425,13 +443,13 @@ export function Tasks() {
         confirmLabel="Удалить задачу"
         cancelLabel="Назад"
         variant="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!taskToDelete) {
             return
           }
 
           try {
-            deleteTask(taskToDelete)
+            await deleteTask(taskToDelete)
 
             showToast({
               variant: 'warning',

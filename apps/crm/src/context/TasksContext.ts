@@ -3,19 +3,21 @@ import type { Task } from '@madina/core'
 
 export interface TasksContextValue {
   tasks: Task[]
+  isLoading: boolean
+  loadError: Error | null
 
   addTask: (
     task: Task,
-  ) => void
+  ) => Promise<Task>
 
   updateTask: (
     taskId: string,
     updates: Partial<Task>,
-  ) => void
+  ) => Promise<Task>
 
   deleteTask: (
     taskId: string,
-  ) => void
+  ) => Promise<void>
 
   getTasksByStatus: (
     status: Task['status'],

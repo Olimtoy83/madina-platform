@@ -11,3 +11,14 @@ export type {
   ClientsListResponse,
   ClientStatus,
 } from './clients/index.js'
+export type {
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  ImportTaskRequest,
+  ImportTasksRequest,
+  ImportTasksResponse,
+  TaskResponse,
+  TasksListResponse,
+  TaskPriority,
+  TaskStatus,
+} from './tasks/index.js'

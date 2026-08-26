@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Task } from './types/task'
-import { getTaskStats } from './TaskService'
+import {
+  createTask,
+  getTaskStats,
+  TaskValidationError,
+  updateTask,
+} from './TaskService'
 
-function createTask(
+function createTaskFixture(
   status: Task['status'],
 ): Task {
   const now = new Date()
@@ -20,11 +25,11 @@ function createTask(
 describe('getTaskStats', () => {
   it('calculates task statistics', () => {
     const tasks = [
-      createTask('todo'),
-      createTask('todo'),
-      createTask('in-progress'),
-      createTask('completed'),
-      createTask('cancelled'),
+      createTaskFixture('todo'),
+      createTaskFixture('todo'),
+      createTaskFixture('in-progress'),
+      createTaskFixture('completed'),
+      createTaskFixture('cancelled'),
     ]
 
     expect(
@@ -50,8 +55,8 @@ describe('getTaskStats', () => {
 
   it('does not count cancelled tasks as completed', () => {
     const tasks = [
-      createTask('cancelled'),
-      createTask('completed'),
+      createTaskFixture('cancelled'),
+      createTaskFixture('completed'),
     ]
 
     expect(
@@ -61,6 +66,51 @@ describe('getTaskStats', () => {
       todo: 0,
       inProgress: 0,
       completed: 1,
+    })
+  })
+})
+
+describe('task mutation services', () => {
+  it('creates a normalized task', () => {
+    const task = createTask({
+      title: '  Позвонить поставщику  ',
+      description: '  Подтвердить заказ  ',
+      status: 'todo',
+      priority: 'high',
+    })
+
+    expect(task).toMatchObject({
+      title: 'Позвонить поставщику',
+      description: 'Подтвердить заказ',
+      status: 'todo',
+      priority: 'high',
+    })
+  })
+
+  it('rejects a task without a title', () => {
+    expect(() => createTask({
+      title: '   ',
+      status: 'todo',
+      priority: 'medium',
+    })).toThrow(TaskValidationError)
+  })
+
+  it('updates only specified task fields', () => {
+    const task = createTask({
+      title: 'Старое название',
+      status: 'todo',
+      priority: 'low',
+    })
+
+    const updated = updateTask(task, {
+      status: 'completed',
+    })
+
+    expect(updated).toMatchObject({
+      id: task.id,
+      title: 'Старое название',
+      status: 'completed',
+      priority: 'low',
     })
   })
 })

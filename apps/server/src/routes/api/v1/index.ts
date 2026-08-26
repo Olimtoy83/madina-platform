@@ -4,9 +4,13 @@ import {
   resolve,
 } from 'node:path'
 import type { ApiV1Response } from '@madina/api'
-import { SqliteClientRepository } from '@madina/database'
+import {
+  SqliteClientRepository,
+  SqliteTaskRepository,
+} from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 import { clientsRoutes } from './clients/index.js'
+import { tasksRoutes } from './tasks/index.js'
 
 function getDatabaseFile(): string {
   return (
@@ -34,8 +38,12 @@ export async function apiV1Routes(
   const clientRepository =
     new SqliteClientRepository(databaseFile)
 
+  const taskRepository =
+    new SqliteTaskRepository(databaseFile)
+
   app.addHook('onClose', async () => {
     clientRepository.close()
+    taskRepository.close()
   })
 
   app.get(
@@ -50,5 +58,10 @@ export async function apiV1Routes(
   app.register(clientsRoutes, {
     prefix: '/clients',
     clientRepository,
+  })
+
+  app.register(tasksRoutes, {
+    prefix: '/tasks',
+    taskRepository,
   })
 }
