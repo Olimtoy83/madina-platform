@@ -84,6 +84,8 @@ importers:
 
   packages/api: {}
 
+  packages/auth: {}
+
   packages/core:
     dependencies:
       '@madina/shared':
