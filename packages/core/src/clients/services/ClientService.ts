@@ -1,6 +1,56 @@
 import type { Client } from '../types/client'
 import type { Sale } from '../../sales/types/sale'
 
+export interface CreateClientInput {
+  name: string
+  phone?: string
+  email?: string
+  company?: string
+  note?: string
+  status: Client['status']
+}
+
+export class ClientValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ClientValidationError'
+  }
+}
+
+function normalizeOptionalText(
+  value: string | undefined,
+): string | undefined {
+  const normalized = value?.trim()
+
+  return normalized || undefined
+}
+
+export function createClient(
+  input: CreateClientInput,
+): Client {
+  const name = input.name.trim()
+
+  if (!name) {
+    throw new ClientValidationError(
+      'Имя клиента обязательно.',
+    )
+  }
+
+  const now = new Date()
+
+  return {
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    name,
+    phone: normalizeOptionalText(input.phone),
+    email: normalizeOptionalText(input.email),
+    company: normalizeOptionalText(input.company),
+    note: normalizeOptionalText(input.note),
+    status: input.status,
+  }
+}
+
 export function deactivateClient(
   client: Client,
 ): Client {

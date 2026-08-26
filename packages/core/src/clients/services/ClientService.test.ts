@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Client } from '../types/client'
 import type { Sale } from '../../sales/types/sale'
 import {
+  ClientValidationError,
+  createClient as createDomainClient,
   deactivateClient,
   getClientSalesStats,
   getCompletedSalesForClient,
@@ -43,6 +45,63 @@ function createSale(
 }
 
 describe('ClientService', () => {
+  describe('createClient', () => {
+    it('creates and normalizes a client', () => {
+      const randomUUID = vi
+        .spyOn(crypto, 'randomUUID')
+        .mockReturnValue(
+          '00000000-0000-4000-8000-000000000001',
+        )
+
+      try {
+        const result = createDomainClient({
+          name: '  Ahmad  ',
+          phone: '  +966500000000  ',
+          email: '  ahmad@example.com  ',
+          company: '  Madina  ',
+          note: '   ',
+          status: 'active',
+        })
+
+        expect(result).toMatchObject({
+          id: '00000000-0000-4000-8000-000000000001',
+          name: 'Ahmad',
+          phone: '+966500000000',
+          email: 'ahmad@example.com',
+          company: 'Madina',
+          note: undefined,
+          status: 'active',
+        })
+        expect(result.createdAt).toBeInstanceOf(Date)
+        expect(result.updatedAt).toBe(
+          result.createdAt,
+        )
+      } finally {
+        randomUUID.mockRestore()
+      }
+    })
+
+    it('rejects an empty client name', () => {
+      const randomUUID = vi.spyOn(
+        crypto,
+        'randomUUID',
+      )
+
+      try {
+        expect(() =>
+          createDomainClient({
+            name: '   ',
+            status: 'active',
+          }),
+        ).toThrow(ClientValidationError)
+
+        expect(randomUUID).not.toHaveBeenCalled()
+      } finally {
+        randomUUID.mockRestore()
+      }
+    })
+  })
+
   it('deactivates a client without changing its identity or sale snapshots', () => {
     const client = createClient()
     const sale = createSale({
