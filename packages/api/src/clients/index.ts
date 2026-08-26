@@ -11,6 +11,9 @@ export interface CreateClientRequest {
   status: ClientStatus
 }
 
+export type UpdateClientRequest =
+  Partial<CreateClientRequest>
+
 export interface ClientResponse {
   id: string
   createdAt: string
