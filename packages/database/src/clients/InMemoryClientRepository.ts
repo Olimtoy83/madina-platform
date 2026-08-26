@@ -22,4 +22,10 @@ export class InMemoryClientRepository
       (client) => client.id === clientId,
     )
   }
+
+  async save(
+    client: Client,
+  ): Promise<void> {
+    this.clients.push(client)
+  }
 }

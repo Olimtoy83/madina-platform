@@ -5,4 +5,7 @@ export interface ClientRepository {
   findById(
     clientId: string,
   ): Promise<Client | undefined>
+  save(
+    client: Client,
+  ): Promise<void>
 }
