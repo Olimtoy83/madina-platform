@@ -28,4 +28,19 @@ export class InMemoryClientRepository
   ): Promise<void> {
     this.clients.push(client)
   }
+
+  async update(
+    client: Client,
+  ): Promise<void> {
+    const index = this.clients.findIndex(
+      (currentClient) =>
+        currentClient.id === client.id,
+    )
+
+    if (index === -1) {
+      return
+    }
+
+    this.clients[index] = client
+  }
 }

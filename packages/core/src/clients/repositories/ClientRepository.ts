@@ -8,4 +8,7 @@ export interface ClientRepository {
   save(
     client: Client,
   ): Promise<void>
+  update(
+    client: Client,
+  ): Promise<void>
 }
