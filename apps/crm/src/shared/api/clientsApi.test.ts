@@ -9,6 +9,7 @@ import {
   createClient,
   getClient,
   getClients,
+  importClients,
   updateClient,
 } from './clientsApi'
 
@@ -159,6 +160,57 @@ describe('clientsApi', () => {
       JSON.stringify({
         status: 'inactive',
       }),
+    )
+  })
+
+  it('imports existing clients with POST', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          created: 1,
+          updated: 0,
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const input = {
+      clients: [
+        {
+          id: 'legacy-client-1',
+          createdAt: '2026-08-01T10:00:00.000Z',
+          updatedAt: '2026-08-02T10:00:00.000Z',
+          name: 'Ahmad',
+          status: 'active' as const,
+        },
+      ],
+    }
+
+    const result = await importClients(input)
+
+    expect(result).toEqual({
+      created: 1,
+      updated: 0,
+    })
+
+    const [url, options] =
+      fetchMock.mock.calls[0]
+
+    expect(url).toBe(
+      '/api/v1/clients/import',
+    )
+
+    expect(options?.method).toBe('POST')
+
+    expect(options?.body).toBe(
+      JSON.stringify(input),
     )
   })
 })

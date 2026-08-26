@@ -2,6 +2,8 @@ import type {
   ClientResponse,
   ClientsListResponse,
   CreateClientRequest,
+  ImportClientsRequest,
+  ImportClientsResponse,
   UpdateClientRequest,
 } from '@madina/api'
 import { requestJson } from './httpClient'
@@ -46,6 +48,18 @@ export function updateClient(
     `${clientsUrl}/${encodeURIComponent(clientId)}`,
     {
       method: 'PATCH',
+      body: input,
+    },
+  )
+}
+
+export function importClients(
+  input: ImportClientsRequest,
+): Promise<ImportClientsResponse> {
+  return requestJson<ImportClientsResponse>(
+    '/api/v1/clients/import',
+    {
+      method: 'POST',
       body: input,
     },
   )
