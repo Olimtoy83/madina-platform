@@ -3,10 +3,12 @@ import type {
   ClientResponse,
   ClientsListResponse,
   CreateClientRequest,
+  UpdateClientRequest,
 } from '@madina/api'
 import {
   ClientValidationError,
   createClient,
+  updateClient,
   type Client,
   type ClientRepository,
 } from '@madina/core'
@@ -68,6 +70,62 @@ export async function clientsRoutes(
         reply.code(201)
 
         return toClientResponse(client)
+      } catch (error) {
+        if (
+          error instanceof
+          ClientValidationError
+        ) {
+          reply.code(400)
+
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: error.message,
+          }
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.patch<{
+    Params: ClientParams
+    Body: UpdateClientRequest
+  }>(
+    '/:clientId',
+    async (
+      request,
+      reply,
+    ): Promise<
+      ClientResponse | ApiErrorResponse
+    > => {
+      const client =
+        await clientRepository.findById(
+          request.params.clientId,
+        )
+
+      if (!client) {
+        reply.code(404)
+
+        return {
+          statusCode: 404,
+          error: 'Not Found',
+          message: 'Client not found',
+        }
+      }
+
+      try {
+        const updatedClient = updateClient(
+          client,
+          request.body,
+        )
+
+        await clientRepository.update(
+          updatedClient,
+        )
+
+        return toClientResponse(updatedClient)
       } catch (error) {
         if (
           error instanceof
