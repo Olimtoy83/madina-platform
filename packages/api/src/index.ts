@@ -12,6 +12,11 @@ export type {
   ClientStatus,
 } from './clients/index.js'
 export type {
+  CompletePurchaseRequest,
+  CompleteSaleRequest,
+  CommerceCompletionResponse,
+} from './commerce/index.js'
+export type {
   CreateTaskRequest,
   UpdateTaskRequest,
   ImportTaskRequest,
