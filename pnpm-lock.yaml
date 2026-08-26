@@ -17,6 +17,9 @@ importers:
 
   apps/crm:
     dependencies:
+      '@madina/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@madina/core':
         specifier: workspace:*
         version: link:../../packages/core

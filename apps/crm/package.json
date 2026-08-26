@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@madina/api": "workspace:*",
     "@madina/core": "workspace:*",
     "@madina/ui": "workspace:*",
     "react": "^19.2.8",
