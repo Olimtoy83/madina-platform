@@ -1,10 +1,11 @@
+import type { HealthResponse } from '@madina/api'
 import Fastify from 'fastify'
 
 const app = Fastify({
   logger: true,
 })
 
-app.get('/health', async () => {
+app.get('/health', async (): Promise<HealthResponse> => {
   return {
     status: 'ok',
   }

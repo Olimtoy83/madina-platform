@@ -75,6 +75,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@madina/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       fastify:
         specifier: ^5.12.1
         version: 5.12.1

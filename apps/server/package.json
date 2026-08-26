@@ -12,6 +12,7 @@
     "typescript": "~6.0.2"
   },
   "dependencies": {
+    "@madina/api": "workspace:*",
     "fastify": "^5.12.1"
   }
 }
