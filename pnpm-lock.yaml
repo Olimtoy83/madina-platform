@@ -103,7 +103,11 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3))
 
-  packages/database: {}
+  packages/database:
+    dependencies:
+      '@madina/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/shared: {}
 
