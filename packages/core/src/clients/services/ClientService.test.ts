@@ -7,6 +7,7 @@ import {
   deactivateClient,
   getClientSalesStats,
   getCompletedSalesForClient,
+  updateClient,
 } from './ClientService'
 
 function createClient(
@@ -99,6 +100,68 @@ describe('ClientService', () => {
       } finally {
         randomUUID.mockRestore()
       }
+    })
+  })
+
+  describe('updateClient', () => {
+    it('updates and normalizes editable client fields', () => {
+      const client = createClient({
+        phone: '+966500000000',
+        email: 'old@example.com',
+        company: 'Old Company',
+        note: 'Old note',
+      })
+
+      const result = updateClient(client, {
+        name: '  Omar  ',
+        phone: '  +966511111111  ',
+        email: '   ',
+        company: '  New Company  ',
+        note: '  New note  ',
+        status: 'inactive',
+      })
+
+      expect(result).toMatchObject({
+        id: client.id,
+        name: 'Omar',
+        phone: '+966511111111',
+        email: undefined,
+        company: 'New Company',
+        note: 'New note',
+        status: 'inactive',
+      })
+      expect(result.createdAt).toBe(
+        client.createdAt,
+      )
+      expect(result.updatedAt).toBeInstanceOf(Date)
+    })
+
+    it('preserves fields that are not updated', () => {
+      const client = createClient({
+        phone: '+966500000000',
+        company: 'Madina',
+      })
+
+      const result = updateClient(client, {
+        status: 'inactive',
+      })
+
+      expect(result).toMatchObject({
+        name: client.name,
+        phone: client.phone,
+        company: client.company,
+        status: 'inactive',
+      })
+    })
+
+    it('rejects an empty updated client name', () => {
+      const client = createClient()
+
+      expect(() =>
+        updateClient(client, {
+          name: '   ',
+        }),
+      ).toThrow(ClientValidationError)
     })
   })
 

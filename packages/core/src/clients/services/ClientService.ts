@@ -51,6 +51,60 @@ export function createClient(
   }
 }
 
+export type UpdateClientInput =
+  Partial<CreateClientInput>
+
+export function updateClient(
+  client: Client,
+  updates: UpdateClientInput,
+): Client {
+  const nextClient: Client = {
+    ...client,
+    updatedAt: new Date(),
+  }
+
+  if (Object.hasOwn(updates, 'name')) {
+    const name = updates.name?.trim()
+
+    if (!name) {
+      throw new ClientValidationError(
+        'Имя клиента обязательно.',
+      )
+    }
+
+    nextClient.name = name
+  }
+
+  if (Object.hasOwn(updates, 'phone')) {
+    nextClient.phone =
+      normalizeOptionalText(updates.phone)
+  }
+
+  if (Object.hasOwn(updates, 'email')) {
+    nextClient.email =
+      normalizeOptionalText(updates.email)
+  }
+
+  if (Object.hasOwn(updates, 'company')) {
+    nextClient.company =
+      normalizeOptionalText(updates.company)
+  }
+
+  if (Object.hasOwn(updates, 'note')) {
+    nextClient.note =
+      normalizeOptionalText(updates.note)
+  }
+
+  if (
+    Object.hasOwn(updates, 'status') &&
+    updates.status !== undefined
+  ) {
+    nextClient.status = updates.status
+  }
+
+  return nextClient
+}
+
 export function deactivateClient(
   client: Client,
 ): Client {
