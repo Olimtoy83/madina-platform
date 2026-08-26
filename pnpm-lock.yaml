@@ -78,6 +78,9 @@ importers:
       '@madina/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@madina/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@madina/database':
         specifier: workspace:*
         version: link:../../packages/database
