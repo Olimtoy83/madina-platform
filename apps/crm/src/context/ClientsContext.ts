@@ -3,19 +3,21 @@ import type { Client } from '@madina/core'
 
 export interface ClientsContextValue {
   clients: Client[]
+  isLoading: boolean
+  loadError: Error | null
 
   addClient: (
     client: Client,
-  ) => void
+  ) => Promise<Client>
 
   updateClient: (
     clientId: string,
     updates: Partial<Client>,
-  ) => void
+  ) => Promise<Client>
 
   deactivateClient: (
     clientId: string,
-  ) => void
+  ) => Promise<Client | undefined>
 
   getClientById: (
     clientId: string,

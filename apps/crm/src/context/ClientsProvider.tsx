@@ -1,127 +1,209 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
+import type { Client } from '@madina/core'
+import type {
+  ClientResponse,
+  UpdateClientRequest,
+} from '@madina/api'
 import {
-  deactivateClient as deactivateClientCore,
-  type Client,
-} from '@madina/core'
-import {
-  loadStorage,
-  saveStorage,
-} from '../shared/storage'
+  createClient as createClientApi,
+  getClients,
+  updateClient as updateClientApi,
+} from '../shared/api/clientsApi'
 import { ClientsContext } from './ClientsContext'
 
 interface ClientsProviderProps {
   children: ReactNode
 }
 
-type StoredClient = Omit<
-  Client,
-  'createdAt' | 'updatedAt'
-> & {
-  createdAt: string
-  updatedAt: string
-}
-
-const STORAGE_KEY = 'clients'
-
-function restoreClient(
-  client: StoredClient,
+function toClient(
+  response: ClientResponse,
 ): Client {
   return {
-    ...client,
-    createdAt: new Date(client.createdAt),
-    updatedAt: new Date(client.updatedAt),
+    ...response,
+    createdAt: new Date(response.createdAt),
+    updatedAt: new Date(response.updatedAt),
   }
 }
 
-function loadClients(): Client[] {
-  const storedClients =
-    loadStorage<StoredClient[]>(
-      STORAGE_KEY,
-      [],
-    )
+function toUpdateRequest(
+  updates: Partial<Client>,
+): UpdateClientRequest {
+  const request: UpdateClientRequest = {}
 
-  return storedClients.map(
-    restoreClient,
-  )
+  if (updates.name !== undefined) {
+    request.name = updates.name
+  }
+
+  if (updates.phone !== undefined) {
+    request.phone = updates.phone
+  }
+
+  if (updates.email !== undefined) {
+    request.email = updates.email
+  }
+
+  if (updates.company !== undefined) {
+    request.company = updates.company
+  }
+
+  if (updates.note !== undefined) {
+    request.note = updates.note
+  }
+
+  if (updates.status !== undefined) {
+    request.status = updates.status
+  }
+
+  return request
 }
 
 export function ClientsProvider({
   children,
 }: ClientsProviderProps) {
   const [clients, setClients] =
-    useState<Client[]>(loadClients)
+    useState<Client[]>([])
+
+  const [isLoading, setIsLoading] =
+    useState(true)
+
+  const [loadError, setLoadError] =
+    useState<Error | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      try {
+        const responses =
+          await getClients()
+
+        if (cancelled) {
+          return
+        }
+
+        setClients(
+          responses.map(toClient),
+        )
+        setLoadError(null)
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+
+        setLoadError(
+          error instanceof Error
+            ? error
+            : new Error(
+                'Не удалось загрузить клиентов.',
+              ),
+        )
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const addClient = useCallback(
-    (client: Client) => {
-      const nextClients = [
-        client,
-        ...clients,
-      ]
+    async (
+      client: Client,
+    ): Promise<Client> => {
+      const response =
+        await createClientApi({
+          name: client.name,
+          phone: client.phone,
+          email: client.email,
+          company: client.company,
+          note: client.note,
+          status: client.status,
+        })
 
-      saveStorage(
-        STORAGE_KEY,
-        nextClients,
-      )
+      const savedClient =
+        toClient(response)
 
-      setClients(nextClients)
+      setClients((currentClients) => [
+        savedClient,
+        ...currentClients,
+      ])
+
+      return savedClient
     },
-    [clients],
+    [],
   )
 
   const updateClient = useCallback(
-    (
+    async (
       clientId: string,
       updates: Partial<Client>,
-    ) => {
-      const nextClients =
-        clients.map((client) =>
-          client.id === clientId
-            ? {
-                ...client,
-                ...updates,
-                updatedAt: new Date(),
-              }
-            : client,
+    ): Promise<Client> => {
+      const response =
+        await updateClientApi(
+          clientId,
+          toUpdateRequest(updates),
         )
 
-      saveStorage(
-        STORAGE_KEY,
-        nextClients,
+      const savedClient =
+        toClient(response)
+
+      setClients((currentClients) =>
+        currentClients.map((client) =>
+          client.id === savedClient.id
+            ? savedClient
+            : client,
+        ),
       )
 
-      setClients(nextClients)
+      return savedClient
     },
-    [clients],
+    [],
   )
 
   const deactivateClient = useCallback(
-    (clientId: string) => {
-      const client = clients.find(
-        (currentClient) =>
-          currentClient.id === clientId,
+    async (
+      clientId: string,
+    ): Promise<Client | undefined> => {
+      const exists = clients.some(
+        (client) =>
+          client.id === clientId,
       )
 
-      if (!client) {
-        return
+      if (!exists) {
+        return undefined
       }
 
-      const deactivatedClient =
-        deactivateClientCore(client)
+      const response =
+        await updateClientApi(
+          clientId,
+          {
+            status: 'inactive',
+          },
+        )
 
-      const nextClients = clients.map(
-        (currentClient) =>
-          currentClient.id === clientId
-            ? deactivatedClient
-            : currentClient,
+      const savedClient =
+        toClient(response)
+
+      setClients((currentClients) =>
+        currentClients.map((client) =>
+          client.id === savedClient.id
+            ? savedClient
+            : client,
+        ),
       )
 
-      saveStorage(STORAGE_KEY, nextClients)
-      setClients(nextClients)
+      return savedClient
     },
     [clients],
   )
@@ -138,6 +220,8 @@ export function ClientsProvider({
   const value = useMemo(
     () => ({
       clients,
+      isLoading,
+      loadError,
       addClient,
       updateClient,
       deactivateClient,
@@ -145,6 +229,8 @@ export function ClientsProvider({
     }),
     [
       clients,
+      isLoading,
+      loadError,
       addClient,
       updateClient,
       deactivateClient,

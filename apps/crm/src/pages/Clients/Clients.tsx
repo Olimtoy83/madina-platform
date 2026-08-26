@@ -70,7 +70,7 @@ export function Clients() {
     setStatus('active')
   }
 
-  function handleCreateClient() {
+  async function handleCreateClient() {
     const trimmedName = name.trim()
 
     if (!trimmedName) {
@@ -87,7 +87,7 @@ export function Clients() {
         status,
       })
 
-      addClient(client)
+      await addClient(client)
 
       showToast({
         variant: 'success',
@@ -252,7 +252,7 @@ export function Clients() {
             type="button"
             variant="secondary"
             onClick={() => {
-              resetForm()
+            resetForm()
               setIsFormOpen(false)
             }}
           >
@@ -363,9 +363,9 @@ export function Clients() {
                       <Select
                         size="sm"
                         value={client.status}
-                        onChange={(event) => {
+                        onChange={async (event) => {
                           try {
-                            updateClient(
+                            await updateClient(
                               client.id,
                               {
                                 status:
@@ -402,7 +402,7 @@ export function Clients() {
                         type="button"
                         variant="secondary"
                         onClick={() => {
-                          setClientToDeactivate(client.id)
+                        setClientToDeactivate(client.id)
                         }}
                       >
                         Деактивировать
@@ -436,9 +436,9 @@ export function Clients() {
             <Button
               type="button"
               variant="danger"
-              onClick={() => {
+              onClick={async () => {
                 try {
-                  deactivateClient(clientToDeactivate)
+                  await deactivateClient(clientToDeactivate)
 
                   showToast({
                     variant: 'success',
