@@ -3,6 +3,8 @@ import type {
   ClientResponse,
   ClientsListResponse,
   CreateClientRequest,
+  ImportClientsRequest,
+  ImportClientsResponse,
   UpdateClientRequest,
 } from '@madina/api'
 import {
@@ -70,6 +72,117 @@ export async function clientsRoutes(
         reply.code(201)
 
         return toClientResponse(client)
+      } catch (error) {
+        if (
+          error instanceof
+          ClientValidationError
+        ) {
+          reply.code(400)
+
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: error.message,
+          }
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Body: ImportClientsRequest
+  }>(
+    '/import',
+    async (
+      request,
+      reply,
+    ): Promise<
+      ImportClientsResponse | ApiErrorResponse
+    > => {
+      try {
+        const clients = request.body.clients.map(
+          (input): Client => {
+            const id = input.id.trim()
+            const name = input.name.trim()
+            const createdAt = new Date(
+              input.createdAt,
+            )
+            const updatedAt = new Date(
+              input.updatedAt,
+            )
+
+            if (!id) {
+              throw new ClientValidationError(
+                'Client id is required.',
+              )
+            }
+
+            if (!name) {
+              throw new ClientValidationError(
+                'Имя клиента обязательно.',
+              )
+            }
+
+            if (
+              Number.isNaN(createdAt.getTime()) ||
+              Number.isNaN(updatedAt.getTime())
+            ) {
+              throw new ClientValidationError(
+                'Client dates are invalid.',
+              )
+            }
+
+            if (
+              input.status !== 'active' &&
+              input.status !== 'inactive'
+            ) {
+              throw new ClientValidationError(
+                'Client status is invalid.',
+              )
+            }
+
+            return {
+              id,
+              createdAt,
+              updatedAt,
+              name,
+              phone: input.phone?.trim() ||
+                undefined,
+              email: input.email?.trim() ||
+                undefined,
+              company: input.company?.trim() ||
+                undefined,
+              note: input.note?.trim() ||
+                undefined,
+              status: input.status,
+            }
+          },
+        )
+
+        let created = 0
+        let updated = 0
+
+        for (const client of clients) {
+          const existing =
+            await clientRepository.findById(
+              client.id,
+            )
+
+          if (existing) {
+            await clientRepository.update(client)
+            updated += 1
+          } else {
+            await clientRepository.save(client)
+            created += 1
+          }
+        }
+
+        return {
+          created,
+          updated,
+        }
       } catch (error) {
         if (
           error instanceof
