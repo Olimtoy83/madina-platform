@@ -1,4 +1,6 @@
 export * from './clients/InMemoryClientRepository.js'
 export * from './clients/SqliteClientRepository.js'
+export * from './auth/SqliteAuthRepository.js'
 export * from './commerce/SqliteCommerceRepository.js'
+export * from './migrations/SqliteMigrationRunner.js'
 export * from './tasks/SqliteTaskRepository.js'

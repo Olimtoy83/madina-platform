@@ -100,7 +100,14 @@ importers:
 
   packages/api: {}
 
-  packages/auth: {}
+  packages/auth:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
 
   packages/core:
     dependencies:
@@ -117,6 +124,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@madina/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@madina/core':
         specifier: workspace:*
         version: link:../core
