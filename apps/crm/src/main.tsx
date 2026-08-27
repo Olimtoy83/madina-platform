@@ -7,11 +7,13 @@ import './App.css'
 import { router } from './app/router/index'
 import { ErrorBoundary } from './components/ErrorBoundary/ErrorBoundary'
 import { bootstrapClientsToServer } from './shared/migrations/clientServerBootstrap'
+import { bootstrapCommerceToServer } from './shared/migrations/commerceServerBootstrap'
 import { bootstrapTasksToServer } from './shared/migrations/taskServerBootstrap'
 
 try {
   await bootstrapClientsToServer()
   await bootstrapTasksToServer()
+  await bootstrapCommerceToServer()
 } catch (error) {
   console.error(
     'Failed to bootstrap CRM data to server',
