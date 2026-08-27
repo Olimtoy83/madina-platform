@@ -1,9 +1,10 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type {
   Client,
   ClientRepository,
   ClientStatus,
 } from '@madina/core'
+import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface ClientRow {
   id: string
@@ -44,7 +45,7 @@ export class SqliteClientRepository
   private readonly database: DatabaseSync
 
   constructor(filename: string) {
-    this.database = new DatabaseSync(filename)
+    this.database = openDatabaseConnection(filename)
   }
 
   async findAll(): Promise<Client[]> {

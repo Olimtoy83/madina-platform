@@ -1,12 +1,11 @@
-import { DatabaseSync } from 'node:sqlite'
+import { openDatabaseConnection } from '../connectionPolicy.js'
 import { allMigrations } from './allMigrations.js'
 import { applyMigrations } from './SqliteMigrationRunner.js'
 
 export function initializeDatabase(filename: string): void {
-  const database = new DatabaseSync(filename)
+  const database = openDatabaseConnection(filename)
 
   try {
-    database.exec('PRAGMA foreign_keys = ON')
     applyMigrations(database, allMigrations)
   } finally {
     database.close()

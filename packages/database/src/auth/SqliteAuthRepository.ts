@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type {
   AuthRepository,
   AuthSession,
@@ -7,6 +7,7 @@ import type {
   UserRole,
   UserStatus,
 } from '@madina/auth'
+import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface UserRow {
   id: string
@@ -90,8 +91,7 @@ export class SqliteAuthRepository implements AuthRepository {
   private readonly database: DatabaseSync
 
   constructor(filename: string) {
-    this.database = new DatabaseSync(filename)
-    this.database.exec('PRAGMA foreign_keys = ON')
+    this.database = openDatabaseConnection(filename)
   }
 
   async findAllUsers(): Promise<User[]> {

@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type {
   CommerceRepository,
   CommerceSnapshot,
@@ -9,6 +9,7 @@ import type {
   StockMovement,
   Transaction,
 } from '@madina/core'
+import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface ProductRow {
   id: string
@@ -599,8 +600,7 @@ export class SqliteCommerceRepository implements CommerceRepository {
   private readonly database: DatabaseSync
 
   constructor(filename: string) {
-    this.database = new DatabaseSync(filename)
-    this.database.exec('PRAGMA foreign_keys = ON')
+    this.database = openDatabaseConnection(filename)
   }
 
   async withTransaction<T>(

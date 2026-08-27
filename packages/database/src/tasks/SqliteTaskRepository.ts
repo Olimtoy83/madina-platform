@@ -1,10 +1,11 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type {
   Task,
   TaskPriority,
   TaskRepository,
   TaskStatus,
 } from '@madina/core'
+import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface TaskRow {
   id: string
@@ -39,7 +40,7 @@ export class SqliteTaskRepository
   private readonly database: DatabaseSync
 
   constructor(filename: string) {
-    this.database = new DatabaseSync(filename)
+    this.database = openDatabaseConnection(filename)
   }
 
   async findAll(): Promise<Task[]> {
