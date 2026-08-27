@@ -128,6 +128,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '010_domain_clients_v1',
       '011_domain_tasks_v1',
       '012_domain_commerce_v1',
+      '020_audit_events_v1',
     ].join(','))
   })
 })

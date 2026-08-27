@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/auth/SqliteAuthRepository.test.js dist/commerce/SqliteCommerceRepository.test.js dist/connectionPolicy.test.js dist/databaseBackup.test.js dist/databaseIntegrity.test.js dist/migrations/SqliteMigrationRunner.test.js dist/migrations/initializeDatabase.test.js dist/repositories/SqliteDomainRepositories.test.js",
+    "test": "node --test dist/audit/SqliteAuditRepository.test.js dist/auth/SqliteAuthRepository.test.js dist/commerce/SqliteCommerceRepository.test.js dist/connectionPolicy.test.js dist/databaseBackup.test.js dist/databaseIntegrity.test.js dist/migrations/SqliteMigrationRunner.test.js dist/migrations/initializeDatabase.test.js dist/repositories/SqliteDomainRepositories.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "main": "./dist/index.js",
@@ -19,7 +19,8 @@
   },
   "dependencies": {
     "@madina/auth": "workspace:*",
-    "@madina/core": "workspace:*"
+    "@madina/core": "workspace:*",
+    "@madina/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

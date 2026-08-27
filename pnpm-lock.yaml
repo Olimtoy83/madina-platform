@@ -107,6 +107,10 @@ importers:
   packages/api: {}
 
   packages/auth:
+    dependencies:
+      '@madina/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^24.13.3
@@ -136,6 +140,9 @@ importers:
       '@madina/core':
         specifier: workspace:*
         version: link:../core
+      '@madina/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^24.13.3
