@@ -1,34 +1,26 @@
-﻿import { createContext } from 'react'
+import { createContext } from 'react'
 import type { Sale } from '@madina/core'
+import type { CommerceMutationResult } from '../shared/commerceState'
 
 export interface SalesContextValue {
   sales: Sale[]
 
   addSale: (
     sale: Sale,
-  ) => {
-    success: boolean
-    message?: string
-  }
+  ) => Promise<CommerceMutationResult<Sale>>
 
   updateSale: (
     saleId: string,
     updates: Partial<Sale>,
-  ) => void
+  ) => Promise<CommerceMutationResult<Sale>>
 
   completeSale: (
     saleId: string,
-  ) => {
-    success: boolean
-    message?: string
-  }
+  ) => Promise<CommerceMutationResult<Sale>>
 
   cancelSale: (
     saleId: string,
-  ) => {
-    success: boolean
-    message?: string
-  }
+  ) => Promise<CommerceMutationResult<Sale>>
 }
 
 export const SalesContext =

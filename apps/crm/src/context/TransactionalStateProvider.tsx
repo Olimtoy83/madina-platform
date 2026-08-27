@@ -1,24 +1,23 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
 import { Alert } from '@madina/ui'
+import { getCommerceAggregate } from '../shared/api/commerceApi'
 import {
-  commitTransactionalSnapshot,
-  loadTransactionalSnapshot,
-  type TransactionalSnapshot,
-} from '../shared/transactionalStorage'
+  toCommerceAggregateState,
+  type CommerceAggregateState,
+} from '../shared/commerceState'
 import { TransactionalStateContext } from './TransactionalStateContext'
 
 interface TransactionalStateProviderProps {
   children: ReactNode
 }
 
-const emptySnapshot: TransactionalSnapshot = {
-  schemaVersion: 3,
-  revision: 0,
+const emptySnapshot: CommerceAggregateState = {
   products: [],
   sales: [],
   purchases: [],
@@ -26,75 +25,55 @@ const emptySnapshot: TransactionalSnapshot = {
   transactions: [],
 }
 
-function loadInitialState() {
-  try {
-    return {
-      snapshot: loadTransactionalSnapshot().snapshot,
-      persistenceError: null,
-    }
-  } catch (error) {
-    return {
-      snapshot: emptySnapshot,
-      persistenceError: error instanceof Error ? error : new Error('Не удалось восстановить transactional snapshot.'),
-    }
-  }
-}
-
 export function TransactionalStateProvider({
   children,
 }: TransactionalStateProviderProps) {
-  const [state, setState] = useState(loadInitialState)
+  const [snapshot, setSnapshot] = useState(emptySnapshot)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<Error | null>(null)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
-  const commit = useCallback((snapshot: TransactionalSnapshot) => {
-    if (state.persistenceError) {
-      throw state.persistenceError
+  const reload = useCallback(async () => {
+    try {
+      const response = await getCommerceAggregate()
+      setSnapshot(toCommerceAggregateState(response))
+      setLoadError(null)
+      setHasLoaded(true)
+    } catch (error) {
+      setLoadError(error instanceof Error
+        ? error
+        : new Error('Не удалось загрузить commerce state с сервера.'))
+      throw error
+    } finally {
+      setIsLoading(false)
     }
+  }, [])
 
-    commitTransactionalSnapshot(snapshot)
-    setState({ snapshot, persistenceError: null })
-  }, [state.persistenceError])
-
-  const commitUpdate = useCallback(
-    (
-      updater: (
-        snapshot: TransactionalSnapshot,
-      ) => TransactionalSnapshot,
-    ) => {
-      if (state.persistenceError) {
-        throw state.persistenceError
-      }
-
-      const nextSnapshot = updater(state.snapshot)
-
-      commitTransactionalSnapshot(nextSnapshot)
-
-      setState({
-        snapshot: nextSnapshot,
-        persistenceError: null,
-      })
-    },
-    [
-      state.persistenceError,
-      state.snapshot,
-    ],
-  )
+  useEffect(() => {
+    void reload().catch(() => {})
+  }, [reload])
 
   const value = useMemo(() => ({
-    snapshot: state.snapshot,
-    persistenceError: state.persistenceError,
-    commit,
-    commitUpdate,
+    snapshot,
+    isLoading,
+    loadError,
+    reload,
   }), [
-    state,
-    commit,
-    commitUpdate,
+    snapshot,
+    isLoading,
+    loadError,
+    reload,
   ])
 
-  if (state.persistenceError) {
+  if (isLoading && !hasLoaded) {
+    return <section>Загрузка commerce данных…</section>
+  }
+
+  if (loadError && !hasLoaded) {
     return (
       <section>
-        <Alert variant="danger" title="Ошибка хранилища">
-          {state.persistenceError.message}
+        <Alert variant="danger" title="Ошибка загрузки commerce данных">
+          {loadError.message}
         </Alert>
       </section>
     )
@@ -102,6 +81,11 @@ export function TransactionalStateProvider({
 
   return (
     <TransactionalStateContext.Provider value={value}>
+      {loadError && (
+        <Alert variant="danger" title="Не удалось обновить commerce данные">
+          {loadError.message}
+        </Alert>
+      )}
       {children}
     </TransactionalStateContext.Provider>
   )

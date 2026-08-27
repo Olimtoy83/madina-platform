@@ -1,4 +1,4 @@
-﻿import {
+import {
   useMemo,
   useState,
 } from 'react'
@@ -6,8 +6,6 @@
 import {
   getNextPurchaseNumber,
   getPurchaseItemTotal,
-  normalizePurchase,
-  PurchaseValidationError,
   type PurchaseItem,
   type PurchasePaymentMethod,
   type PurchaseStatus,
@@ -247,7 +245,7 @@ export function Purchases() {
     })
   }
 
-  function savePurchase() {
+  async function savePurchase() {
     if (!purchaseDate) {
       setError('Укажите дату поступления.')
       return
@@ -307,7 +305,7 @@ export function Purchases() {
         }
       })
 
-    const newPurchase = normalizePurchase({
+    const newPurchase: Parameters<typeof addPurchase>[0] = {
       id: `purchase-${crypto.randomUUID()}`,
       createdAt: now,
       updatedAt: now,
@@ -321,9 +319,9 @@ export function Purchases() {
       paymentMethod,
       status: 'draft',
       note: note.trim() || undefined,
-    })
+    }
 
-    const result = addPurchase(newPurchase)
+    const result = await addPurchase(newPurchase)
 
     if (!result.success) {
       showToast({
@@ -344,7 +342,7 @@ export function Purchases() {
     })
 
     setError(null)
-    setSelectedPurchaseId(newPurchase.id)
+    setSelectedPurchaseId(result.value?.id ?? null)
 
     setIsCreateOpen(false)
 
@@ -632,47 +630,24 @@ export function Purchases() {
                 <Button
                   type="button"
                   variant="primary"
-                  onClick={() => {
+                  onClick={async () => {
                     setError(null)
+                    const result = await completePurchase(selectedPurchase.id)
 
-                    try {
-                      const result = completePurchase(
-                        selectedPurchase.id,
-                      )
-
-                      if (!result.success) {
-                        showToast({
-                          variant: 'error',
-                          title: 'Ошибка завершения поступления',
-                          message:
-                            result.message ??
-                            'Не удалось завершить поступление.',
-                        })
-
-                        return
-                      }
-
+                    if (!result.success) {
                       showToast({
-                        variant: 'success',
-                        title: 'Закупка завершена',
-                        message: 'Товары добавлены на склад',
+                        variant: 'error',
+                        title: 'Ошибка завершения поступления',
+                        message: result.message ?? 'Не удалось завершить поступление.',
                       })
-
-                    } catch (error) {
-                      if (
-                        error instanceof
-                        PurchaseValidationError
-                      ) {
-                        showToast({
-                          variant: 'error',
-                          title: 'Ошибка завершения поступления',
-                          message: error.message,
-                        })
-                        return
-                      }
-
-                      throw error
+                      return
                     }
+
+                    showToast({
+                      variant: 'success',
+                      title: 'Закупка завершена',
+                      message: 'Товары добавлены на склад',
+                    })
                   }}
                 >
                   Завершить поступление
@@ -949,15 +924,14 @@ export function Purchases() {
         confirmLabel="Отменить поступление"
         cancelLabel="Назад"
         variant="danger"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!purchaseToCancel) {
             return
           }
 
           setError(null)
 
-          const result =
-            cancelPurchase(purchaseToCancel)
+          const result = await cancelPurchase(purchaseToCancel)
 
           if (!result.success) {
             showToast({

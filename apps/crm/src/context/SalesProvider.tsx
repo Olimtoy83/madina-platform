@@ -4,120 +4,131 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
+import type { Sale } from '@madina/core'
 import {
-  normalizeSale,
-  updateSale as updateSaleCore,
-  type Sale,
-  type SaleStatus,
-} from '@madina/core'
+  cancelSale as cancelSaleApi,
+  completeSale as completeSaleApi,
+  createSale as createSaleApi,
+  updateSale as updateSaleApi,
+} from '../shared/api/commerceApi'
 import {
-  getNextSnapshot,
-  TransactionalPersistenceError,
-} from '../shared/transactionalStorage'
+  toCommerceMutationFailure,
+  type CommerceMutationResult,
+} from '../shared/commerceState'
 import { SalesContext } from './SalesContext'
 import { useTransactionalState } from './useTransactionalState'
-import {
-  completeSaleSnapshot,
-  createCompletionGuard,
-} from '../shared/transactionalCompletion'
 
 interface SalesProviderProps { children: ReactNode }
 
 export function SalesProvider({ children }: SalesProviderProps) {
-  const { snapshot, commit, persistenceError } = useTransactionalState()
+  const { snapshot, reload } = useTransactionalState()
   const { sales } = snapshot
   const completionGuard = useRef(createCompletionGuard())
 
-  const addSale = useCallback((sale: Sale) => {
+  const addSale = useCallback(async (
+    sale: Sale,
+  ): Promise<CommerceMutationResult<Sale>> => {
     try {
-      const normalizedSale = normalizeSale(sale)
-
-      commit(
-        getNextSnapshot(snapshot, {
-          sales: [...sales, normalizedSale],
-        }),
-      )
-
-      return {
-        success: true,
-      }
+      const savedSale = await createSaleApi({
+        saleNumber: sale.saleNumber,
+        saleDate: sale.saleDate.toISOString(),
+        clientId: sale.clientId,
+        clientName: sale.clientName,
+        items: sale.items,
+        paymentMethod: sale.paymentMethod,
+        note: sale.note,
+      })
+      await reload()
+      return { success: true, value: toSale(savedSale) }
     } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, sales, snapshot])
+  }, [reload])
 
-  const updateSale = useCallback((saleId: string, updates: Partial<Sale>) => {
-    const nextSales = sales.map((sale) => sale.id === saleId
-      ? updateSaleCore(sale, updates)
-      : sale)
-    commit(getNextSnapshot(snapshot, { sales: nextSales }))
-  }, [commit, sales, snapshot])
-
-  const completeSale = useCallback((saleId: string) => {
-    if (persistenceError) {
-      return { success: false, message: persistenceError.message }
+  const updateSale = useCallback(async (
+    saleId: string,
+    updates: Partial<Sale>,
+  ): Promise<CommerceMutationResult<Sale>> => {
+    try {
+      const savedSale = await updateSaleApi(saleId, {
+        saleDate: updates.saleDate?.toISOString(),
+        clientId: updates.clientId,
+        clientName: updates.clientName,
+        items: updates.items,
+        paymentMethod: updates.paymentMethod,
+        note: updates.note,
+      })
+      await reload()
+      return { success: true, value: toSale(savedSale) }
+    } catch (error) {
+      return toCommerceMutationFailure(error)
     }
+  }, [reload])
+
+  const completeSale = useCallback(async (
+    saleId: string,
+  ): Promise<CommerceMutationResult<Sale>> => {
     if (!completionGuard.current.begin(saleId)) {
       return { success: false, message: 'Завершение продажи уже выполняется.' }
     }
     try {
-      const result = completeSaleSnapshot(snapshot, saleId)
-      if (!result.success || !result.snapshot) {
-        return { success: false, message: result.message }
-      }
-      commit(result.snapshot)
+      const result = await completeSaleApi(saleId)
+      if (!result.success) return { success: false, message: result.message }
+      await reload()
       return { success: true }
     } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        return { success: false, message: error.message }
-      }
-      throw error
+      return toCommerceMutationFailure(error)
     } finally {
       completionGuard.current.finish(saleId)
     }
-  }, [commit, persistenceError, snapshot])
+  }, [reload])
 
-  const cancelSale = useCallback((saleId: string) => {
+  const cancelSale = useCallback(async (
+    saleId: string,
+  ): Promise<CommerceMutationResult<Sale>> => {
     try {
-      const nextSales = sales.map((sale) =>
-        sale.id === saleId &&
-          sale.status === 'draft'
-          ? {
-            ...sale,
-            status: 'cancelled' as SaleStatus,
-            updatedAt: new Date(),
-          }
-          : sale,
-      )
-
-      commit(
-        getNextSnapshot(snapshot, {
-          sales: nextSales,
-        }),
-      )
-
-      return {
-        success: true,
-      }
+      const savedSale = await cancelSaleApi(saleId)
+      await reload()
+      return { success: true, value: toSale(savedSale) }
     } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, sales, snapshot])
+  }, [reload])
 
-  const value = useMemo(() => ({ sales, addSale, updateSale, completeSale, cancelSale }), [sales, addSale, updateSale, completeSale, cancelSale])
+  const value = useMemo(() => ({
+    sales,
+    addSale,
+    updateSale,
+    completeSale,
+    cancelSale,
+  }), [sales, addSale, updateSale, completeSale, cancelSale])
+
   return <SalesContext.Provider value={value}>{children}</SalesContext.Provider>
+}
+
+function createCompletionGuard() {
+  const activeIds = new Set<string>()
+  return {
+    begin(id: string) {
+      if (activeIds.has(id)) return false
+      activeIds.add(id)
+      return true
+    },
+    finish(id: string) {
+      activeIds.delete(id)
+    },
+  }
+}
+
+function toSale(response: {
+  createdAt: string
+  updatedAt: string
+  saleDate: string
+} & Omit<Sale, 'createdAt' | 'updatedAt' | 'saleDate'>): Sale {
+  return {
+    ...response,
+    createdAt: new Date(response.createdAt),
+    updatedAt: new Date(response.updatedAt),
+    saleDate: new Date(response.saleDate),
+  }
 }

@@ -1,19 +1,13 @@
-﻿import { useTransactionalState } from '../../context/useTransactionalState'
-import { TransactionalPersistenceError } from '../../shared/transactionalStorage'
 import { useState } from 'react'
 import { useProducts } from '../../context/useProducts'
-import { usePurchases } from '../../context/usePurchases'
-import { useSales } from '../../context/useSales'
+import { useStockMovements } from '../../context/useStockMovements'
 import { useToast } from '../../context/ToastProvider'
 
 import {
-  adjustStock,
   getStockIntegrityDiscrepancies,
-  ProductValidationError,
   type Product,
   type ProductCategory,
   type ProductUnit,
-  type StockMovement,
 } from '@madina/core'
 
 import {
@@ -53,19 +47,14 @@ const unitLabels: Record<ProductUnit, string> = {
 export function Warehouse() {
   const { showToast } = useToast()
   const {
-    snapshot,
-    commitUpdate,
-  } = useTransactionalState()
-
-  const {
     products,
     addProduct,
     deactivateProduct,
     updateProduct,
+    adjustProductStock,
   } = useProducts()
 
-  const { sales } = useSales()
-  const { purchases } = usePurchases()
+  const { movements } = useStockMovements()
 
   const [search, setSearch] = useState('')
   const [category, setCategory] =
@@ -120,7 +109,7 @@ export function Warehouse() {
   const stockIntegrityDiscrepancies =
     getStockIntegrityDiscrepancies(
       products,
-      snapshot.stockMovements,
+      movements,
     )
 
   const filteredProducts = products.filter((product) => {
@@ -163,7 +152,7 @@ export function Warehouse() {
     setAdjustmentNote('')
   }
 
-  function handleAdjustment() {
+  async function handleAdjustment() {
     if (!selectedProduct) return
 
     const quantity = Number(adjustmentQuantity)
@@ -177,46 +166,23 @@ export function Warehouse() {
         ? quantity
         : -quantity
 
-    const result = adjustStock(
-      products,
+    const result = await adjustProductStock(
       selectedProduct.id,
       signedQuantity,
-      undefined,
       adjustmentNote.trim() ||
       'Корректировка остатка',
     )
 
-    if (!result.success || !result.product || !result.movement) {
+    if (!result.success || !result.value) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось изменить остаток',
+        message: result.message ?? 'Не удалось сохранить изменение на сервере.',
+      })
       return
     }
 
-    const updatedProduct = result.product
-    const movement = result.movement
-
-    try {
-      commitUpdate((snapshot) => ({
-        ...snapshot,
-        products: result.products,
-        stockMovements: [
-          ...snapshot.stockMovements,
-          movement,
-        ],
-      }))
-    } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        showToast({
-          variant: 'error',
-          title: 'Не удалось изменить остаток',
-          message: error.message,
-        })
-
-        return
-      }
-
-      throw error
-    }
-
-    setSelectedProduct(updatedProduct)
+    setSelectedProduct(result.value)
 
     showToast({
       variant: 'success',
@@ -243,7 +209,7 @@ export function Warehouse() {
     setIsEditing(true)
   }
 
-  function handleSaveEdit() {
+  async function handleSaveEdit() {
     if (!selectedProduct) return
 
     const updatedProduct: Product = {
@@ -261,52 +227,31 @@ export function Warehouse() {
       return
     }
 
-    try {
-      const result = updateProduct(
-        updatedProduct.id,
-        {
-          name: updatedProduct.name,
-          category: updatedProduct.category,
-          unit: updatedProduct.unit,
-          costPrice: updatedProduct.costPrice,
-          salePrice: updatedProduct.salePrice,
-          status: updatedProduct.status,
-        },
-        sales,
-        purchases,
-      )
+    const result = await updateProduct(
+      updatedProduct.id,
+      {
+        name: updatedProduct.name,
+        category: updatedProduct.category,
+        unit: updatedProduct.unit,
+        costPrice: updatedProduct.costPrice,
+        salePrice: updatedProduct.salePrice,
+        status: updatedProduct.status,
+      },
+    )
 
-      if (!result.success || !result.product) {
-        showToast({
-          variant: 'error',
-          title: 'Не удалось обновить товар',
-          message:
-            result.message ??
-            'Не удалось сохранить изменение товара.',
-        })
-
-        return
-      }
-
-      const savedProduct = result.product
-
-      setSelectedProduct(savedProduct)
-      setValidationError(null)
-      setIsEditing(false)
-
-      showToast({
-        variant: 'success',
-        title: 'Товар обновлён',
-      })
-
-    } catch (error) {
-      if (error instanceof ProductValidationError) {
-        setValidationError(error.message)
-        return
-      }
-
-      throw error
+    if (!result.success || !result.value) {
+      setValidationError(result.message ?? 'Не удалось сохранить изменение товара.')
+      return
     }
+
+    setSelectedProduct(result.value)
+    setValidationError(null)
+    setIsEditing(false)
+
+    showToast({
+      variant: 'success',
+      title: 'Товар обновлён',
+    })
   }
 
   function startAdding() {
@@ -330,7 +275,7 @@ export function Warehouse() {
     setIsAdding(false)
   }
 
-  function handleAddProduct() {
+  async function handleAddProduct() {
     const name = addForm.name.trim()
 
     if (!name) {
@@ -352,57 +297,15 @@ export function Warehouse() {
       updatedAt: now,
     }
 
-    if (newProduct.quantity > 0) {
-      const initialMovement: StockMovement = {
-        id: `movement-${Date.now()}`,
-        productId: newProduct.id,
-        type: 'adjustment',
-        quantity: newProduct.quantity,
-        unit: newProduct.unit,
-        note: 'Начальный остаток',
-        createdAt: now,
-        updatedAt: now,
-      }
+    const result = await addProduct(newProduct)
 
-      try {
-        commitUpdate((snapshot) => ({
-          ...snapshot,
-          products: [
-            newProduct,
-            ...snapshot.products,
-          ],
-          stockMovements: [
-            ...snapshot.stockMovements,
-            initialMovement,
-          ],
-        }))
-      } catch (error) {
-        if (error instanceof TransactionalPersistenceError) {
-          showToast({
-            variant: 'error',
-            title: 'Не удалось добавить товар',
-            message: error.message,
-          })
-
-          return
-        }
-
-        throw error
-      }
-    } else {
-      const result = addProduct(newProduct)
-
-      if (!result.success) {
-        showToast({
-          variant: 'error',
-          title: 'Не удалось добавить товар',
-          message:
-            result.message ??
-            'Не удалось сохранить товар.',
-        })
-
-        return
-      }
+    if (!result.success) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось добавить товар',
+        message: result.message ?? 'Не удалось сохранить товар на сервере.',
+      })
+      return
     }
 
     showToast({
@@ -422,14 +325,14 @@ export function Warehouse() {
     setIsDeactivateConfirmOpen(false)
   }
 
-  function confirmDeactivation() {
+  async function confirmDeactivation() {
     if (!selectedProduct) return
 
-    const result = deactivateProduct(
+    const result = await deactivateProduct(
       selectedProduct.id,
     )
 
-    if (!result.success || !result.product) {
+    if (!result.success || !result.value) {
       showToast({
         variant: 'error',
         title: 'Не удалось отключить товар',
@@ -441,7 +344,7 @@ export function Warehouse() {
       return
     }
 
-    setSelectedProduct(result.product)
+    setSelectedProduct(result.value)
     setIsDeactivateConfirmOpen(false)
 
     showToast({

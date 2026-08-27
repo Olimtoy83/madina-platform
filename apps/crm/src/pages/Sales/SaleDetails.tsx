@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Button,
@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from '@madina/ui'
-import { SaleValidationError } from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
 import { useToast } from '../../context/ToastProvider'
@@ -62,42 +61,26 @@ export function SaleDetails() {
     other: 'Другое',
   }
 
-  function handleComplete() {
-    try {
-      const result = completeSale(saleIdValue)
+  async function handleComplete() {
+    const result = await completeSale(saleIdValue)
 
-      if (!result.success) {
-        showToast({
-          variant: 'error',
-          title: 'Ошибка',
-          message:
-            result.message ??
-            'Не удалось завершить продажу.',
-        })
-        return
-      }
-
+    if (!result.success) {
       showToast({
-        variant: 'success',
-        title: 'Продажа завершена',
+        variant: 'error',
+        title: 'Ошибка',
+        message: result.message ?? 'Не удалось завершить продажу.',
       })
-
-    } catch (error) {
-      if (error instanceof SaleValidationError) {
-        showToast({
-          variant: 'error',
-          title: 'Ошибка',
-          message: error.message,
-        })
-        return
-      }
-
-      throw error
+      return
     }
+
+    showToast({
+      variant: 'success',
+      title: 'Продажа завершена',
+    })
   }
 
-  function handleCancel() {
-    const result = cancelSale(saleIdValue)
+  async function handleCancel() {
+    const result = await cancelSale(saleIdValue)
 
     if (!result.success) {
       showToast({

@@ -3,20 +3,17 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
-
+import type { Product } from '@madina/core'
 import {
-  deactivateProduct as deactivateProductCore,
-  updateProduct as updateProductCore,
-  type Product,
-  type Purchase,
-  type Sale,
-} from '@madina/core'
-
+  adjustProductStock as adjustProductStockApi,
+  createProduct as createProductApi,
+  deactivateProduct as deactivateProductApi,
+  updateProduct as updateProductApi,
+} from '../shared/api/commerceApi'
 import {
-  getNextSnapshot,
-  TransactionalPersistenceError,
-} from '../shared/transactionalStorage'
-
+  toCommerceMutationFailure,
+  type CommerceMutationResult,
+} from '../shared/commerceState'
 import { ProductsContext } from './ProductsContext'
 import { useTransactionalState } from './useTransactionalState'
 
@@ -25,133 +22,113 @@ interface ProductsProviderProps {
 }
 
 export function ProductsProvider({ children }: ProductsProviderProps) {
-  const { snapshot, commit } = useTransactionalState()
+  const { snapshot, reload } = useTransactionalState()
   const { products } = snapshot
 
-  const addProduct = useCallback((product: Product) => {
+  const addProduct = useCallback(async (
+    product: Product,
+  ): Promise<CommerceMutationResult<Product>> => {
     try {
-      commit(
-        getNextSnapshot(snapshot, {
-          products: [...products, product],
-        }),
-      )
+      const savedProduct = await createProductApi({
+        name: product.name,
+        category: product.category,
+        unit: product.unit,
+        costPrice: product.costPrice,
+        salePrice: product.salePrice,
+        status: product.status,
+        initialQuantity: product.quantity,
+      })
+      await reload()
 
       return {
         success: true,
+        value: {
+          ...savedProduct,
+          createdAt: new Date(savedProduct.createdAt),
+          updatedAt: new Date(savedProduct.updatedAt),
+        },
       }
     } catch (error) {
-      if (
-        error instanceof
-        TransactionalPersistenceError
-      ) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, products, snapshot])
+  }, [reload])
 
-  const deactivateProduct = useCallback((productId: string) => {
-    const product = products.find((item) => item.id === productId)
-
-    if (!product) {
-      return {
-        success: false,
-        message: 'Товар не найден.',
-      }
-    }
-
+  const deactivateProduct = useCallback(async (
+    productId: string,
+  ): Promise<CommerceMutationResult<Product>> => {
     try {
-      const deactivatedProduct = deactivateProductCore(product)
-      const nextProducts = products.map((item) =>
-        item.id === productId ? deactivatedProduct : item,
-      )
-
-      commit(
-        getNextSnapshot(snapshot, {
-          products: nextProducts,
-        }),
-      )
+      const savedProduct = await deactivateProductApi(productId)
+      await reload()
 
       return {
         success: true,
-        product: deactivatedProduct,
+        value: {
+          ...savedProduct,
+          createdAt: new Date(savedProduct.createdAt),
+          updatedAt: new Date(savedProduct.updatedAt),
+        },
       }
     } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, products, snapshot])
+  }, [reload])
 
-  const updateProduct = useCallback((
+  const updateProduct = useCallback(async (
     productId: string,
     updates: Partial<Product>,
-    sales: Sale[],
-    purchases: Purchase[],
-  ) => {
-    const product = products.find((item) => item.id === productId)
-
-    if (!product) {
-      return {
-        success: false,
-        message: 'Товар не найден.',
-      }
-    }
-
+  ): Promise<CommerceMutationResult<Product>> => {
     try {
-      const updatedProduct = updateProductCore(
-        product,
-        updates,
-        sales,
-        purchases,
-      )
-
-      const nextProducts = products.map((item) =>
-        item.id === productId ? updatedProduct : item,
-      )
-
-      commit(
-        getNextSnapshot(snapshot, {
-          products: nextProducts,
-        }),
-      )
+      const savedProduct = await updateProductApi(productId, {
+        name: updates.name,
+        category: updates.category,
+        unit: updates.unit,
+        costPrice: updates.costPrice,
+        salePrice: updates.salePrice,
+        status: updates.status,
+      })
+      await reload()
 
       return {
         success: true,
-        product: updatedProduct,
+        value: {
+          ...savedProduct,
+          createdAt: new Date(savedProduct.createdAt),
+          updatedAt: new Date(savedProduct.updatedAt),
+        },
       }
     } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, products, snapshot])
+  }, [reload])
 
-  const replaceProducts = useCallback((nextProducts: Product[]) => {
-    commit(getNextSnapshot(snapshot, { products: nextProducts }))
-  }, [commit, snapshot])
+  const adjustProductStock = useCallback(async (
+    productId: string,
+    quantity: number,
+    note?: string,
+  ): Promise<CommerceMutationResult<Product>> => {
+    try {
+      const result = await adjustProductStockApi(productId, { quantity, note })
+      await reload()
+      return {
+        success: true,
+        value: {
+          ...result.product,
+          createdAt: new Date(result.product.createdAt),
+          updatedAt: new Date(result.product.updatedAt),
+        },
+      }
+    } catch (error) {
+      return toCommerceMutationFailure(error)
+    }
+  }, [reload])
 
   const value = useMemo(() => ({
     products,
     addProduct,
     deactivateProduct,
     updateProduct,
-    replaceProducts,
-  }), [products, addProduct, deactivateProduct, updateProduct, replaceProducts])
+    adjustProductStock,
+  }), [products, addProduct, deactivateProduct, updateProduct, adjustProductStock])
 
   return (
     <ProductsContext.Provider value={value}>

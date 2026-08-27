@@ -1,4 +1,4 @@
-﻿import {
+import {
   useEffect,
   useMemo,
   useState,
@@ -16,7 +16,6 @@ import {
   getSaleStats,
   getSaleItemTotal,
   getSaleItemsTotal,
-  SaleValidationError,
   type PaymentMethod,
   type SaleItem,
 } from '@madina/core'
@@ -223,45 +222,28 @@ export function Sales() {
     )
   }
 
-  function handleCompleteSale(saleId: string) {
+  async function handleCompleteSale(saleId: string) {
     setError(null)
 
-    try {
-      const result = completeSale(saleId)
+    const result = await completeSale(saleId)
 
-      if (!result.success) {
-        showToast({
-          variant: 'error',
-          title: 'Ошибка завершения продажи',
-          message:
-            result.message ??
-            'Не удалось завершить продажу.',
-        })
-
-        return
-      }
-
+    if (!result.success) {
       showToast({
-        variant: 'success',
-        title: 'Продажа завершена',
-        message: 'Статус продажи изменён на завершённую',
+        variant: 'error',
+        title: 'Ошибка завершения продажи',
+        message: result.message ?? 'Не удалось завершить продажу.',
       })
-
-    } catch (error) {
-      if (error instanceof SaleValidationError) {
-        showToast({
-          variant: 'error',
-          title: 'Ошибка завершения продажи',
-          message: error.message,
-        })
-        return
-      }
-
-      throw error
+      return
     }
+
+    showToast({
+      variant: 'success',
+      title: 'Продажа завершена',
+      message: 'Статус продажи изменён на завершённую',
+    })
   }
 
-  function handleSaveDraft() {
+  async function handleSaveDraft() {
     const selectedClient = clients.find(
       (client) => client.id === clientId,
     )
@@ -294,7 +276,7 @@ export function Sales() {
       status: 'draft',
     }
 
-    const result = addSale(sale)
+    const result = await addSale(sale)
 
     if (!result.success) {
       showToast({
@@ -765,8 +747,8 @@ export function Sales() {
         <ConfirmDialog
           open={saleToCancel !== null}
           onClose={() => setSaleToCancel(null)}
-          onConfirm={() => {
-            const result = cancelSale(saleToCancel)
+          onConfirm={async () => {
+            const result = await cancelSale(saleToCancel)
 
             if (!result.success) {
               showToast({

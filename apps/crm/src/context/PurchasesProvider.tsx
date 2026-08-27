@@ -1,125 +1,127 @@
 import { useCallback, useMemo, useRef, type ReactNode } from 'react'
+import type { Purchase } from '@madina/core'
 import {
-  normalizePurchase,
-  updatePurchase as updatePurchaseCore,
-  type Purchase,
-  type PurchaseStatus,
-} from '@madina/core'
-import { getNextSnapshot, TransactionalPersistenceError } from '../shared/transactionalStorage'
+  cancelPurchase as cancelPurchaseApi,
+  completePurchase as completePurchaseApi,
+  createPurchase as createPurchaseApi,
+  updatePurchase as updatePurchaseApi,
+} from '../shared/api/commerceApi'
+import {
+  toCommerceMutationFailure,
+  type CommerceMutationResult,
+} from '../shared/commerceState'
 import { PurchasesContext } from './PurchasesContext'
 import { useTransactionalState } from './useTransactionalState'
-import {
-  completePurchaseSnapshot,
-  createCompletionGuard,
-} from '../shared/transactionalCompletion'
 
 interface PurchasesProviderProps { children: ReactNode }
 
 export function PurchasesProvider({ children }: PurchasesProviderProps) {
-  const { snapshot, commit, persistenceError } = useTransactionalState()
+  const { snapshot, reload } = useTransactionalState()
   const { purchases } = snapshot
   const completionGuard = useRef(createCompletionGuard())
 
-  const addPurchase = useCallback((purchase: Purchase) => {
+  const addPurchase = useCallback(async (
+    purchase: Purchase,
+  ): Promise<CommerceMutationResult<Purchase>> => {
     try {
-      const normalizedPurchase =
-        normalizePurchase(purchase)
-
-      commit(
-        getNextSnapshot(snapshot, {
-          purchases: [
-            normalizedPurchase,
-            ...purchases,
-          ],
-        }),
-      )
-
-      return {
-        success: true,
-      }
+      const savedPurchase = await createPurchaseApi({
+        purchaseNumber: purchase.purchaseNumber,
+        purchaseDate: purchase.purchaseDate.toISOString(),
+        supplierName: purchase.supplierName,
+        items: purchase.items,
+        paymentMethod: purchase.paymentMethod,
+        note: purchase.note,
+      })
+      await reload()
+      return { success: true, value: toPurchase(savedPurchase) }
     } catch (error) {
-      if (
-        error instanceof
-        TransactionalPersistenceError
-      ) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, purchases, snapshot])
+  }, [reload])
 
-  const updatePurchase = useCallback((purchaseId: string, updates: Partial<Purchase>) => {
-    const nextPurchases = purchases.map((purchase) => purchase.id === purchaseId
-      ? updatePurchaseCore(purchase, updates)
-      : purchase)
-    commit(getNextSnapshot(snapshot, { purchases: nextPurchases }))
-  }, [commit, purchases, snapshot])
+  const updatePurchase = useCallback(async (
+    purchaseId: string,
+    updates: Partial<Purchase>,
+  ): Promise<CommerceMutationResult<Purchase>> => {
+    try {
+      const savedPurchase = await updatePurchaseApi(purchaseId, {
+        purchaseDate: updates.purchaseDate?.toISOString(),
+        supplierName: updates.supplierName,
+        items: updates.items,
+        paymentMethod: updates.paymentMethod,
+        note: updates.note,
+      })
+      await reload()
+      return { success: true, value: toPurchase(savedPurchase) }
+    } catch (error) {
+      return toCommerceMutationFailure(error)
+    }
+  }, [reload])
 
-  const completePurchase = useCallback((purchaseId: string) => {
-    if (persistenceError) return { success: false, message: persistenceError.message }
+  const completePurchase = useCallback(async (
+    purchaseId: string,
+  ): Promise<CommerceMutationResult<Purchase>> => {
     if (!completionGuard.current.begin(purchaseId)) {
       return { success: false, message: 'Завершение поступления уже выполняется.' }
     }
     try {
-      const result = completePurchaseSnapshot(snapshot, purchaseId)
-      if (!result.success || !result.snapshot) {
-        return { success: false, message: result.message }
-      }
-      commit(result.snapshot)
+      const result = await completePurchaseApi(purchaseId)
+      if (!result.success) return { success: false, message: result.message }
+      await reload()
       return { success: true }
     } catch (error) {
-      if (error instanceof TransactionalPersistenceError) {
-        return { success: false, message: error.message }
-      }
-      throw error
+      return toCommerceMutationFailure(error)
     } finally {
       completionGuard.current.finish(purchaseId)
     }
-  }, [commit, persistenceError, snapshot])
+  }, [reload])
 
-  const cancelPurchase = useCallback((purchaseId: string) => {
+  const cancelPurchase = useCallback(async (
+    purchaseId: string,
+  ): Promise<CommerceMutationResult<Purchase>> => {
     try {
-      const nextPurchases = purchases.map(
-        (purchase) =>
-          purchase.id === purchaseId &&
-            purchase.status === 'draft'
-            ? {
-              ...purchase,
-              status:
-                'cancelled' as PurchaseStatus,
-              updatedAt: new Date(),
-            }
-            : purchase,
-      )
-
-      commit(
-        getNextSnapshot(snapshot, {
-          purchases: nextPurchases,
-        }),
-      )
-
-      return {
-        success: true,
-      }
+      const savedPurchase = await cancelPurchaseApi(purchaseId)
+      await reload()
+      return { success: true, value: toPurchase(savedPurchase) }
     } catch (error) {
-      if (
-        error instanceof
-        TransactionalPersistenceError
-      ) {
-        return {
-          success: false,
-          message: error.message,
-        }
-      }
-
-      throw error
+      return toCommerceMutationFailure(error)
     }
-  }, [commit, purchases, snapshot])
+  }, [reload])
 
-  const value = useMemo(() => ({ purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase }), [purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase])
+  const value = useMemo(() => ({
+    purchases,
+    addPurchase,
+    updatePurchase,
+    completePurchase,
+    cancelPurchase,
+  }), [purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase])
+
   return <PurchasesContext.Provider value={value}>{children}</PurchasesContext.Provider>
+}
+
+function createCompletionGuard() {
+  const activeIds = new Set<string>()
+  return {
+    begin(id: string) {
+      if (activeIds.has(id)) return false
+      activeIds.add(id)
+      return true
+    },
+    finish(id: string) {
+      activeIds.delete(id)
+    },
+  }
+}
+
+function toPurchase(response: {
+  createdAt: string
+  updatedAt: string
+  purchaseDate: string
+} & Omit<Purchase, 'createdAt' | 'updatedAt' | 'purchaseDate'>): Purchase {
+  return {
+    ...response,
+    createdAt: new Date(response.createdAt),
+    updatedAt: new Date(response.updatedAt),
+    purchaseDate: new Date(response.purchaseDate),
+  }
 }

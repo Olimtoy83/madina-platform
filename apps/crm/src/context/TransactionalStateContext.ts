@@ -1,18 +1,12 @@
 import { createContext } from 'react'
-import type { TransactionalSnapshot } from '../shared/transactionalStorage'
+import type { CommerceAggregateState } from '../shared/commerceState'
 
 export interface TransactionalStateContextValue {
-  snapshot: TransactionalSnapshot
-  persistenceError: Error | null
-  commit: (snapshot: TransactionalSnapshot) => void
-  commitUpdate: (
-    updater: TransactionalSnapshotUpdater,
-  ) => void
+  snapshot: CommerceAggregateState
+  isLoading: boolean
+  loadError: Error | null
+  reload: () => Promise<void>
 }
 
 export const TransactionalStateContext =
   createContext<TransactionalStateContextValue | null>(null)
-
-export type TransactionalSnapshotUpdater = (
-  snapshot: TransactionalSnapshot,
-) => TransactionalSnapshot
