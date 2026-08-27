@@ -9,6 +9,7 @@ import {
   needsPasswordRehash,
   verifyPassword,
 } from './passwords/scrypt.js'
+import { normalizeUsername } from './usernames.js'
 import type {
   AuthSession,
   PasswordHash,
@@ -54,10 +55,6 @@ function toPrincipal(user: User, sessionId: string): AuthPrincipal {
 function getDummyCredential(): Promise<PasswordHash> {
   dummyCredentialPromise ??= hashPassword(dummyPassword)
   return dummyCredentialPromise
-}
-
-function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase()
 }
 
 function addMilliseconds(date: Date, milliseconds: number): Date {

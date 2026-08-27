@@ -135,3 +135,23 @@ test('SqliteAuthRepository persists and revokes sessions with constraints', asyn
     equal(revokedSession?.revokedAt?.toISOString(), now.toISOString())
   })
 })
+
+test('SqliteAuthRepository rolls back a failed first-admin creation', async () => {
+  await withRepository(async (repository) => {
+    const user = createUser()
+    const passwordHash = await hashPassword('correct horse battery staple')
+
+    await rejects(repository.createFirstAdmin(user, {
+      userId: user.id,
+      ...passwordHash,
+      keyLength: 0,
+      passwordChangedAt: now,
+    }))
+
+    equal(
+      await repository.findUserByNormalizedUsername(user.normalizedUsername),
+      undefined,
+    )
+    equal(await repository.findCredentialByUserId(user.id), undefined)
+  })
+})

@@ -10,6 +10,10 @@ export interface AuthRepository {
     normalizedUsername: string,
   ): Promise<User | undefined>
   createUser(user: User): Promise<void>
+  createFirstAdmin(
+    user: User,
+    credential: PasswordCredential,
+  ): Promise<boolean>
   updateUser(user: User): Promise<void>
   findCredentialByUserId(
     userId: string,

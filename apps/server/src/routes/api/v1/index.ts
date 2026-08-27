@@ -1,8 +1,3 @@
-import { mkdirSync } from 'node:fs'
-import {
-  dirname,
-  resolve,
-} from 'node:path'
 import type { ApiV1Response } from '@madina/api'
 import { AuthService } from '@madina/auth'
 import { CommerceService } from '@madina/core'
@@ -13,34 +8,22 @@ import {
   SqliteTaskRepository,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
+import {
+  ensureDatabaseDirectory,
+  getDatabaseFile,
+} from '../../../database.js'
 import { authenticationPlugin } from '../../../plugins/authentication.js'
 import { authRoutes } from './auth/index.js'
 import { clientsRoutes } from './clients/index.js'
 import { commerceRoutes } from './commerce/index.js'
 import { tasksRoutes } from './tasks/index.js'
 
-function getDatabaseFile(): string {
-  return (
-    process.env.DATABASE_FILE ??
-    resolve(
-      process.cwd(),
-      'data',
-      'madina.sqlite',
-    )
-  )
-}
-
 export async function apiV1Routes(
   app: FastifyInstance,
 ) {
   const databaseFile = getDatabaseFile()
 
-  mkdirSync(
-    dirname(databaseFile),
-    {
-      recursive: true,
-    },
-  )
+  ensureDatabaseDirectory(databaseFile)
 
   const clientRepository =
     new SqliteClientRepository(databaseFile)

@@ -138,6 +138,32 @@ export class SqliteAuthRepository implements AuthRepository {
     )
   }
 
+  async createFirstAdmin(
+    user: User,
+    credential: PasswordCredential,
+  ): Promise<boolean> {
+    this.database.exec('BEGIN IMMEDIATE')
+
+    try {
+      const existingUser = this.database.prepare(`
+        SELECT 1 FROM users LIMIT 1
+      `).get()
+
+      if (existingUser) {
+        this.database.exec('COMMIT')
+        return false
+      }
+
+      await this.createUser(user)
+      await this.saveCredential(credential)
+      this.database.exec('COMMIT')
+      return true
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   async updateUser(user: User): Promise<void> {
     this.database.prepare(`
       UPDATE users SET
