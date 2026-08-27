@@ -1,4 +1,6 @@
 import { useLocation } from 'react-router-dom'
+import { Button } from '@madina/ui'
+import { useAuth } from '../../context/useAuth'
 
 const pageTitles: Record<string, string> = {
   '/': 'Главная',
@@ -16,6 +18,7 @@ const pageTitles: Record<string, string> = {
 
 export function Header() {
   const location = useLocation()
+  const { logout, user } = useAuth()
 
   const title =
     pageTitles[location.pathname] ?? 'Madina CRM'
@@ -28,8 +31,15 @@ export function Header() {
 
       <div className="app-header__actions">
         <span className="app-header__brand">
-          Madina CRM
+          {user?.username ?? 'Madina CRM'}
         </span>
+        <Button
+          onClick={() => void logout()}
+          size="sm"
+          variant="secondary"
+        >
+          Выйти
+        </Button>
       </div>
     </header>
   )

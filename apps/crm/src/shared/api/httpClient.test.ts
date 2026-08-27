@@ -8,6 +8,7 @@ import {
 import {
   HttpError,
   requestJson,
+  subscribeToUnauthorized,
 } from './httpClient'
 
 afterEach(() => {
@@ -91,6 +92,7 @@ describe('httpClient', () => {
         options?.headers,
       ).get('Content-Type'),
     ).toBe('application/json')
+    expect(options?.credentials).toBe('same-origin')
   })
 
   it('throws HttpError with API message for a failed response', async () => {
@@ -120,5 +122,31 @@ describe('httpClient', () => {
       status: 404,
       message: 'Client not found',
     } satisfies Partial<HttpError>)
+  })
+
+  it('notifies subscribers only for 401 responses', async () => {
+    const listener = vi.fn()
+    const unsubscribe = subscribeToUnauthorized(listener)
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ message: 'Authentication required.' }),
+        { status: 401 },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ message: 'Permission denied.' }),
+        { status: 403 },
+      ))
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(requestJson('/api/protected')).rejects.toMatchObject({
+      status: 401,
+    })
+    await expect(requestJson('/api/forbidden')).rejects.toMatchObject({
+      status: 403,
+    })
+
+    expect(listener).toHaveBeenCalledOnce()
+    unsubscribe()
   })
 })

@@ -3,6 +3,10 @@ export interface HttpRequestOptions
   body?: unknown
 }
 
+type UnauthorizedListener = () => void
+
+const unauthorizedListeners = new Set<UnauthorizedListener>()
+
 export class HttpError extends Error {
   readonly status: number
 
@@ -13,6 +17,22 @@ export class HttpError extends Error {
     super(message)
     this.name = 'HttpError'
     this.status = status
+  }
+}
+
+export function subscribeToUnauthorized(
+  listener: UnauthorizedListener,
+): () => void {
+  unauthorizedListeners.add(listener)
+
+  return () => {
+    unauthorizedListeners.delete(listener)
+  }
+}
+
+function notifyUnauthorized(): void {
+  for (const listener of unauthorizedListeners) {
+    listener()
   }
 }
 
@@ -35,6 +55,7 @@ export async function requestJson<T>(
   const response = await fetch(url, {
     ...options,
     headers,
+    credentials: options.credentials ?? 'same-origin',
     body:
       options.body === undefined
         ? undefined
@@ -58,10 +79,16 @@ export async function requestJson<T>(
       // Keep the fallback HTTP error message.
     }
 
-    throw new HttpError(
+    const error = new HttpError(
       response.status,
       message,
     )
+
+    if (response.status === 401) {
+      notifyUnauthorized()
+    }
+
+    throw error
   }
 
   if (response.status === 204) {
