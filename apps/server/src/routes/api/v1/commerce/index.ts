@@ -40,6 +40,10 @@ import {
   SaleValidationError,
 } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
+import {
+  requirePermission,
+  requireTrustedOrigin,
+} from '../../../../plugins/authentication.js'
 
 interface CommerceRoutesOptions {
   commerceRepository: CommerceRepository
@@ -273,6 +277,9 @@ export async function commerceRoutes(
 ) {
   app.get(
     '/products',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
     async (): Promise<ProductsListResponse> => ({
       products: (await options.commerceRepository.findAllProducts())
         .map(toProductResponse),
@@ -283,6 +290,12 @@ export async function commerceRoutes(
     Body: CreateProductRequest
   }>(
     '/products',
+    {
+      preHandler: [
+        requirePermission(app, 'products:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
       try {
         const product = await options.commerceService.createProduct(
@@ -305,6 +318,12 @@ export async function commerceRoutes(
     Body: UpdateProductRequest
   }>(
     '/products/:productId',
+    {
+      preHandler: [
+        requirePermission(app, 'products:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
       try {
         const product = await options.commerceService.updateProduct(
@@ -326,6 +345,12 @@ export async function commerceRoutes(
     Params: ProductParams
   }>(
     '/products/:productId/deactivate',
+    {
+      preHandler: [
+        requirePermission(app, 'products:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
       try {
         return toProductResponse(
@@ -348,6 +373,12 @@ export async function commerceRoutes(
     Body: AdjustProductStockRequest
   }>(
     '/products/:productId/stock-adjustments',
+    {
+      preHandler: [
+        requirePermission(app, 'stock:adjust'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<StockAdjustmentResponse | ApiErrorResponse> => {
       try {
         const result = await options.commerceService.adjustProductStock(
@@ -370,6 +401,9 @@ export async function commerceRoutes(
 
   app.get(
     '/stock-movements',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
     async (): Promise<StockMovementsListResponse> => ({
       stockMovements: (
         await options.commerceRepository.findAllStockMovements()
@@ -379,6 +413,9 @@ export async function commerceRoutes(
 
   app.get(
     '/purchases',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
     async (): Promise<PurchasesListResponse> => ({
       purchases: (await options.commerceRepository.findAllPurchases())
         .map(toPurchaseResponse),
@@ -387,6 +424,9 @@ export async function commerceRoutes(
 
   app.get(
     '/sales',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
     async (): Promise<SalesListResponse> => ({
       sales: (await options.commerceRepository.findAllSales())
         .map(toSaleResponse),
@@ -395,6 +435,9 @@ export async function commerceRoutes(
 
   app.get(
     '/transactions',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
     async (): Promise<TransactionsListResponse> => ({
       transactions: (await options.commerceRepository.findAllTransactions())
         .map(toTransactionResponse),
@@ -405,6 +448,12 @@ export async function commerceRoutes(
     Body: ImportCommerceSnapshotRequest
   }>(
     '/import',
+    {
+      preHandler: [
+        requirePermission(app, 'data:import'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (
       request,
       reply,
@@ -428,6 +477,12 @@ export async function commerceRoutes(
     Body: CreatePurchaseRequest
   }>(
     '/purchases',
+    {
+      preHandler: [
+        requirePermission(app, 'purchases:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
       try {
         const purchase = await options.commerceService.createPurchase(
@@ -450,6 +505,12 @@ export async function commerceRoutes(
     Body: UpdatePurchaseRequest
   }>(
     '/purchases/:purchaseId',
+    {
+      preHandler: [
+        requirePermission(app, 'purchases:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
       try {
         return toPurchaseResponse(
@@ -472,6 +533,12 @@ export async function commerceRoutes(
     Params: PurchaseParams
   }>(
     '/purchases/:purchaseId/cancel',
+    {
+      preHandler: [
+        requirePermission(app, 'purchases:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
       try {
         return toPurchaseResponse(
@@ -489,6 +556,12 @@ export async function commerceRoutes(
 
   app.post<{ Params: PurchaseParams }>(
     '/purchases/:purchaseId/complete',
+    {
+      preHandler: [
+        requirePermission(app, 'purchases:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<CommerceCompletionResponse> => {
       const result = await options.commerceService.completePurchase(
         request.params.purchaseId,
@@ -508,6 +581,12 @@ export async function commerceRoutes(
 
   app.post<{ Params: SaleParams }>(
     '/sales/:saleId/complete',
+    {
+      preHandler: [
+        requirePermission(app, 'sales:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<CommerceCompletionResponse> => {
       const result = await options.commerceService.completeSale(
         request.params.saleId,
@@ -529,6 +608,12 @@ export async function commerceRoutes(
     Body: CreateSaleRequest
   }>(
     '/sales',
+    {
+      preHandler: [
+        requirePermission(app, 'sales:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
       try {
         const sale = await options.commerceService.createSale(
@@ -551,6 +636,12 @@ export async function commerceRoutes(
     Body: UpdateSaleRequest
   }>(
     '/sales/:saleId',
+    {
+      preHandler: [
+        requirePermission(app, 'sales:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
       try {
         return toSaleResponse(
@@ -573,6 +664,12 @@ export async function commerceRoutes(
     Params: SaleParams
   }>(
     '/sales/:saleId/cancel',
+    {
+      preHandler: [
+        requirePermission(app, 'sales:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
       try {
         return toSaleResponse(

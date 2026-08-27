@@ -15,6 +15,10 @@ import {
   type ClientRepository,
 } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
+import {
+  requirePermission,
+  requireTrustedOrigin,
+} from '../../../../plugins/authentication.js'
 
 interface ClientsRoutesOptions {
   clientRepository: ClientRepository
@@ -42,6 +46,9 @@ export async function clientsRoutes(
 
   app.get(
     '/',
+    {
+      preHandler: requirePermission(app, 'clients:read'),
+    },
     async (): Promise<ClientsListResponse> => {
       const clients =
         await clientRepository.findAll()
@@ -56,6 +63,12 @@ export async function clientsRoutes(
     Body: CreateClientRequest
   }>(
     '/',
+    {
+      preHandler: [
+        requirePermission(app, 'clients:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (
       request,
       reply,
@@ -95,6 +108,12 @@ export async function clientsRoutes(
     Body: ImportClientsRequest
   }>(
     '/import',
+    {
+      preHandler: [
+        requirePermission(app, 'data:import'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (
       request,
       reply,
@@ -207,6 +226,12 @@ export async function clientsRoutes(
     Body: UpdateClientRequest
   }>(
     '/:clientId',
+    {
+      preHandler: [
+        requirePermission(app, 'clients:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (
       request,
       reply,
@@ -262,6 +287,9 @@ export async function clientsRoutes(
     Params: ClientParams
   }>(
     '/:clientId',
+    {
+      preHandler: requirePermission(app, 'clients:read'),
+    },
     async (
       request,
       reply,

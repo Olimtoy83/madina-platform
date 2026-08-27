@@ -18,6 +18,7 @@ import type {
 import {
   getSessionCookieName,
   getSessionSecret,
+  requireAuthentication,
   sessionCookieOptions,
 } from '../../../../plugins/authentication.js'
 
@@ -104,6 +105,9 @@ export async function authRoutes(
 
   app.get(
     '/me',
+    {
+      preHandler: requireAuthentication(app),
+    },
     async (request, reply): Promise<MeResponse | ApiErrorResponse> => {
       const principal = await getAuthenticatedPrincipal(app, request)
 

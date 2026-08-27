@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/routes/api/v1/auth/index.test.js dist/routes/api/v1/commerce/index.test.js dist/routes/api/v1/commerce/mutations.test.js",
+    "test": "node --test dist/routes/api/v1/auth/index.test.js dist/routes/api/v1/commerce/index.test.js dist/routes/api/v1/commerce/mutations.test.js dist/routes/api/v1/protection.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

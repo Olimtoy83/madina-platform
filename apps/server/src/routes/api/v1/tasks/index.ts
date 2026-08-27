@@ -15,6 +15,10 @@ import {
   type TaskRepository,
 } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
+import {
+  requirePermission,
+  requireTrustedOrigin,
+} from '../../../../plugins/authentication.js'
 
 interface TasksRoutesOptions {
   taskRepository: TaskRepository
@@ -83,6 +87,9 @@ export async function tasksRoutes(
 
   app.get(
     '/',
+    {
+      preHandler: requirePermission(app, 'tasks:read'),
+    },
     async (): Promise<TasksListResponse> => ({
       tasks: (await taskRepository.findAll()).map(
         toTaskResponse,
@@ -94,6 +101,12 @@ export async function tasksRoutes(
     Body: CreateTaskRequest
   }>(
     '/',
+    {
+      preHandler: [
+        requirePermission(app, 'tasks:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<TaskResponse | ApiErrorResponse> => {
       try {
         const task = toTask(request.body)
@@ -117,6 +130,12 @@ export async function tasksRoutes(
     Body: ImportTasksRequest
   }>(
     '/import',
+    {
+      preHandler: [
+        requirePermission(app, 'data:import'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (
       request,
       reply,
@@ -188,6 +207,12 @@ export async function tasksRoutes(
     Body: UpdateTaskRequest
   }>(
     '/:taskId',
+    {
+      preHandler: [
+        requirePermission(app, 'tasks:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<TaskResponse | ApiErrorResponse> => {
       const task = await taskRepository.findById(
         request.params.taskId,
@@ -226,6 +251,12 @@ export async function tasksRoutes(
     Params: TaskParams
   }>(
     '/:taskId',
+    {
+      preHandler: [
+        requirePermission(app, 'tasks:write'),
+        requireTrustedOrigin(),
+      ],
+    },
     async (request, reply): Promise<void | ApiErrorResponse> => {
       const task = await taskRepository.findById(
         request.params.taskId,

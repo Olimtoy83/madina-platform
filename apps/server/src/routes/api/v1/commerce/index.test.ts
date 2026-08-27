@@ -9,6 +9,10 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import {
+  hashSessionSecret,
+  type User,
+} from '@madina/auth'
 import type {
   ImportCommerceSnapshotRequest,
 } from '@madina/api'
@@ -17,7 +21,10 @@ import type {
   Purchase,
   Sale,
 } from '@madina/core'
-import { SqliteCommerceRepository } from '@madina/database'
+import {
+  SqliteAuthRepository,
+  SqliteCommerceRepository,
+} from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 import { buildApp } from '../../../../app.js'
 
@@ -80,6 +87,39 @@ function createSale(quantity = 3): Sale {
   }
 }
 
+async function seedAdminSession(databaseFile: string): Promise<string> {
+  const repository = new SqliteAuthRepository(databaseFile)
+  const sessionSecret = 'commerce-routes-test-session'
+  const timestamp = new Date()
+  const user: User = {
+    id: 'commerce-routes-admin',
+    username: 'commerce.routes.admin',
+    normalizedUsername: 'commerce.routes.admin',
+    role: 'admin',
+    status: 'active',
+    sessionVersion: 1,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+
+  try {
+    await repository.createUser(user)
+    await repository.createSession({
+      id: 'commerce-routes-session',
+      userId: user.id,
+      tokenHash: hashSessionSecret(sessionSecret),
+      createdAt: timestamp,
+      lastSeenAt: timestamp,
+      expiresAt: new Date(timestamp.getTime() + 24 * 60 * 60 * 1000),
+      sessionVersion: user.sessionVersion,
+    })
+  } finally {
+    repository.close()
+  }
+
+  return sessionSecret
+}
+
 async function withApp(
   seed: (repository: SqliteCommerceRepository) => Promise<void>,
   run: (app: FastifyInstance) => Promise<void>,
@@ -95,8 +135,20 @@ async function withApp(
     repository.close()
   }
 
+  const sessionSecret = await seedAdminSession(databaseFile)
   process.env.DATABASE_FILE = databaseFile
   const app = buildApp()
+  const inject = app.inject.bind(app)
+  app.inject = ((options: {
+    headers?: Record<string, string>
+  }) => inject({
+    ...options,
+    headers: {
+      cookie: `madina-session=${sessionSecret}`,
+      origin: 'http://localhost:3000',
+      ...options.headers,
+    },
+  })) as typeof app.inject
 
   try {
     await app.ready()
