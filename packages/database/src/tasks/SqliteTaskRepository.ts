@@ -40,23 +40,6 @@ export class SqliteTaskRepository
 
   constructor(filename: string) {
     this.database = new DatabaseSync(filename)
-
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT PRIMARY KEY,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        status TEXT NOT NULL CHECK (
-          status IN ('todo', 'in-progress', 'completed', 'cancelled')
-        ),
-        priority TEXT NOT NULL CHECK (
-          priority IN ('low', 'medium', 'high')
-        ),
-        due_date TEXT
-      )
-    `)
   }
 
   async findAll(): Promise<Task[]> {

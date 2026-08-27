@@ -15,6 +15,7 @@ import {
   type Purchase,
   type Sale,
 } from '@madina/core'
+import { initializeDatabase } from '../migrations/initializeDatabase.js'
 import { SqliteCommerceRepository } from './SqliteCommerceRepository.js'
 
 function createProduct(quantity = 10): Product {
@@ -58,9 +59,9 @@ function createSale(): Sale {
 
 function createRepository() {
   const directory = mkdtempSync(join(tmpdir(), 'madina-commerce-'))
-  const repository = new SqliteCommerceRepository(
-    join(directory, 'commerce.sqlite'),
-  )
+  const databaseFile = join(directory, 'commerce.sqlite')
+  initializeDatabase(databaseFile)
+  const repository = new SqliteCommerceRepository(databaseFile)
 
   return { directory, repository }
 }

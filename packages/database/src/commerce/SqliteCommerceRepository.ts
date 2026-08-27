@@ -601,63 +601,6 @@ export class SqliteCommerceRepository implements CommerceRepository {
   constructor(filename: string) {
     this.database = new DatabaseSync(filename)
     this.database.exec('PRAGMA foreign_keys = ON')
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        name TEXT NOT NULL, category TEXT NOT NULL CHECK (category IN ('dry-fruits', 'dates', 'perfume', 'carpets')),
-        quantity REAL NOT NULL, unit TEXT NOT NULL CHECK (unit IN ('kg', 'piece', 'liter', 'box')),
-        cost_price REAL NOT NULL, sale_price REAL NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('active', 'inactive'))
-      );
-      CREATE TABLE IF NOT EXISTS purchases (
-        id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        purchase_number TEXT NOT NULL UNIQUE, purchase_date TEXT NOT NULL,
-        supplier_name TEXT NOT NULL, total_amount REAL NOT NULL,
-        payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'bank-transfer', 'other')),
-        status TEXT NOT NULL CHECK (status IN ('draft', 'completed', 'cancelled')),
-        note TEXT
-      );
-      CREATE TABLE IF NOT EXISTS purchase_items (
-        purchase_id TEXT NOT NULL REFERENCES purchases(id),
-        product_id TEXT NOT NULL REFERENCES products(id), quantity REAL NOT NULL,
-        unit TEXT NOT NULL CHECK (unit IN ('kg', 'piece', 'liter', 'box')),
-        unit_cost REAL NOT NULL, total_cost REAL NOT NULL,
-        PRIMARY KEY (purchase_id, product_id)
-      );
-      CREATE TABLE IF NOT EXISTS sales (
-        id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        sale_number TEXT NOT NULL UNIQUE, sale_date TEXT NOT NULL, client_id TEXT,
-        client_name TEXT NOT NULL, total_amount REAL NOT NULL,
-        payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'bank-transfer', 'other')),
-        status TEXT NOT NULL CHECK (status IN ('draft', 'completed', 'cancelled')),
-        note TEXT
-      );
-      CREATE TABLE IF NOT EXISTS sale_items (
-        sale_id TEXT NOT NULL REFERENCES sales(id),
-        product_id TEXT NOT NULL REFERENCES products(id), quantity REAL NOT NULL,
-        unit TEXT NOT NULL CHECK (unit IN ('kg', 'piece', 'liter', 'box')),
-        unit_price REAL NOT NULL, total_amount REAL NOT NULL,
-        PRIMARY KEY (sale_id, product_id)
-      );
-      CREATE TABLE IF NOT EXISTS stock_movements (
-        id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        product_id TEXT NOT NULL REFERENCES products(id),
-        type TEXT NOT NULL CHECK (type IN ('purchase', 'sale', 'adjustment')),
-        quantity REAL NOT NULL, unit TEXT NOT NULL CHECK (unit IN ('kg', 'piece', 'liter', 'box')),
-        reference_id TEXT, note TEXT,
-        UNIQUE (type, product_id, reference_id)
-      );
-      CREATE TABLE IF NOT EXISTS transactions (
-        id TEXT PRIMARY KEY, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        type TEXT NOT NULL CHECK (type IN ('income', 'expense')),
-        category TEXT NOT NULL CHECK (category IN ('sale', 'purchase', 'other')),
-        amount REAL NOT NULL,
-        payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card', 'bank-transfer', 'other')),
-        transaction_date TEXT NOT NULL, reference_id TEXT, description TEXT,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'cancelled')),
-        UNIQUE (category, reference_id)
-      );
-    `)
   }
 
   async withTransaction<T>(

@@ -45,21 +45,6 @@ export class SqliteClientRepository
 
   constructor(filename: string) {
     this.database = new DatabaseSync(filename)
-
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS clients (
-        id TEXT PRIMARY KEY,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        name TEXT NOT NULL,
-        phone TEXT,
-        email TEXT,
-        company TEXT,
-        note TEXT,
-        status TEXT NOT NULL
-          CHECK (status IN ('active', 'inactive'))
-      )
-    `)
   }
 
   async findAll(): Promise<Client[]> {
