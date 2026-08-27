@@ -61,6 +61,22 @@ export function updateSale(
   })
 }
 
+export function cancelSale(
+  sale: Sale,
+): Sale {
+  if (sale.status !== 'draft') {
+    throw new SaleValidationError(
+      'Можно отменить только черновик продажи.',
+    )
+  }
+
+  return {
+    ...sale,
+    status: 'cancelled',
+    updatedAt: new Date(),
+  }
+}
+
 export function normalizeSale(
   sale: Sale,
 ): Sale {

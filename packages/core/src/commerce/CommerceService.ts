@@ -1,13 +1,26 @@
 import {
   completePurchase as completePurchaseCore,
+  cancelPurchase,
+  normalizePurchase,
+  updatePurchase as updatePurchaseCore,
   type Purchase,
 } from '../purchases/index.js'
 import {
   completeSale as completeSaleCore,
+  cancelSale,
+  normalizeSale,
+  updateSale as updateSaleCore,
   type Sale,
 } from '../sales/index.js'
 import type { Transaction } from '../transactions/index.js'
-import type { Product } from '../inventory/index.js'
+import {
+  adjustStock,
+  deactivateProduct,
+  getStockIntegrityDiscrepancies,
+  updateProduct as updateProductCore,
+  type Product,
+  type StockMovement,
+} from '../inventory/index.js'
 import type {
   CommerceRepository,
   CommerceUnitOfWork,
@@ -17,7 +30,16 @@ import {
   type CommerceSnapshot,
   type CommerceSnapshotImportResult,
 } from './CommerceSnapshot.js'
-import { getStockIntegrityDiscrepancies } from '../inventory/index.js'
+import {
+  CommerceCommandError,
+  type AdjustProductStockCommand,
+  type CreateProductCommand,
+  type CreatePurchaseCommand,
+  type CreateSaleCommand,
+  type UpdateProductCommand,
+  type UpdatePurchaseCommand,
+  type UpdateSaleCommand,
+} from './CommerceCommands.js'
 
 export interface CommerceCompletionResult {
   success: boolean
@@ -57,6 +79,231 @@ export class CommerceService {
     repository: CommerceRepository,
   ) {
     this.repository = repository
+  }
+
+  async createProduct(
+    command: CreateProductCommand,
+  ): Promise<Product> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      if (!Number.isFinite(command.initialQuantity) || command.initialQuantity < 0) {
+        throw new CommerceCommandError(
+          'Initial product quantity must be a non-negative finite number.',
+        )
+      }
+
+      const now = new Date()
+      const product: Product = {
+        id: crypto.randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        name: command.name,
+        category: command.category,
+        quantity: 0,
+        unit: command.unit,
+        costPrice: command.costPrice,
+        salePrice: command.salePrice,
+        status: command.status,
+      }
+
+      await unitOfWork.insertProduct(product)
+
+      if (command.initialQuantity === 0) {
+        return product
+      }
+
+      const result = adjustStock(
+        [product],
+        product.id,
+        command.initialQuantity,
+        undefined,
+        'Начальный остаток',
+      )
+
+      if (!result.success || !result.product || !result.movement) {
+        throw new CommerceCommandError(
+          result.message ?? 'Unable to set initial product quantity.',
+        )
+      }
+
+      await unitOfWork.saveProducts(result.products)
+      await unitOfWork.saveStockMovements([result.movement])
+      return result.product
+    })
+  }
+
+  async updateProduct(
+    productId: string,
+    command: UpdateProductCommand,
+  ): Promise<Product> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const product = await findProduct(unitOfWork, productId)
+      const [sales, purchases] = await Promise.all([
+        unitOfWork.findAllSales(),
+        unitOfWork.findAllPurchases(),
+      ])
+      const updatedProduct = updateProductCore(
+        product,
+        pickProductUpdates(command),
+        sales,
+        purchases,
+      )
+
+      await unitOfWork.saveProducts([updatedProduct])
+      return updatedProduct
+    })
+  }
+
+  async deactivateProduct(productId: string): Promise<Product> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const product = await findProduct(unitOfWork, productId)
+      const deactivatedProduct = deactivateProduct(product)
+
+      await unitOfWork.saveProducts([deactivatedProduct])
+      return deactivatedProduct
+    })
+  }
+
+  async adjustProductStock(
+    productId: string,
+    command: AdjustProductStockCommand,
+  ): Promise<{ product: Product; movement: StockMovement }> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const product = await findProduct(unitOfWork, productId)
+      const result = adjustStock(
+        [product],
+        productId,
+        command.quantity,
+        undefined,
+        command.note,
+      )
+
+      if (!result.success || !result.product || !result.movement) {
+        throw new CommerceCommandError(
+          result.message ?? 'Unable to adjust product stock.',
+        )
+      }
+
+      await unitOfWork.saveProducts(result.products)
+      await unitOfWork.saveStockMovements([result.movement])
+
+      return {
+        product: result.product,
+        movement: result.movement,
+      }
+    })
+  }
+
+  async createPurchase(
+    command: CreatePurchaseCommand,
+  ): Promise<Purchase> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const now = new Date()
+      const purchase = normalizePurchase({
+        id: crypto.randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        purchaseNumber: command.purchaseNumber,
+        purchaseDate: command.purchaseDate,
+        supplierName: command.supplierName,
+        items: command.items,
+        totalAmount: 0,
+        paymentMethod: command.paymentMethod,
+        status: 'draft',
+        note: command.note,
+      })
+
+      await validateDocumentProducts(unitOfWork, purchase.items)
+      await unitOfWork.insertPurchase(purchase)
+      return purchase
+    })
+  }
+
+  async updatePurchase(
+    purchaseId: string,
+    command: UpdatePurchaseCommand,
+  ): Promise<Purchase> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const purchase = await unitOfWork.findPurchaseById(purchaseId)
+
+      if (!purchase) {
+        throw new CommerceCommandError('Purchase not found.')
+      }
+
+      const updatedPurchase = updatePurchaseCore(purchase, command)
+      await validateDocumentProducts(unitOfWork, updatedPurchase.items)
+      await unitOfWork.updatePurchase(updatedPurchase)
+      return updatedPurchase
+    })
+  }
+
+  async cancelPurchase(purchaseId: string): Promise<Purchase> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const purchase = await unitOfWork.findPurchaseById(purchaseId)
+
+      if (!purchase) {
+        throw new CommerceCommandError('Purchase not found.')
+      }
+
+      const cancelledPurchase = cancelPurchase(purchase)
+      await unitOfWork.updatePurchase(cancelledPurchase)
+      return cancelledPurchase
+    })
+  }
+
+  async createSale(command: CreateSaleCommand): Promise<Sale> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const now = new Date()
+      const sale = normalizeSale({
+        id: crypto.randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        saleNumber: command.saleNumber,
+        saleDate: command.saleDate,
+        clientId: command.clientId,
+        clientName: command.clientName,
+        items: command.items,
+        totalAmount: 0,
+        paymentMethod: command.paymentMethod,
+        status: 'draft',
+        note: command.note,
+      })
+
+      await validateDocumentProducts(unitOfWork, sale.items)
+      await unitOfWork.insertSale(sale)
+      return sale
+    })
+  }
+
+  async updateSale(
+    saleId: string,
+    command: UpdateSaleCommand,
+  ): Promise<Sale> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const sale = await unitOfWork.findSaleById(saleId)
+
+      if (!sale) {
+        throw new CommerceCommandError('Sale not found.')
+      }
+
+      const updatedSale = updateSaleCore(sale, command)
+      await validateDocumentProducts(unitOfWork, updatedSale.items)
+      await unitOfWork.updateSale(updatedSale)
+      return updatedSale
+    })
+  }
+
+  async cancelSale(saleId: string): Promise<Sale> {
+    return this.repository.withTransaction(async (unitOfWork) => {
+      const sale = await unitOfWork.findSaleById(saleId)
+
+      if (!sale) {
+        throw new CommerceCommandError('Sale not found.')
+      }
+
+      const cancelledSale = cancelSale(sale)
+      await unitOfWork.updateSale(cancelledSale)
+      return cancelledSale
+    })
   }
 
   async completePurchase(
@@ -217,6 +464,62 @@ export class CommerceService {
         }
       },
     )
+  }
+}
+
+function pickProductUpdates(
+  command: UpdateProductCommand,
+): UpdateProductCommand {
+  const updates: UpdateProductCommand = {}
+
+  if (command.name !== undefined) updates.name = command.name
+  if (command.category !== undefined) updates.category = command.category
+  if (command.unit !== undefined) updates.unit = command.unit
+  if (command.costPrice !== undefined) updates.costPrice = command.costPrice
+  if (command.salePrice !== undefined) updates.salePrice = command.salePrice
+  if (command.status !== undefined) updates.status = command.status
+
+  return updates
+}
+
+async function findProduct(
+  unitOfWork: CommerceUnitOfWork,
+  productId: string,
+): Promise<Product> {
+  const [product] = await unitOfWork.findProductsByIds([productId])
+
+  if (!product) {
+    throw new CommerceCommandError('Product not found.')
+  }
+
+  return product
+}
+
+async function validateDocumentProducts(
+  unitOfWork: CommerceUnitOfWork,
+  items: Array<{ productId: string; unit: Product['unit'] }>,
+): Promise<void> {
+  const products = await unitOfWork.findProductsByIds(
+    items.map((item) => item.productId),
+  )
+  const productsById = new Map(
+    products.map((product) => [product.id, product]),
+  )
+
+  for (const item of items) {
+    const product = productsById.get(item.productId)
+
+    if (!product) {
+      throw new CommerceCommandError(
+        `Product not found: ${item.productId}.`,
+      )
+    }
+
+    if (product.unit !== item.unit) {
+      throw new CommerceCommandError(
+        `Product unit does not match document item: ${item.productId}.`,
+      )
+    }
   }
 }
 

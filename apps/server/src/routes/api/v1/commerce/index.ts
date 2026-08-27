@@ -1,6 +1,10 @@
 import type {
   ApiErrorResponse,
+  AdjustProductStockRequest,
   CommerceCompletionResponse,
+  CreateProductRequest,
+  CreatePurchaseRequest,
+  CreateSaleRequest,
   ImportCommerceSnapshotRequest,
   ImportCommerceSnapshotResponse,
   ProductResponse,
@@ -10,9 +14,13 @@ import type {
   SaleResponse,
   SalesListResponse,
   StockMovementResponse,
+  StockAdjustmentResponse,
   StockMovementsListResponse,
   TransactionResponse,
   TransactionsListResponse,
+  UpdateProductRequest,
+  UpdatePurchaseRequest,
+  UpdateSaleRequest,
 } from '@madina/api'
 import type {
   CommerceRepository,
@@ -24,7 +32,13 @@ import type {
   StockMovement,
   Transaction,
 } from '@madina/core'
-import { CommerceSnapshotValidationError } from '@madina/core'
+import {
+  CommerceCommandError,
+  CommerceSnapshotValidationError,
+  ProductValidationError,
+  PurchaseValidationError,
+  SaleValidationError,
+} from '@madina/core'
 import type { FastifyInstance } from 'fastify'
 
 interface CommerceRoutesOptions {
@@ -38,6 +52,10 @@ interface PurchaseParams {
 
 interface SaleParams {
   saleId: string
+}
+
+interface ProductParams {
+  productId: string
 }
 
 function toProductResponse(product: Product): ProductResponse {
@@ -194,6 +212,61 @@ function toSnapshotImportError(
   }
 }
 
+function toMutationError(error: Error): ApiErrorResponse {
+  return {
+    statusCode: 400,
+    error: 'Bad Request',
+    message: error.message,
+  }
+}
+
+function isMutationError(error: unknown): error is Error {
+  return error instanceof CommerceCommandError ||
+    error instanceof ProductValidationError ||
+    error instanceof PurchaseValidationError ||
+    error instanceof SaleValidationError
+}
+
+function toCreatePurchaseCommand(input: CreatePurchaseRequest) {
+  return {
+    ...input,
+    purchaseDate: parseDate(input.purchaseDate, 'Purchase date'),
+  }
+}
+
+function toUpdatePurchaseCommand(input: UpdatePurchaseRequest) {
+  const { purchaseDate, ...command } = input
+
+  return Object.hasOwn(input, 'purchaseDate')
+    ? {
+      ...command,
+      purchaseDate: purchaseDate
+        ? parseDate(purchaseDate, 'Purchase date')
+        : undefined,
+    }
+    : command
+}
+
+function toCreateSaleCommand(input: CreateSaleRequest) {
+  return {
+    ...input,
+    saleDate: parseDate(input.saleDate, 'Sale date'),
+  }
+}
+
+function toUpdateSaleCommand(input: UpdateSaleRequest) {
+  const { saleDate, ...command } = input
+
+  return Object.hasOwn(input, 'saleDate')
+    ? {
+      ...command,
+      saleDate: saleDate
+        ? parseDate(saleDate, 'Sale date')
+        : undefined,
+    }
+    : command
+}
+
 export async function commerceRoutes(
   app: FastifyInstance,
   options: CommerceRoutesOptions,
@@ -204,6 +277,95 @@ export async function commerceRoutes(
       products: (await options.commerceRepository.findAllProducts())
         .map(toProductResponse),
     }),
+  )
+
+  app.post<{
+    Body: CreateProductRequest
+  }>(
+    '/products',
+    async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
+      try {
+        const product = await options.commerceService.createProduct(
+          request.body,
+        )
+        reply.code(201)
+        return toProductResponse(product)
+      } catch (error) {
+        if (isMutationError(error)) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.patch<{
+    Params: ProductParams
+    Body: UpdateProductRequest
+  }>(
+    '/products/:productId',
+    async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
+      try {
+        const product = await options.commerceService.updateProduct(
+          request.params.productId,
+          request.body,
+        )
+        return toProductResponse(product)
+      } catch (error) {
+        if (isMutationError(error)) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Params: ProductParams
+  }>(
+    '/products/:productId/deactivate',
+    async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
+      try {
+        return toProductResponse(
+          await options.commerceService.deactivateProduct(
+            request.params.productId,
+          ),
+        )
+      } catch (error) {
+        if (isMutationError(error)) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Params: ProductParams
+    Body: AdjustProductStockRequest
+  }>(
+    '/products/:productId/stock-adjustments',
+    async (request, reply): Promise<StockAdjustmentResponse | ApiErrorResponse> => {
+      try {
+        const result = await options.commerceService.adjustProductStock(
+          request.params.productId,
+          request.body,
+        )
+        return {
+          product: toProductResponse(result.product),
+          stockMovement: toStockMovementResponse(result.movement),
+        }
+      } catch (error) {
+        if (isMutationError(error)) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
   )
 
   app.get(
@@ -262,6 +424,69 @@ export async function commerceRoutes(
     },
   )
 
+  app.post<{
+    Body: CreatePurchaseRequest
+  }>(
+    '/purchases',
+    async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
+      try {
+        const purchase = await options.commerceService.createPurchase(
+          toCreatePurchaseCommand(request.body),
+        )
+        reply.code(201)
+        return toPurchaseResponse(purchase)
+      } catch (error) {
+        if (isMutationError(error) || error instanceof CommerceSnapshotValidationError) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.patch<{
+    Params: PurchaseParams
+    Body: UpdatePurchaseRequest
+  }>(
+    '/purchases/:purchaseId',
+    async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
+      try {
+        return toPurchaseResponse(
+          await options.commerceService.updatePurchase(
+            request.params.purchaseId,
+            toUpdatePurchaseCommand(request.body),
+          ),
+        )
+      } catch (error) {
+        if (isMutationError(error) || error instanceof CommerceSnapshotValidationError) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Params: PurchaseParams
+  }>(
+    '/purchases/:purchaseId/cancel',
+    async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
+      try {
+        return toPurchaseResponse(
+          await options.commerceService.cancelPurchase(request.params.purchaseId),
+        )
+      } catch (error) {
+        if (isMutationError(error)) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
   app.post<{ Params: PurchaseParams }>(
     '/purchases/:purchaseId/complete',
     async (request, reply): Promise<CommerceCompletionResponse> => {
@@ -296,6 +521,69 @@ export async function commerceRoutes(
         success: result.success,
         idempotent: result.idempotent,
         message: result.message,
+      }
+    },
+  )
+
+  app.post<{
+    Body: CreateSaleRequest
+  }>(
+    '/sales',
+    async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
+      try {
+        const sale = await options.commerceService.createSale(
+          toCreateSaleCommand(request.body),
+        )
+        reply.code(201)
+        return toSaleResponse(sale)
+      } catch (error) {
+        if (isMutationError(error) || error instanceof CommerceSnapshotValidationError) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.patch<{
+    Params: SaleParams
+    Body: UpdateSaleRequest
+  }>(
+    '/sales/:saleId',
+    async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
+      try {
+        return toSaleResponse(
+          await options.commerceService.updateSale(
+            request.params.saleId,
+            toUpdateSaleCommand(request.body),
+          ),
+        )
+      } catch (error) {
+        if (isMutationError(error) || error instanceof CommerceSnapshotValidationError) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Params: SaleParams
+  }>(
+    '/sales/:saleId/cancel',
+    async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
+      try {
+        return toSaleResponse(
+          await options.commerceService.cancelSale(request.params.saleId),
+        )
+      } catch (error) {
+        if (isMutationError(error)) {
+          reply.code(400)
+          return toMutationError(error)
+        }
+        throw error
       }
     },
   )

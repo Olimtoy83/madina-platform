@@ -12,6 +12,60 @@ export interface CommerceCompletionResponse {
   message?: string
 }
 
+export interface CreateProductRequest {
+  name: string
+  category: ProductResponse['category']
+  unit: ProductResponse['unit']
+  costPrice: number
+  salePrice: number
+  status: ProductResponse['status']
+  initialQuantity: number
+}
+
+export type UpdateProductRequest = Partial<Pick<
+  CreateProductRequest,
+  'name' | 'category' | 'unit' | 'costPrice' | 'salePrice' | 'status'
+>>
+
+export interface AdjustProductStockRequest {
+  quantity: number
+  note?: string
+}
+
+export interface StockAdjustmentResponse {
+  product: ProductResponse
+  stockMovement: StockMovementResponse
+}
+
+export interface CreatePurchaseRequest {
+  purchaseNumber: string
+  purchaseDate: string
+  supplierName: string
+  items: PurchaseResponse['items']
+  paymentMethod: PurchaseResponse['paymentMethod']
+  note?: string
+}
+
+export type UpdatePurchaseRequest = Partial<Pick<
+  CreatePurchaseRequest,
+  'purchaseDate' | 'supplierName' | 'items' | 'paymentMethod' | 'note'
+>>
+
+export interface CreateSaleRequest {
+  saleNumber: string
+  saleDate: string
+  clientId?: string
+  clientName: string
+  items: SaleResponse['items']
+  paymentMethod: SaleResponse['paymentMethod']
+  note?: string
+}
+
+export type UpdateSaleRequest = Partial<Pick<
+  CreateSaleRequest,
+  'saleDate' | 'clientId' | 'clientName' | 'items' | 'paymentMethod' | 'note'
+>>
+
 export interface ProductResponse {
   id: string
   createdAt: string

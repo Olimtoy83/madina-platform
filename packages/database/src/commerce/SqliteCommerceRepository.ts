@@ -325,18 +325,131 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
     }
   }
 
+  async insertProduct(product: Product): Promise<void> {
+    this.database.prepare(`
+      INSERT INTO products (
+        id, created_at, updated_at, name, category, quantity, unit,
+        cost_price, sale_price, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      product.id, product.createdAt.toISOString(),
+      product.updatedAt.toISOString(), product.name, product.category,
+      product.quantity, product.unit, product.costPrice, product.salePrice,
+      product.status,
+    )
+  }
+
+  async insertPurchase(purchase: Purchase): Promise<void> {
+    this.database.prepare(`
+      INSERT INTO purchases (
+        id, created_at, updated_at, purchase_number, purchase_date,
+        supplier_name, total_amount, payment_method, status, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      purchase.id, purchase.createdAt.toISOString(),
+      purchase.updatedAt.toISOString(), purchase.purchaseNumber,
+      purchase.purchaseDate.toISOString(), purchase.supplierName,
+      purchase.totalAmount, purchase.paymentMethod, purchase.status,
+      purchase.note ?? null,
+    )
+
+    const statement = this.database.prepare(`
+      INSERT INTO purchase_items (
+        purchase_id, product_id, quantity, unit, unit_cost, total_cost
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const item of purchase.items) {
+      statement.run(
+        purchase.id, item.productId, item.quantity, item.unit,
+        item.unitCost, item.totalCost,
+      )
+    }
+  }
+
+  async insertSale(sale: Sale): Promise<void> {
+    this.database.prepare(`
+      INSERT INTO sales (
+        id, created_at, updated_at, sale_number, sale_date, client_id,
+        client_name, total_amount, payment_method, status, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      sale.id, sale.createdAt.toISOString(), sale.updatedAt.toISOString(),
+      sale.saleNumber, sale.saleDate.toISOString(), sale.clientId ?? null,
+      sale.clientName, sale.totalAmount, sale.paymentMethod, sale.status,
+      sale.note ?? null,
+    )
+
+    const statement = this.database.prepare(`
+      INSERT INTO sale_items (
+        sale_id, product_id, quantity, unit, unit_price, total_amount
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const item of sale.items) {
+      statement.run(
+        sale.id, item.productId, item.quantity, item.unit,
+        item.unitPrice, item.totalAmount,
+      )
+    }
+  }
+
   async updatePurchase(purchase: Purchase): Promise<void> {
     this.database.prepare(`
-      UPDATE purchases SET updated_at = ?, status = ? WHERE id = ?
+      UPDATE purchases SET updated_at = ?, purchase_date = ?,
+        supplier_name = ?, total_amount = ?, payment_method = ?, status = ?,
+        note = ? WHERE id = ?
     `).run(
-      purchase.updatedAt.toISOString(), purchase.status, purchase.id,
+      purchase.updatedAt.toISOString(), purchase.purchaseDate.toISOString(),
+      purchase.supplierName, purchase.totalAmount, purchase.paymentMethod,
+      purchase.status, purchase.note ?? null, purchase.id,
     )
+
+    this.database.prepare(
+      'DELETE FROM purchase_items WHERE purchase_id = ?',
+    ).run(purchase.id)
+
+    const statement = this.database.prepare(`
+      INSERT INTO purchase_items (
+        purchase_id, product_id, quantity, unit, unit_cost, total_cost
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const item of purchase.items) {
+      statement.run(
+        purchase.id, item.productId, item.quantity, item.unit,
+        item.unitCost, item.totalCost,
+      )
+    }
   }
 
   async updateSale(sale: Sale): Promise<void> {
     this.database.prepare(`
-      UPDATE sales SET updated_at = ?, status = ? WHERE id = ?
-    `).run(sale.updatedAt.toISOString(), sale.status, sale.id)
+      UPDATE sales SET updated_at = ?, sale_date = ?, client_id = ?,
+        client_name = ?, total_amount = ?, payment_method = ?, status = ?,
+        note = ? WHERE id = ?
+    `).run(
+      sale.updatedAt.toISOString(), sale.saleDate.toISOString(),
+      sale.clientId ?? null, sale.clientName, sale.totalAmount,
+      sale.paymentMethod, sale.status, sale.note ?? null, sale.id,
+    )
+
+    this.database.prepare(
+      'DELETE FROM sale_items WHERE sale_id = ?',
+    ).run(sale.id)
+
+    const statement = this.database.prepare(`
+      INSERT INTO sale_items (
+        sale_id, product_id, quantity, unit, unit_price, total_amount
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const item of sale.items) {
+      statement.run(
+        sale.id, item.productId, item.quantity, item.unit,
+        item.unitPrice, item.totalAmount,
+      )
+    }
   }
 
   async saveStockMovements(movements: StockMovement[]): Promise<void> {

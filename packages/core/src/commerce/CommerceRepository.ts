@@ -31,6 +31,9 @@ export interface CommerceUnitOfWork
     referenceId: string,
   ): Promise<StockMovement[]>
   saveProducts(products: Product[]): Promise<void>
+  insertProduct(product: Product): Promise<void>
+  insertPurchase(purchase: Purchase): Promise<void>
+  insertSale(sale: Sale): Promise<void>
   updatePurchase(purchase: Purchase): Promise<void>
   updateSale(sale: Sale): Promise<void>
   saveStockMovements(

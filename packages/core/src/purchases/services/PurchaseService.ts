@@ -61,6 +61,22 @@ export function updatePurchase(
   })
 }
 
+export function cancelPurchase(
+  purchase: Purchase,
+): Purchase {
+  if (purchase.status !== 'draft') {
+    throw new PurchaseValidationError(
+      'Можно отменить только черновик поступления.',
+    )
+  }
+
+  return {
+    ...purchase,
+    status: 'cancelled',
+    updatedAt: new Date(),
+  }
+}
+
 export function normalizePurchase(
   purchase: Purchase,
 ): Purchase {
