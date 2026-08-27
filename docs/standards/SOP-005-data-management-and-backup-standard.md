@@ -387,6 +387,60 @@ Restore Test
 
 ---
 
+# SQLite Operational Backup and Offline Restore Runbook
+
+This runbook applies to the current server-backed SQLite database.
+
+## Security and Storage
+
+- Set `DATABASE_FILE` to the absolute production database path.
+- Set `MADINA_BACKUP_DIR` to an absolute directory outside the repository and outside synchronized or shared folders.
+- Backups contain business data, password hashes, salts, and active session records. Treat every backup as a security-sensitive artifact.
+- Do not commit backups to Git or print their contents in logs.
+
+## Verified Backup
+
+Create a verified online backup with:
+
+```powershell
+$env:DATABASE_FILE = 'C:\absolute\path\madina.sqlite'
+$env:MADINA_BACKUP_DIR = 'C:\absolute\path\madina-backups'
+pnpm --filter server db:backup
+```
+
+The command requires an existing source database, validates source and backup with `PRAGMA integrity_check` and `PRAGMA foreign_key_check`, and never overwrites an existing backup. It creates collision-safe files named `madina-YYYYMMDDTHHMMSSZ.sqlite`, with a numeric suffix when needed.
+
+## Deployment and Migration Order
+
+1. Stop or quiesce the server.
+2. Run `pnpm --filter server db:check` against the production database.
+3. Run `pnpm --filter server db:backup`.
+4. Deploy the application; startup applies and verifies migrations.
+5. Run `db:check` again.
+6. Start and confirm the server.
+
+Do not automate migration rollback by replacing the database from a backup.
+
+## Controlled Offline Restore
+
+There is intentionally no restore CLI. Restore only while the server is stopped.
+
+1. Record the absolute `DATABASE_FILE` and select a verified backup.
+2. Run `db:check` with `DATABASE_FILE` set to the backup.
+3. Preserve the current production database as a separate recovery copy; do not overwrite it before backup validation.
+4. Replace the production database file only while the server is offline.
+5. Start the application once so `initializeDatabase` applies any later migrations.
+6. Run `db:check` against the restored production database.
+7. Start and confirm the server only after successful validation.
+
+This procedure assumes the current SQLite `DELETE` journal mode. It must be revised before any future WAL activation because WAL and SHM sidecar files need coordinated handling.
+
+## Legacy Browser Migration Markers
+
+Restoring an old or empty server database while a browser retains a `done` legacy migration marker can skip Clients, Tasks, or Commerce import. Do not reset browser markers automatically and do not treat an old browser snapshot as an unconditional recovery source. Prefer restoring a verified server backup; use a controlled, per-browser recovery procedure only after validating the legacy data.
+
+---
+
 # Recovery Strategy
 
 In case of data failure:
