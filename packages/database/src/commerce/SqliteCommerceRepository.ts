@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import type {
   CommerceRepository,
+  CommerceSnapshot,
   CommerceUnitOfWork,
   Product,
   Purchase,
@@ -254,6 +255,60 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
     return rows.map(toStockMovement)
   }
 
+  async findAllProducts(): Promise<Product[]> {
+    const rows = this.database.prepare(`
+      SELECT id, created_at, updated_at, name, category, quantity,
+        unit, cost_price, sale_price, status
+      FROM products ORDER BY name COLLATE NOCASE, id
+    `).all() as unknown as ProductRow[]
+
+    return rows.map(toProduct)
+  }
+
+  async findAllStockMovements(): Promise<StockMovement[]> {
+    const rows = this.database.prepare(`
+      SELECT id, created_at, updated_at, product_id, type, quantity, unit,
+        reference_id, note
+      FROM stock_movements ORDER BY created_at DESC, id DESC
+    `).all() as unknown as StockMovementRow[]
+
+    return rows.map(toStockMovement)
+  }
+
+  async findAllPurchases(): Promise<Purchase[]> {
+    const rows = this.database.prepare(`
+      SELECT id FROM purchases ORDER BY purchase_date DESC, id DESC
+    `).all() as unknown as Array<{ id: string }>
+    const purchases = await Promise.all(rows.map((row) =>
+      this.findPurchaseById(row.id),
+    ))
+
+    return purchases.filter((purchase): purchase is Purchase =>
+      purchase !== undefined,
+    )
+  }
+
+  async findAllSales(): Promise<Sale[]> {
+    const rows = this.database.prepare(`
+      SELECT id FROM sales ORDER BY sale_date DESC, id DESC
+    `).all() as unknown as Array<{ id: string }>
+    const sales = await Promise.all(rows.map((row) =>
+      this.findSaleById(row.id),
+    ))
+
+    return sales.filter((sale): sale is Sale => sale !== undefined)
+  }
+
+  async findAllTransactions(): Promise<Transaction[]> {
+    const rows = this.database.prepare(`
+      SELECT id, created_at, updated_at, type, category, amount,
+        payment_method, transaction_date, reference_id, description, status
+      FROM transactions ORDER BY transaction_date DESC, id DESC
+    `).all() as unknown as TransactionRow[]
+
+    return rows.map(toTransaction)
+  }
+
   async saveProducts(products: Product[]): Promise<void> {
     const statement = this.database.prepare(`
       UPDATE products SET updated_at = ?, name = ?, category = ?, quantity = ?,
@@ -315,6 +370,115 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
       transaction.transactionDate.toISOString(), transaction.referenceId ?? null,
       transaction.description ?? null, transaction.status,
     )
+  }
+
+  async insertSnapshot(snapshot: CommerceSnapshot): Promise<void> {
+    const productStatement = this.database.prepare(`
+      INSERT INTO products (
+        id, created_at, updated_at, name, category, quantity, unit,
+        cost_price, sale_price, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const product of snapshot.products) {
+      productStatement.run(
+        product.id, product.createdAt.toISOString(),
+        product.updatedAt.toISOString(), product.name, product.category,
+        product.quantity, product.unit, product.costPrice, product.salePrice,
+        product.status,
+      )
+    }
+
+    const purchaseStatement = this.database.prepare(`
+      INSERT INTO purchases (
+        id, created_at, updated_at, purchase_number, purchase_date,
+        supplier_name, total_amount, payment_method, status, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    const purchaseItemStatement = this.database.prepare(`
+      INSERT INTO purchase_items (
+        purchase_id, product_id, quantity, unit, unit_cost, total_cost
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const purchase of snapshot.purchases) {
+      purchaseStatement.run(
+        purchase.id, purchase.createdAt.toISOString(),
+        purchase.updatedAt.toISOString(), purchase.purchaseNumber,
+        purchase.purchaseDate.toISOString(), purchase.supplierName,
+        purchase.totalAmount, purchase.paymentMethod, purchase.status,
+        purchase.note ?? null,
+      )
+
+      for (const item of purchase.items) {
+        purchaseItemStatement.run(
+          purchase.id, item.productId, item.quantity, item.unit,
+          item.unitCost, item.totalCost,
+        )
+      }
+    }
+
+    const saleStatement = this.database.prepare(`
+      INSERT INTO sales (
+        id, created_at, updated_at, sale_number, sale_date, client_id,
+        client_name, total_amount, payment_method, status, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    const saleItemStatement = this.database.prepare(`
+      INSERT INTO sale_items (
+        sale_id, product_id, quantity, unit, unit_price, total_amount
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const sale of snapshot.sales) {
+      saleStatement.run(
+        sale.id, sale.createdAt.toISOString(), sale.updatedAt.toISOString(),
+        sale.saleNumber, sale.saleDate.toISOString(), sale.clientId ?? null,
+        sale.clientName, sale.totalAmount, sale.paymentMethod, sale.status,
+        sale.note ?? null,
+      )
+
+      for (const item of sale.items) {
+        saleItemStatement.run(
+          sale.id, item.productId, item.quantity, item.unit,
+          item.unitPrice, item.totalAmount,
+        )
+      }
+    }
+
+    const movementStatement = this.database.prepare(`
+      INSERT INTO stock_movements (
+        id, created_at, updated_at, product_id, type, quantity, unit,
+        reference_id, note
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const movement of snapshot.stockMovements) {
+      movementStatement.run(
+        movement.id, movement.createdAt.toISOString(),
+        movement.updatedAt.toISOString(), movement.productId, movement.type,
+        movement.quantity, movement.unit, movement.referenceId ?? null,
+        movement.note ?? null,
+      )
+    }
+
+    const transactionStatement = this.database.prepare(`
+      INSERT INTO transactions (
+        id, created_at, updated_at, type, category, amount, payment_method,
+        transaction_date, reference_id, description, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    for (const transaction of snapshot.transactions) {
+      transactionStatement.run(
+        transaction.id, transaction.createdAt.toISOString(),
+        transaction.updatedAt.toISOString(), transaction.type,
+        transaction.category, transaction.amount, transaction.paymentMethod,
+        transaction.transactionDate.toISOString(),
+        transaction.referenceId ?? null, transaction.description ?? null,
+        transaction.status,
+      )
+    }
   }
 }
 

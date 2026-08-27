@@ -97,3 +97,16 @@ export interface StockMovementsListResponse { stockMovements: StockMovementRespo
 export interface PurchasesListResponse { purchases: PurchaseResponse[] }
 export interface SalesListResponse { sales: SaleResponse[] }
 export interface TransactionsListResponse { transactions: TransactionResponse[] }
+
+export interface ImportCommerceSnapshotRequest {
+  products: ProductResponse[]
+  stockMovements: StockMovementResponse[]
+  purchases: PurchaseResponse[]
+  sales: SaleResponse[]
+  transactions: TransactionResponse[]
+}
+
+export interface ImportCommerceSnapshotResponse {
+  imported: boolean
+  idempotent: boolean
+}

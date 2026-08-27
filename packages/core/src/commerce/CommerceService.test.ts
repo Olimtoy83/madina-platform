@@ -10,6 +10,7 @@ import type {
   CommerceRepository,
   CommerceUnitOfWork,
 } from './CommerceRepository.js'
+import type { CommerceSnapshot } from './CommerceSnapshot.js'
 import { CommerceService } from './CommerceService.js'
 
 function createProduct(quantity = 10): Product {
@@ -82,6 +83,26 @@ class InMemoryCommerceRepository implements CommerceRepository {
   movements: StockMovement[] = []
   transactions: Transaction[] = []
 
+  async findAllProducts(): Promise<Product[]> {
+    return this.products
+  }
+
+  async findAllStockMovements(): Promise<StockMovement[]> {
+    return this.movements
+  }
+
+  async findAllPurchases(): Promise<Purchase[]> {
+    return this.purchases
+  }
+
+  async findAllSales(): Promise<Sale[]> {
+    return this.sales
+  }
+
+  async findAllTransactions(): Promise<Transaction[]> {
+    return this.transactions
+  }
+
   async withTransaction<T>(
     operation: (unitOfWork: CommerceUnitOfWork) => Promise<T>,
   ): Promise<T> {
@@ -104,6 +125,11 @@ class InMemoryCommerceRepository implements CommerceRepository {
         this.movements.filter((movement) =>
           movement.referenceId === referenceId,
         ),
+      findAllProducts: () => this.findAllProducts(),
+      findAllStockMovements: () => this.findAllStockMovements(),
+      findAllPurchases: () => this.findAllPurchases(),
+      findAllSales: () => this.findAllSales(),
+      findAllTransactions: () => this.findAllTransactions(),
       saveProducts: async (products) => {
         this.products = products
       },
@@ -122,6 +148,13 @@ class InMemoryCommerceRepository implements CommerceRepository {
       },
       saveTransaction: async (transaction) => {
         this.transactions.push(transaction)
+      },
+      insertSnapshot: async (snapshot: CommerceSnapshot) => {
+        this.products = snapshot.products
+        this.movements = snapshot.stockMovements
+        this.purchases = snapshot.purchases
+        this.sales = snapshot.sales
+        this.transactions = snapshot.transactions
       },
     })
   }

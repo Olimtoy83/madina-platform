@@ -10,6 +10,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import type {
+  ImportCommerceSnapshotRequest,
+} from '@madina/api'
+import type {
   Product,
   Purchase,
   Sale,
@@ -118,6 +121,78 @@ async function getJson(
   const response = await app.inject({ method: 'GET', url })
   equal(response.statusCode, 200)
   return response.json() as Record<string, unknown>
+}
+
+function createSnapshot(): ImportCommerceSnapshotRequest {
+  const timestamp = now.toISOString()
+
+  return {
+    products: [{
+      id: 'product-1',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      name: 'Финики',
+      category: 'dates',
+      quantity: 5,
+      unit: 'kg',
+      costPrice: 10,
+      salePrice: 15,
+      status: 'active',
+    }],
+    stockMovements: [{
+      id: 'movement-1',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      productId: 'product-1',
+      type: 'purchase',
+      quantity: 5,
+      unit: 'kg',
+      referenceId: 'purchase-1',
+    }],
+    purchases: [{
+      id: 'purchase-1',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      purchaseNumber: 'PUR-0001',
+      purchaseDate: timestamp,
+      supplierName: 'Поставщик',
+      items: [{
+        productId: 'product-1',
+        quantity: 5,
+        unit: 'kg',
+        unitCost: 10,
+        totalCost: 50,
+      }],
+      totalAmount: 50,
+      paymentMethod: 'cash',
+      status: 'completed',
+    }],
+    sales: [],
+    transactions: [{
+      id: 'transaction-1',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      type: 'expense',
+      category: 'purchase',
+      amount: 50,
+      paymentMethod: 'cash',
+      transactionDate: timestamp,
+      referenceId: 'purchase-1',
+      description: 'Поступление PUR-0001',
+      status: 'completed',
+    }],
+  }
+}
+
+async function importSnapshot(
+  app: FastifyInstance,
+  snapshot: ImportCommerceSnapshotRequest,
+) {
+  return app.inject({
+    method: 'POST',
+    url: '/api/v1/commerce/import',
+    payload: snapshot,
+  })
 }
 
 test('commerce routes return the persisted read model', async () => {
@@ -288,6 +363,145 @@ test('commerce routes roll back an insufficient-stock sale', async () => {
       equal((sales.sales as Array<{ status: string }>)[0]?.status, 'draft')
       deepEqual(movements.stockMovements, [])
       deepEqual(transactions.transactions, [])
+    },
+  )
+})
+
+test('commerce routes import a full transactional snapshot', async () => {
+  await withApp(
+    async () => {},
+    async (app) => {
+      const response = await importSnapshot(app, createSnapshot())
+
+      equal(response.statusCode, 200)
+      deepEqual(response.json(), {
+        imported: true,
+        idempotent: false,
+      })
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      const movements = await getJson(
+        app,
+        '/api/v1/commerce/stock-movements',
+      )
+      const purchases = await getJson(app, '/api/v1/commerce/purchases')
+      const sales = await getJson(app, '/api/v1/commerce/sales')
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+
+      equal((products.products as unknown[]).length, 1)
+      equal((movements.stockMovements as unknown[]).length, 1)
+      equal((purchases.purchases as unknown[]).length, 1)
+      deepEqual(sales.sales, [])
+      equal((transactions.transactions as unknown[]).length, 1)
+      equal(
+        (products.products as Array<{ createdAt: string }>)[0]?.createdAt,
+        now.toISOString(),
+      )
+      equal(
+        (purchases.purchases as Array<{ status: string }>)[0]?.status,
+        'completed',
+      )
+      equal(
+        (movements.stockMovements as Array<{ referenceId: string }>)[0]?.referenceId,
+        'purchase-1',
+      )
+    },
+  )
+})
+
+test('commerce snapshot import validates product balances and rolls back', async () => {
+  await withApp(
+    async () => {},
+    async (app) => {
+      const snapshot = createSnapshot()
+      snapshot.products[0]!.quantity = 4
+
+      const response = await importSnapshot(app, snapshot)
+      equal(response.statusCode, 400)
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      const purchases = await getJson(app, '/api/v1/commerce/purchases')
+      const movements = await getJson(
+        app,
+        '/api/v1/commerce/stock-movements',
+      )
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+
+      deepEqual(products.products, [])
+      deepEqual(purchases.purchases, [])
+      deepEqual(movements.stockMovements, [])
+      deepEqual(transactions.transactions, [])
+    },
+  )
+})
+
+test('commerce snapshot import rejects broken entity references', async () => {
+  await withApp(
+    async () => {},
+    async (app) => {
+      const snapshot = createSnapshot()
+      snapshot.purchases[0]!.items[0]!.productId = 'missing-product'
+
+      const response = await importSnapshot(app, snapshot)
+      equal(response.statusCode, 400)
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      deepEqual(products.products, [])
+    },
+  )
+})
+
+test('commerce snapshot import rejects duplicate transaction references', async () => {
+  await withApp(
+    async () => {},
+    async (app) => {
+      const snapshot = createSnapshot()
+      snapshot.transactions.push({
+        ...snapshot.transactions[0]!,
+        id: 'transaction-2',
+      })
+
+      const response = await importSnapshot(app, snapshot)
+      equal(response.statusCode, 400)
+
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+      deepEqual(transactions.transactions, [])
+    },
+  )
+})
+
+test('commerce snapshot import is idempotent and never overwrites state', async () => {
+  await withApp(
+    async () => {},
+    async (app) => {
+      const snapshot = createSnapshot()
+      const first = await importSnapshot(app, snapshot)
+      const repeated = await importSnapshot(app, snapshot)
+      const conflictingSnapshot = createSnapshot()
+      conflictingSnapshot.products[0]!.name = 'Другие финики'
+      const conflicting = await importSnapshot(app, conflictingSnapshot)
+
+      equal(first.statusCode, 200)
+      deepEqual(repeated.json(), {
+        imported: false,
+        idempotent: true,
+      })
+      equal(conflicting.statusCode, 400)
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      equal(
+        (products.products as Array<{ name: string }>)[0]?.name,
+        'Финики',
+      )
     },
   )
 })

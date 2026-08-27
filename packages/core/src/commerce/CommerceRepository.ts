@@ -2,8 +2,18 @@ import type { Product, StockMovement } from '../inventory/index.js'
 import type { Purchase } from '../purchases/index.js'
 import type { Sale } from '../sales/index.js'
 import type { Transaction } from '../transactions/index.js'
+import type { CommerceSnapshot } from './CommerceSnapshot.js'
 
-export interface CommerceUnitOfWork {
+export interface CommerceReadRepository {
+  findAllProducts(): Promise<Product[]>
+  findAllStockMovements(): Promise<StockMovement[]>
+  findAllPurchases(): Promise<Purchase[]>
+  findAllSales(): Promise<Sale[]>
+  findAllTransactions(): Promise<Transaction[]>
+}
+
+export interface CommerceUnitOfWork
+  extends CommerceReadRepository {
   findProductsByIds(
     productIds: string[],
   ): Promise<Product[]>
@@ -29,14 +39,7 @@ export interface CommerceUnitOfWork {
   saveTransaction(
     transaction: Transaction,
   ): Promise<void>
-}
-
-export interface CommerceReadRepository {
-  findAllProducts(): Promise<Product[]>
-  findAllStockMovements(): Promise<StockMovement[]>
-  findAllPurchases(): Promise<Purchase[]>
-  findAllSales(): Promise<Sale[]>
-  findAllTransactions(): Promise<Transaction[]>
+  insertSnapshot(snapshot: CommerceSnapshot): Promise<void>
 }
 
 export interface CommerceRepository

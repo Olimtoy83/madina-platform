@@ -25,6 +25,8 @@ export type {
   PurchasesListResponse,
   SalesListResponse,
   TransactionsListResponse,
+  ImportCommerceSnapshotRequest,
+  ImportCommerceSnapshotResponse,
 } from './commerce/index.js'
 export type {
   CreateTaskRequest,

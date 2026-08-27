@@ -1,5 +1,8 @@
 import type {
+  ApiErrorResponse,
   CommerceCompletionResponse,
+  ImportCommerceSnapshotRequest,
+  ImportCommerceSnapshotResponse,
   ProductResponse,
   ProductsListResponse,
   PurchaseResponse,
@@ -14,12 +17,14 @@ import type {
 import type {
   CommerceRepository,
   CommerceService,
+  CommerceSnapshot,
   Product,
   Purchase,
   Sale,
   StockMovement,
   Transaction,
 } from '@madina/core'
+import { CommerceSnapshotValidationError } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
 
 interface CommerceRoutesOptions {
@@ -129,6 +134,66 @@ function toTransactionResponse(
   }
 }
 
+function parseDate(value: string, fieldName: string): Date {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    throw new CommerceSnapshotValidationError(
+      `${fieldName} is invalid.`,
+    )
+  }
+
+  return date
+}
+
+function toCommerceSnapshot(
+  input: ImportCommerceSnapshotRequest,
+): CommerceSnapshot {
+  return {
+    products: input.products.map((product) => ({
+      ...product,
+      createdAt: parseDate(product.createdAt, 'Product createdAt'),
+      updatedAt: parseDate(product.updatedAt, 'Product updatedAt'),
+    })),
+    stockMovements: input.stockMovements.map((movement) => ({
+      ...movement,
+      createdAt: parseDate(movement.createdAt, 'Stock movement createdAt'),
+      updatedAt: parseDate(movement.updatedAt, 'Stock movement updatedAt'),
+    })),
+    purchases: input.purchases.map((purchase) => ({
+      ...purchase,
+      createdAt: parseDate(purchase.createdAt, 'Purchase createdAt'),
+      updatedAt: parseDate(purchase.updatedAt, 'Purchase updatedAt'),
+      purchaseDate: parseDate(purchase.purchaseDate, 'Purchase date'),
+    })),
+    sales: input.sales.map((sale) => ({
+      ...sale,
+      createdAt: parseDate(sale.createdAt, 'Sale createdAt'),
+      updatedAt: parseDate(sale.updatedAt, 'Sale updatedAt'),
+      saleDate: parseDate(sale.saleDate, 'Sale date'),
+    })),
+    transactions: input.transactions.map((transaction) => ({
+      ...transaction,
+      createdAt: parseDate(transaction.createdAt, 'Transaction createdAt'),
+      updatedAt: parseDate(transaction.updatedAt, 'Transaction updatedAt'),
+      transactionDate: parseDate(
+        transaction.transactionDate,
+        'Transaction date',
+      ),
+    })),
+  }
+}
+
+function toSnapshotImportError(
+  error: CommerceSnapshotValidationError,
+): ApiErrorResponse {
+  return {
+    statusCode: 400,
+    error: 'Bad Request',
+    message: error.message,
+  }
+}
+
 export async function commerceRoutes(
   app: FastifyInstance,
   options: CommerceRoutesOptions,
@@ -172,6 +237,29 @@ export async function commerceRoutes(
       transactions: (await options.commerceRepository.findAllTransactions())
         .map(toTransactionResponse),
     }),
+  )
+
+  app.post<{
+    Body: ImportCommerceSnapshotRequest
+  }>(
+    '/import',
+    async (
+      request,
+      reply,
+    ): Promise<ImportCommerceSnapshotResponse | ApiErrorResponse> => {
+      try {
+        return await options.commerceService.importSnapshot(
+          toCommerceSnapshot(request.body),
+        )
+      } catch (error) {
+        if (error instanceof CommerceSnapshotValidationError) {
+          reply.code(400)
+          return toSnapshotImportError(error)
+        }
+
+        throw error
+      }
+    },
   )
 
   app.post<{ Params: PurchaseParams }>(
