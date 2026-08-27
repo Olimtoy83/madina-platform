@@ -97,6 +97,17 @@ export class SqliteAuthRepository implements AuthRepository {
     applyMigrations(this.database, authMigrations)
   }
 
+  async findAllUsers(): Promise<User[]> {
+    const rows = this.database.prepare(`
+      SELECT id, username, normalized_username, email, role, status,
+        session_version, created_at, updated_at
+      FROM users
+      ORDER BY normalized_username, id
+    `).all() as unknown as UserRow[]
+
+    return rows.map(toUser)
+  }
+
   async findUserById(userId: string): Promise<User | undefined> {
     const row = this.database.prepare(`
       SELECT id, username, normalized_username, email, role, status,
@@ -115,6 +126,16 @@ export class SqliteAuthRepository implements AuthRepository {
         session_version, created_at, updated_at
       FROM users WHERE normalized_username = ?
     `).get(normalizedUsername) as UserRow | undefined
+
+    return row ? toUser(row) : undefined
+  }
+
+  async findUserByEmail(email: string): Promise<User | undefined> {
+    const row = this.database.prepare(`
+      SELECT id, username, normalized_username, email, role, status,
+        session_version, created_at, updated_at
+      FROM users WHERE email = ?
+    `).get(email) as UserRow | undefined
 
     return row ? toUser(row) : undefined
   }
@@ -284,6 +305,32 @@ export class SqliteAuthRepository implements AuthRepository {
     this.database.prepare(`
       UPDATE auth_sessions SET revoked_at = ? WHERE id = ?
     `).run(revokedAt.toISOString(), sessionId)
+  }
+
+  async revokeSessionsByUserId(
+    userId: string,
+    revokedAt: Date,
+  ): Promise<void> {
+    this.database.prepare(`
+      UPDATE auth_sessions
+      SET revoked_at = ?
+      WHERE user_id = ? AND revoked_at IS NULL
+    `).run(revokedAt.toISOString(), userId)
+  }
+
+  async withUserManagementTransaction<T>(
+    operation: (unitOfWork: AuthRepository) => Promise<T>,
+  ): Promise<T> {
+    this.database.exec('BEGIN IMMEDIATE')
+
+    try {
+      const result = await operation(this)
+      this.database.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
   }
 
   close(): void {

@@ -155,3 +155,23 @@ test('SqliteAuthRepository rolls back a failed first-admin creation', async () =
     equal(await repository.findCredentialByUserId(user.id), undefined)
   })
 })
+
+test('SqliteAuthRepository rolls back failed user lifecycle transactions', async () => {
+  await withRepository(async (repository) => {
+    const user = createUser()
+    const passwordHash = await hashPassword('correct horse battery staple')
+
+    await rejects(repository.withUserManagementTransaction(async (unitOfWork) => {
+      await unitOfWork.createUser(user)
+      await unitOfWork.saveCredential({
+        userId: user.id,
+        ...passwordHash,
+        passwordChangedAt: now,
+      })
+      throw new Error('Simulated lifecycle failure')
+    }))
+
+    equal(await repository.findUserById(user.id), undefined)
+    equal(await repository.findCredentialByUserId(user.id), undefined)
+  })
+})

@@ -7,6 +7,12 @@ export type {
   LoginResponse,
   LogoutResponse,
   MeResponse,
+  ManagedUserResponse,
+  UsersListResponse,
+  CreateUserRequest,
+  UpdateUserRequest,
+  ResetUserPasswordRequest,
+  RevokeUserSessionsResponse,
 } from './auth/index.js'
 export type {
   CreateClientRequest,

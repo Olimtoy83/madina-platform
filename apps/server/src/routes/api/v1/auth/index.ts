@@ -1,15 +1,29 @@
 import type {
   ApiErrorResponse,
   AuthUserResponse,
+  CreateUserRequest,
   LoginRequest,
   LoginResponse,
+  ManagedUserResponse,
   LogoutResponse,
   MeResponse,
+  ResetUserPasswordRequest,
+  RevokeUserSessionsResponse,
+  UpdateUserRequest,
+  UsersListResponse,
 } from '@madina/api'
 import {
   AuthService,
+  DuplicateUserError,
   InvalidCredentialsError,
+  LastActiveAdminError,
+  PasswordValidationError,
+  UserManagementService,
+  UserManagementValidationError,
+  UserNotFoundError,
+  UsernameValidationError,
   type AuthPrincipal,
+  type User,
 } from '@madina/auth'
 import type {
   FastifyInstance,
@@ -19,11 +33,18 @@ import {
   getSessionCookieName,
   getSessionSecret,
   requireAuthentication,
+  requirePermission,
+  requireTrustedOrigin,
   sessionCookieOptions,
 } from '../../../../plugins/authentication.js'
 
 interface AuthRoutesOptions {
   authService: AuthService
+  userManagementService: UserManagementService
+}
+
+interface UserParams {
+  userId: string
 }
 
 function toUserResponse(principal: AuthPrincipal): AuthUserResponse {
@@ -50,11 +71,94 @@ function invalidCredentialsResponse(): ApiErrorResponse {
   }
 }
 
+function toManagedUserResponse(user: User): ManagedUserResponse {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    status: user.status,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+  }
+}
+
+function badRequestResponse(message: string): ApiErrorResponse {
+  return {
+    statusCode: 400,
+    error: 'Bad Request',
+    message,
+  }
+}
+
+function userManagementErrorResponse(
+  error: unknown,
+): ApiErrorResponse | undefined {
+  if (error instanceof UserNotFoundError) {
+    return {
+      statusCode: 404,
+      error: 'Not Found',
+      message: 'User not found.',
+    }
+  }
+
+  if (
+    error instanceof DuplicateUserError ||
+    error instanceof LastActiveAdminError
+  ) {
+    return {
+      statusCode: 409,
+      error: 'Conflict',
+      message: error.message,
+    }
+  }
+
+  if (
+    error instanceof UserManagementValidationError ||
+    error instanceof UsernameValidationError ||
+    error instanceof PasswordValidationError
+  ) {
+    return badRequestResponse(error.message)
+  }
+
+  return undefined
+}
+
 function isLoginRequest(value: unknown): value is LoginRequest {
   return typeof value === 'object' &&
     value !== null &&
     typeof (value as LoginRequest).username === 'string' &&
     typeof (value as LoginRequest).password === 'string'
+}
+
+function isCreateUserRequest(value: unknown): value is CreateUserRequest {
+  return typeof value === 'object' &&
+    value !== null &&
+    typeof (value as CreateUserRequest).username === 'string' &&
+    typeof (value as CreateUserRequest).initialPassword === 'string' &&
+    typeof (value as CreateUserRequest).role === 'string' &&
+    (
+      (value as CreateUserRequest).email === undefined ||
+      typeof (value as CreateUserRequest).email === 'string'
+    )
+}
+
+function isUpdateUserRequest(value: unknown): value is UpdateUserRequest {
+  if (typeof value !== 'object' || value === null) return false
+
+  const input = value as UpdateUserRequest
+
+  return (input.role !== undefined || input.status !== undefined) &&
+    (input.role === undefined || typeof input.role === 'string') &&
+    (input.status === undefined || typeof input.status === 'string')
+}
+
+function isResetUserPasswordRequest(
+  value: unknown,
+): value is ResetUserPasswordRequest {
+  return typeof value === 'object' &&
+    value !== null &&
+    typeof (value as ResetUserPasswordRequest).password === 'string'
 }
 
 async function getAuthenticatedPrincipal(
@@ -118,6 +222,154 @@ export async function authRoutes(
 
       return {
         user: toUserResponse(principal),
+      }
+    },
+  )
+
+  app.get(
+    '/users',
+    {
+      preHandler: requirePermission(app, 'users:manage'),
+    },
+    async (): Promise<UsersListResponse> => ({
+      users: (await options.userManagementService.listUsers()).map(
+        toManagedUserResponse,
+      ),
+    }),
+  )
+
+  app.post<{
+    Body: CreateUserRequest
+  }>(
+    '/users',
+    {
+      preHandler: [
+        requirePermission(app, 'users:manage'),
+        requireTrustedOrigin(),
+      ],
+    },
+    async (request, reply): Promise<ManagedUserResponse | ApiErrorResponse> => {
+      if (!isCreateUserRequest(request.body)) {
+        reply.code(400)
+        return badRequestResponse('User input is invalid.')
+      }
+
+      try {
+        const user = await options.userManagementService.createUser(
+          request.body,
+        )
+        reply.code(201)
+        return toManagedUserResponse(user)
+      } catch (error) {
+        const response = userManagementErrorResponse(error)
+
+        if (response) {
+          reply.code(response.statusCode)
+          return response
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.patch<{
+    Params: UserParams
+    Body: UpdateUserRequest
+  }>(
+    '/users/:userId',
+    {
+      preHandler: [
+        requirePermission(app, 'users:manage'),
+        requireTrustedOrigin(),
+      ],
+    },
+    async (request, reply): Promise<ManagedUserResponse | ApiErrorResponse> => {
+      if (!isUpdateUserRequest(request.body)) {
+        reply.code(400)
+        return badRequestResponse('User input is invalid.')
+      }
+
+      try {
+        const user = await options.userManagementService.updateUser(
+          request.params.userId,
+          request.body,
+        )
+        return toManagedUserResponse(user)
+      } catch (error) {
+        const response = userManagementErrorResponse(error)
+
+        if (response) {
+          reply.code(response.statusCode)
+          return response
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Params: UserParams
+    Body: ResetUserPasswordRequest
+  }>(
+    '/users/:userId/password',
+    {
+      preHandler: [
+        requirePermission(app, 'users:manage'),
+        requireTrustedOrigin(),
+      ],
+    },
+    async (request, reply): Promise<RevokeUserSessionsResponse | ApiErrorResponse> => {
+      if (!isResetUserPasswordRequest(request.body)) {
+        reply.code(400)
+        return badRequestResponse('User password input is invalid.')
+      }
+
+      try {
+        await options.userManagementService.resetPassword(
+          request.params.userId,
+          request.body.password,
+        )
+        return { success: true }
+      } catch (error) {
+        const response = userManagementErrorResponse(error)
+
+        if (response) {
+          reply.code(response.statusCode)
+          return response
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.post<{
+    Params: UserParams
+  }>(
+    '/users/:userId/revoke-sessions',
+    {
+      preHandler: [
+        requirePermission(app, 'users:manage'),
+        requireTrustedOrigin(),
+      ],
+    },
+    async (request, reply): Promise<RevokeUserSessionsResponse | ApiErrorResponse> => {
+      try {
+        await options.userManagementService.revokeSessions(
+          request.params.userId,
+        )
+        return { success: true }
+      } catch (error) {
+        const response = userManagementErrorResponse(error)
+
+        if (response) {
+          reply.code(response.statusCode)
+          return response
+        }
+
+        throw error
       }
     },
   )

@@ -5,10 +5,12 @@ import type {
 } from '../types.js'
 
 export interface AuthRepository {
+  findAllUsers(): Promise<User[]>
   findUserById(userId: string): Promise<User | undefined>
   findUserByNormalizedUsername(
     normalizedUsername: string,
   ): Promise<User | undefined>
+  findUserByEmail(email: string): Promise<User | undefined>
   createUser(user: User): Promise<void>
   createFirstAdmin(
     user: User,
@@ -26,4 +28,8 @@ export interface AuthRepository {
   createSession(session: AuthSession): Promise<void>
   updateSession(session: AuthSession): Promise<void>
   revokeSession(sessionId: string, revokedAt: Date): Promise<void>
+  revokeSessionsByUserId(userId: string, revokedAt: Date): Promise<void>
+  withUserManagementTransaction<T>(
+    operation: (unitOfWork: AuthRepository) => Promise<T>,
+  ): Promise<T>
 }

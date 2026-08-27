@@ -1,5 +1,8 @@
 import type { ApiV1Response } from '@madina/api'
-import { AuthService } from '@madina/auth'
+import {
+  AuthService,
+  UserManagementService,
+} from '@madina/auth'
 import { CommerceService } from '@madina/core'
 import {
   SqliteAuthRepository,
@@ -32,6 +35,9 @@ export async function apiV1Routes(
     new SqliteAuthRepository(databaseFile)
 
   const authService = new AuthService(authRepository)
+  const userManagementService = new UserManagementService(
+    authRepository,
+  )
 
   const taskRepository =
     new SqliteTaskRepository(databaseFile)
@@ -66,6 +72,7 @@ export async function apiV1Routes(
   app.register(authRoutes, {
     prefix: '/auth',
     authService,
+    userManagementService,
   })
 
   app.register(clientsRoutes, {
