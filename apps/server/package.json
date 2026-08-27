@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/routes/api/v1/commerce/index.test.js dist/routes/api/v1/commerce/mutations.test.js",
+    "test": "node --test dist/routes/api/v1/auth/index.test.js dist/routes/api/v1/commerce/index.test.js dist/routes/api/v1/commerce/mutations.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -13,7 +13,9 @@
     "typescript": "~6.0.2"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
     "@madina/api": "workspace:*",
+    "@madina/auth": "workspace:*",
     "@madina/core": "workspace:*",
     "@madina/database": "workspace:*",
     "fastify": "^5.12.1"
