@@ -16,6 +16,7 @@ import {
   getDatabaseFile,
 } from '../../../database.js'
 import { authenticationPlugin } from '../../../plugins/authentication.js'
+import { LoginRateLimiter } from '../../../security/LoginRateLimiter.js'
 import { authRoutes } from './auth/index.js'
 import { clientsRoutes } from './clients/index.js'
 import { commerceRoutes } from './commerce/index.js'
@@ -35,6 +36,9 @@ export async function apiV1Routes(
     new SqliteAuthRepository(databaseFile)
 
   const authService = new AuthService(authRepository)
+  // Fastify has no trustProxy configuration here, so request.ip remains the
+  // direct peer address rather than an untrusted X-Forwarded-For value.
+  const loginRateLimiter = new LoginRateLimiter()
   const userManagementService = new UserManagementService(
     authRepository,
   )
@@ -72,6 +76,7 @@ export async function apiV1Routes(
   app.register(authRoutes, {
     prefix: '/auth',
     authService,
+    loginRateLimiter,
     userManagementService,
   })
 

@@ -256,6 +256,41 @@ test('wrong and unknown usernames have the same external authentication failure'
   })
 })
 
+test('login rate limiting is source-based for known and unknown usernames', async () => {
+  await withApp(seedUser, async (app) => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await loginAs(
+        app,
+        attempt % 2 === 0 ? 'madina.admin' : 'missing.user',
+        'wrong password',
+      )
+      equal(response.statusCode, 401)
+    }
+
+    const blockedUnknown = await loginAs(
+      app,
+      'missing.user',
+      'wrong password',
+    )
+    const blockedKnown = await loginAs(
+      app,
+      'madina.admin',
+      password,
+    )
+
+    equal(blockedUnknown.statusCode, 429)
+    equal(blockedKnown.statusCode, 429)
+    deepEqual(blockedUnknown.json(), blockedKnown.json())
+    const unknownRetryAfter = Number(blockedUnknown.headers['retry-after'])
+    const knownRetryAfter = Number(blockedKnown.headers['retry-after'])
+
+    equal(Number.isInteger(unknownRetryAfter), true)
+    equal(Number.isInteger(knownRetryAfter), true)
+    equal(unknownRetryAfter > 0 && unknownRetryAfter <= 900, true)
+    equal(knownRetryAfter > 0 && knownRetryAfter <= 900, true)
+  })
+})
+
 test('inactive users cannot log in', async () => {
   await withApp(
     (repository) => seedUser(repository, createUser({ status: 'inactive' })),
@@ -334,6 +369,7 @@ test('me rejects revoked sessions', async () => {
       method: 'GET', url: '/api/v1/auth/me', headers: { cookie: cookie.cookie },
     })
     equal(response.statusCode, 401)
+    equal(getSetCookie(response).includes('Max-Age=0'), true)
   })
 })
 
@@ -363,13 +399,19 @@ test('logout revokes the session and remains idempotent', async () => {
   await withApp(seedUser, async (app) => {
     const cookie = readCookie(await login(app))
     const firstLogout = await app.inject({
-      method: 'POST', url: '/api/v1/auth/logout', headers: { cookie: cookie.cookie },
+      method: 'POST', url: '/api/v1/auth/logout', headers: {
+        cookie: cookie.cookie,
+        origin: 'http://localhost:80',
+      },
     })
     const me = await app.inject({
       method: 'GET', url: '/api/v1/auth/me', headers: { cookie: cookie.cookie },
     })
     const repeatedLogout = await app.inject({
-      method: 'POST', url: '/api/v1/auth/logout', headers: { cookie: cookie.cookie },
+      method: 'POST', url: '/api/v1/auth/logout', headers: {
+        cookie: cookie.cookie,
+        origin: 'http://localhost:80',
+      },
     })
 
     equal(firstLogout.statusCode, 200)
@@ -378,6 +420,33 @@ test('logout revokes the session and remains idempotent', async () => {
     equal(me.statusCode, 401)
     equal(repeatedLogout.statusCode, 200)
     deepEqual(repeatedLogout.json(), { success: true })
+  })
+})
+
+test('logout rejects a cross-origin request and remains safe without a session', async () => {
+  await withApp(seedUser, async (app) => {
+    const cookie = readCookie(await login(app))
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/logout',
+      headers: {
+        cookie: cookie.cookie,
+        origin: 'https://untrusted.example',
+      },
+    })
+    equal(rejected.statusCode, 403)
+    equal((await app.inject({
+      method: 'GET', url: '/api/v1/auth/me', headers: { cookie: cookie.cookie },
+    })).statusCode, 200)
+
+    const logoutWithoutSession = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/logout',
+      headers: { origin: 'http://localhost:80' },
+    })
+    equal(logoutWithoutSession.statusCode, 200)
+    deepEqual(logoutWithoutSession.json(), { success: true })
+    equal(getSetCookie(logoutWithoutSession).includes('Max-Age=0'), true)
   })
 })
 

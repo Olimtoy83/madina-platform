@@ -37,9 +37,11 @@ import {
   requireTrustedOrigin,
   sessionCookieOptions,
 } from '../../../../plugins/authentication.js'
+import type { LoginRateLimiter } from '../../../../security/LoginRateLimiter.js'
 
 interface AuthRoutesOptions {
   authService: AuthService
+  loginRateLimiter: LoginRateLimiter
   userManagementService: UserManagementService
 }
 
@@ -68,6 +70,14 @@ function invalidCredentialsResponse(): ApiErrorResponse {
     statusCode: 401,
     error: 'Unauthorized',
     message: 'Invalid username or password.',
+  }
+}
+
+function rateLimitResponse(): ApiErrorResponse {
+  return {
+    statusCode: 429,
+    error: 'Too Many Requests',
+    message: 'Too many login attempts. Try again later.',
   }
 }
 
@@ -177,7 +187,16 @@ export async function authRoutes(
   }>(
     '/login',
     async (request, reply): Promise<LoginResponse | ApiErrorResponse> => {
+      const rateLimit = options.loginRateLimiter.check(request.ip)
+
+      if (!rateLimit.allowed) {
+        reply.header('Retry-After', String(rateLimit.retryAfterSeconds))
+        reply.code(429)
+        return rateLimitResponse()
+      }
+
       if (!isLoginRequest(request.body)) {
+        options.loginRateLimiter.recordFailure(request.ip)
         reply.code(401)
         return invalidCredentialsResponse()
       }
@@ -198,6 +217,7 @@ export async function authRoutes(
         }
       } catch (error) {
         if (error instanceof InvalidCredentialsError) {
+          options.loginRateLimiter.recordFailure(request.ip)
           reply.code(401)
           return invalidCredentialsResponse()
         }
@@ -376,6 +396,9 @@ export async function authRoutes(
 
   app.post(
     '/logout',
+    {
+      preHandler: requireTrustedOrigin(),
+    },
     async (request, reply): Promise<LogoutResponse> => {
       await getAuthenticatedPrincipal(app, request)
       const sessionSecret = getSessionSecret(request)

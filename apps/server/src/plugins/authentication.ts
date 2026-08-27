@@ -39,6 +39,10 @@ const safeMethods = new Set([
 ])
 
 function sendAuthenticationError(reply: FastifyReply): void {
+  reply.clearCookie(
+    getSessionCookieName(),
+    sessionCookieOptions(),
+  )
   reply.code(401).send({
     statusCode: 401,
     error: 'Unauthorized',
