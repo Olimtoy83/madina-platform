@@ -4,12 +4,15 @@ import {
   resolve,
 } from 'node:path'
 import type { ApiV1Response } from '@madina/api'
+import { CommerceService } from '@madina/core'
 import {
   SqliteClientRepository,
+  SqliteCommerceRepository,
   SqliteTaskRepository,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 import { clientsRoutes } from './clients/index.js'
+import { commerceRoutes } from './commerce/index.js'
 import { tasksRoutes } from './tasks/index.js'
 
 function getDatabaseFile(): string {
@@ -41,8 +44,16 @@ export async function apiV1Routes(
   const taskRepository =
     new SqliteTaskRepository(databaseFile)
 
+  const commerceRepository =
+    new SqliteCommerceRepository(databaseFile)
+
+  const commerceService = new CommerceService(
+    commerceRepository,
+  )
+
   app.addHook('onClose', async () => {
     clientRepository.close()
+    commerceRepository.close()
     taskRepository.close()
   })
 
@@ -63,5 +74,11 @@ export async function apiV1Routes(
   app.register(tasksRoutes, {
     prefix: '/tasks',
     taskRepository,
+  })
+
+  app.register(commerceRoutes, {
+    prefix: '/commerce',
+    commerceRepository,
+    commerceService,
   })
 }

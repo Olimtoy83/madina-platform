@@ -400,6 +400,62 @@ export class SqliteCommerceRepository implements CommerceRepository {
     }
   }
 
+  async findAllProducts(): Promise<Product[]> {
+    const rows = this.database.prepare(`
+      SELECT id, created_at, updated_at, name, category, quantity,
+        unit, cost_price, sale_price, status
+      FROM products ORDER BY name COLLATE NOCASE, id
+    `).all() as unknown as ProductRow[]
+
+    return rows.map(toProduct)
+  }
+
+  async findAllStockMovements(): Promise<StockMovement[]> {
+    const rows = this.database.prepare(`
+      SELECT id, created_at, updated_at, product_id, type, quantity, unit,
+        reference_id, note
+      FROM stock_movements ORDER BY created_at DESC, id DESC
+    `).all() as unknown as StockMovementRow[]
+
+    return rows.map(toStockMovement)
+  }
+
+  async findAllPurchases(): Promise<Purchase[]> {
+    const rows = this.database.prepare(`
+      SELECT id FROM purchases ORDER BY purchase_date DESC, id DESC
+    `).all() as unknown as Array<{ id: string }>
+    const unitOfWork = new SqliteCommerceUnitOfWork(this.database)
+    const purchases = await Promise.all(rows.map((row) =>
+      unitOfWork.findPurchaseById(row.id),
+    ))
+
+    return purchases.filter((purchase): purchase is Purchase =>
+      purchase !== undefined,
+    )
+  }
+
+  async findAllSales(): Promise<Sale[]> {
+    const rows = this.database.prepare(`
+      SELECT id FROM sales ORDER BY sale_date DESC, id DESC
+    `).all() as unknown as Array<{ id: string }>
+    const unitOfWork = new SqliteCommerceUnitOfWork(this.database)
+    const sales = await Promise.all(rows.map((row) =>
+      unitOfWork.findSaleById(row.id),
+    ))
+
+    return sales.filter((sale): sale is Sale => sale !== undefined)
+  }
+
+  async findAllTransactions(): Promise<Transaction[]> {
+    const rows = this.database.prepare(`
+      SELECT id, created_at, updated_at, type, category, amount,
+        payment_method, transaction_date, reference_id, description, status
+      FROM transactions ORDER BY transaction_date DESC, id DESC
+    `).all() as unknown as TransactionRow[]
+
+    return rows.map(toTransaction)
+  }
+
   async saveProduct(product: Product): Promise<void> {
     this.database.prepare(`
       INSERT INTO products (

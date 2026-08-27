@@ -1,0 +1,293 @@
+import {
+  deepEqual,
+  equal,
+} from 'node:assert/strict'
+import {
+  mkdtempSync,
+  rmSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import test from 'node:test'
+import type {
+  Product,
+  Purchase,
+  Sale,
+} from '@madina/core'
+import { SqliteCommerceRepository } from '@madina/database'
+import type { FastifyInstance } from 'fastify'
+import { buildApp } from '../../../../app.js'
+
+const now = new Date('2026-08-27T00:00:00.000Z')
+
+function createProduct(quantity = 10): Product {
+  return {
+    id: 'product-1',
+    createdAt: now,
+    updatedAt: now,
+    name: 'Финики',
+    category: 'dates',
+    quantity,
+    unit: 'kg',
+    costPrice: 10,
+    salePrice: 15,
+    status: 'active',
+  }
+}
+
+function createPurchase(): Purchase {
+  return {
+    id: 'purchase-1',
+    createdAt: now,
+    updatedAt: now,
+    purchaseNumber: 'PUR-0001',
+    purchaseDate: now,
+    supplierName: 'Поставщик',
+    totalAmount: 50,
+    paymentMethod: 'cash',
+    status: 'draft',
+    items: [{
+      productId: 'product-1',
+      quantity: 5,
+      unit: 'kg',
+      unitCost: 10,
+      totalCost: 50,
+    }],
+  }
+}
+
+function createSale(quantity = 3): Sale {
+  return {
+    id: 'sale-1',
+    createdAt: now,
+    updatedAt: now,
+    saleNumber: 'SAL-0001',
+    saleDate: now,
+    clientName: 'Клиент',
+    totalAmount: quantity * 15,
+    paymentMethod: 'cash',
+    status: 'draft',
+    items: [{
+      productId: 'product-1',
+      quantity,
+      unit: 'kg',
+      unitPrice: 15,
+      totalAmount: quantity * 15,
+    }],
+  }
+}
+
+async function withApp(
+  seed: (repository: SqliteCommerceRepository) => Promise<void>,
+  run: (app: FastifyInstance) => Promise<void>,
+): Promise<void> {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-commerce-routes-'))
+  const databaseFile = join(directory, 'commerce.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  const repository = new SqliteCommerceRepository(databaseFile)
+
+  try {
+    await seed(repository)
+  } finally {
+    repository.close()
+  }
+
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+
+  try {
+    await app.ready()
+    await run(app)
+  } finally {
+    await app.close()
+
+    if (previousDatabaseFile === undefined) {
+      delete process.env.DATABASE_FILE
+    } else {
+      process.env.DATABASE_FILE = previousDatabaseFile
+    }
+
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+async function getJson(
+  app: FastifyInstance,
+  url: string,
+): Promise<Record<string, unknown>> {
+  const response = await app.inject({ method: 'GET', url })
+  equal(response.statusCode, 200)
+  return response.json() as Record<string, unknown>
+}
+
+test('commerce routes return the persisted read model', async () => {
+  await withApp(
+    async (repository) => {
+      await repository.saveProduct(createProduct())
+      await repository.savePurchase(createPurchase())
+      await repository.saveSale(createSale())
+    },
+    async (app) => {
+      const products = await getJson(app, '/api/v1/commerce/products')
+      const stockMovements = await getJson(
+        app,
+        '/api/v1/commerce/stock-movements',
+      )
+      const purchases = await getJson(app, '/api/v1/commerce/purchases')
+      const sales = await getJson(app, '/api/v1/commerce/sales')
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+
+      equal((products.products as unknown[]).length, 1)
+      equal((purchases.purchases as unknown[]).length, 1)
+      equal((sales.sales as unknown[]).length, 1)
+      deepEqual(stockMovements.stockMovements, [])
+      deepEqual(transactions.transactions, [])
+    },
+  )
+})
+
+test('commerce routes complete a purchase once', async () => {
+  await withApp(
+    async (repository) => {
+      await repository.saveProduct(createProduct())
+      await repository.savePurchase(createPurchase())
+    },
+    async (app) => {
+      const completion = await app.inject({
+        method: 'POST',
+        url: '/api/v1/commerce/purchases/purchase-1/complete',
+      })
+
+      equal(completion.statusCode, 200)
+      deepEqual(completion.json(), {
+        success: true,
+        idempotent: false,
+      })
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      const movements = await getJson(
+        app,
+        '/api/v1/commerce/stock-movements',
+      )
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+
+      equal((products.products as Array<{ quantity: number }>)[0]?.quantity, 15)
+      equal((movements.stockMovements as unknown[]).length, 1)
+      equal((transactions.transactions as unknown[]).length, 1)
+    },
+  )
+})
+
+test('commerce routes complete a sale once', async () => {
+  await withApp(
+    async (repository) => {
+      await repository.saveProduct(createProduct())
+      await repository.saveSale(createSale())
+    },
+    async (app) => {
+      const completion = await app.inject({
+        method: 'POST',
+        url: '/api/v1/commerce/sales/sale-1/complete',
+      })
+
+      equal(completion.statusCode, 200)
+      deepEqual(completion.json(), {
+        success: true,
+        idempotent: false,
+      })
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      equal((products.products as Array<{ quantity: number }>)[0]?.quantity, 7)
+    },
+  )
+})
+
+test('commerce routes make repeated completion idempotent', async () => {
+  await withApp(
+    async (repository) => {
+      await repository.saveProduct(createProduct())
+      await repository.savePurchase(createPurchase())
+    },
+    async (app) => {
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/v1/commerce/purchases/purchase-1/complete',
+      })
+      const repeated = await app.inject({
+        method: 'POST',
+        url: '/api/v1/commerce/purchases/purchase-1/complete',
+      })
+
+      equal(first.statusCode, 200)
+      equal(repeated.statusCode, 200)
+      deepEqual(repeated.json(), {
+        success: true,
+        idempotent: true,
+      })
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      const movements = await getJson(
+        app,
+        '/api/v1/commerce/stock-movements',
+      )
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+
+      equal((products.products as Array<{ quantity: number }>)[0]?.quantity, 15)
+      equal((movements.stockMovements as unknown[]).length, 1)
+      equal((transactions.transactions as unknown[]).length, 1)
+    },
+  )
+})
+
+test('commerce routes roll back an insufficient-stock sale', async () => {
+  await withApp(
+    async (repository) => {
+      await repository.saveProduct(createProduct(2))
+      await repository.saveSale(createSale(3))
+    },
+    async (app) => {
+      const completion = await app.inject({
+        method: 'POST',
+        url: '/api/v1/commerce/sales/sale-1/complete',
+      })
+
+      equal(completion.statusCode, 400)
+      const completionBody = completion.json() as {
+        success: boolean
+        idempotent: boolean
+        message?: string
+      }
+      equal(completionBody.success, false)
+      equal(completionBody.idempotent, false)
+      equal(
+        completionBody.message?.startsWith('Недостаточно товара на складе.'),
+        true,
+      )
+
+      const products = await getJson(app, '/api/v1/commerce/products')
+      const sales = await getJson(app, '/api/v1/commerce/sales')
+      const movements = await getJson(
+        app,
+        '/api/v1/commerce/stock-movements',
+      )
+      const transactions = await getJson(
+        app,
+        '/api/v1/commerce/transactions',
+      )
+
+      equal((products.products as Array<{ quantity: number }>)[0]?.quantity, 2)
+      equal((sales.sales as Array<{ status: string }>)[0]?.status, 'draft')
+      deepEqual(movements.stockMovements, [])
+      deepEqual(transactions.transactions, [])
+    },
+  )
+})

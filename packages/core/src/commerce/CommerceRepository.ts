@@ -31,7 +31,16 @@ export interface CommerceUnitOfWork {
   ): Promise<void>
 }
 
-export interface CommerceRepository {
+export interface CommerceReadRepository {
+  findAllProducts(): Promise<Product[]>
+  findAllStockMovements(): Promise<StockMovement[]>
+  findAllPurchases(): Promise<Purchase[]>
+  findAllSales(): Promise<Sale[]>
+  findAllTransactions(): Promise<Transaction[]>
+}
+
+export interface CommerceRepository
+  extends CommerceReadRepository {
   withTransaction<T>(
     operation: (
       unitOfWork: CommerceUnitOfWork,

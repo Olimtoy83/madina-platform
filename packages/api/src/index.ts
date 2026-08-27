@@ -15,6 +15,16 @@ export type {
   CompletePurchaseRequest,
   CompleteSaleRequest,
   CommerceCompletionResponse,
+  ProductResponse,
+  StockMovementResponse,
+  PurchaseResponse,
+  SaleResponse,
+  TransactionResponse,
+  ProductsListResponse,
+  StockMovementsListResponse,
+  PurchasesListResponse,
+  SalesListResponse,
+  TransactionsListResponse,
 } from './commerce/index.js'
 export type {
   CreateTaskRequest,
