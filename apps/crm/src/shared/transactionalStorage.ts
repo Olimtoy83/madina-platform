@@ -17,7 +17,6 @@ export class TransactionalPersistenceError extends Error {
     this.name = 'TransactionalPersistenceError'
   }
 }
-
 export interface TransactionalSnapshot {
   schemaVersion: number
   revision: number
@@ -367,38 +366,5 @@ export function loadTransactionalSnapshot():
       'Authoritative transactional snapshot повреждён и не может быть восстановлен.',
       { cause: error },
     )
-  }
-}
-
-export function commitTransactionalSnapshot(
-  snapshot: TransactionalSnapshot,
-): void {
-  try {
-    localStorage.setItem(
-      SNAPSHOT_KEY,
-      JSON.stringify(snapshot),
-    )
-  } catch (error) {
-    throw new TransactionalPersistenceError(
-      'Не удалось сохранить transactional snapshot.',
-      { cause: error },
-    )
-  }
-}
-
-export function getNextSnapshot(
-  snapshot: TransactionalSnapshot,
-  updates: Partial<
-    Omit<
-      TransactionalSnapshot,
-      'schemaVersion' | 'revision'
-    >
-  >,
-): TransactionalSnapshot {
-  return {
-    ...snapshot,
-    ...updates,
-    schemaVersion: SCHEMA_VERSION,
-    revision: snapshot.revision + 1,
   }
 }
