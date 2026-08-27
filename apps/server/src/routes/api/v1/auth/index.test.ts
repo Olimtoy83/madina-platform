@@ -15,7 +15,10 @@ import {
   type AuthSession,
   type User,
 } from '@madina/auth'
-import { SqliteAuthRepository } from '@madina/database'
+import {
+  initializeDatabase,
+  SqliteAuthRepository,
+} from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 import { buildApp } from '../../../../app.js'
 
@@ -56,6 +59,7 @@ async function withApp(
   const directory = mkdtempSync(join(tmpdir(), 'madina-auth-routes-'))
   const databaseFile = join(directory, 'madina.sqlite')
   const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
   const repository = new SqliteAuthRepository(databaseFile)
 
   try {

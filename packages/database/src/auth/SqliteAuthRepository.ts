@@ -7,8 +7,6 @@ import type {
   UserRole,
   UserStatus,
 } from '@madina/auth'
-import { authMigrations } from '../migrations/authMigrations.js'
-import { applyMigrations } from '../migrations/SqliteMigrationRunner.js'
 
 interface UserRow {
   id: string
@@ -94,7 +92,6 @@ export class SqliteAuthRepository implements AuthRepository {
   constructor(filename: string) {
     this.database = new DatabaseSync(filename)
     this.database.exec('PRAGMA foreign_keys = ON')
-    applyMigrations(this.database, authMigrations)
   }
 
   async findAllUsers(): Promise<User[]> {

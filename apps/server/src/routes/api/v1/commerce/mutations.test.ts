@@ -19,6 +19,7 @@ import type {
   Sale,
 } from '@madina/core'
 import {
+  initializeDatabase,
   SqliteAuthRepository,
   SqliteCommerceRepository,
 } from '@madina/database'
@@ -94,6 +95,7 @@ async function withApp(
   const directory = mkdtempSync(join(tmpdir(), 'madina-commerce-mutations-'))
   const databaseFile = join(directory, 'commerce.sqlite')
   const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
   const repository = new SqliteCommerceRepository(databaseFile)
 
   try {

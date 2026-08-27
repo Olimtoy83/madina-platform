@@ -16,6 +16,7 @@ import {
 } from '@madina/auth'
 import type { Product } from '@madina/core'
 import {
+  initializeDatabase,
   SqliteAuthRepository,
   SqliteCommerceRepository,
 } from '@madina/database'
@@ -106,6 +107,7 @@ async function withApp(
   const directory = mkdtempSync(join(tmpdir(), 'madina-route-protection-'))
   const databaseFile = join(directory, 'madina.sqlite')
   const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
   const commerceRepository = new SqliteCommerceRepository(databaseFile)
 
   try {

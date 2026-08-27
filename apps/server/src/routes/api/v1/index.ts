@@ -9,6 +9,7 @@ import {
   SqliteClientRepository,
   SqliteCommerceRepository,
   SqliteTaskRepository,
+  initializeDatabase,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 import {
@@ -28,6 +29,7 @@ export async function apiV1Routes(
   const databaseFile = getDatabaseFile()
 
   ensureDatabaseDirectory(databaseFile)
+  initializeDatabase(databaseFile)
 
   const clientRepository =
     new SqliteClientRepository(databaseFile)

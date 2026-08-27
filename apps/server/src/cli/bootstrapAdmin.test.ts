@@ -13,7 +13,10 @@ import {
   UsernameValidationError,
   verifyPassword,
 } from '@madina/auth'
-import { SqliteAuthRepository } from '@madina/database'
+import {
+  initializeDatabase,
+  SqliteAuthRepository,
+} from '@madina/database'
 import {
   bootstrapAdmin,
   FirstAdminAlreadyExistsError,
@@ -27,7 +30,10 @@ async function withRepository(
   run: (repository: SqliteAuthRepository) => Promise<void>,
 ): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'madina-bootstrap-admin-'))
-  const repository = new SqliteAuthRepository(join(directory, 'madina.sqlite'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  initializeDatabase(databaseFile)
+  initializeDatabase(databaseFile)
+  const repository = new SqliteAuthRepository(databaseFile)
 
   try {
     await run(repository)

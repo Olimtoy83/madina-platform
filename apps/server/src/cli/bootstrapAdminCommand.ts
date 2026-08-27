@@ -1,4 +1,7 @@
-import { SqliteAuthRepository } from '@madina/database'
+import {
+  initializeDatabase,
+  SqliteAuthRepository,
+} from '@madina/database'
 import { bootstrapAdmin } from './bootstrapAdmin.js'
 import { createBootstrapAdminTerminal } from './terminal.js'
 import {
@@ -11,9 +14,11 @@ const databaseFile = getDatabaseFile()
 
 ensureDatabaseDirectory(databaseFile)
 
-const repository = new SqliteAuthRepository(databaseFile)
+let repository: SqliteAuthRepository | undefined
 
 try {
+  initializeDatabase(databaseFile)
+  repository = new SqliteAuthRepository(databaseFile)
   const username = await terminal.prompt('Username: ')
   const password = await terminal.promptSecret('Password: ')
   const passwordConfirmation = await terminal.promptSecret('Confirm password: ')
@@ -33,6 +38,6 @@ try {
   process.stderr.write(`${message}\n`)
   process.exitCode = 1
 } finally {
-  repository.close()
+  repository?.close()
   terminal.close()
 }

@@ -14,6 +14,7 @@ import type {
   User,
 } from '@madina/auth'
 import { hashPassword } from '@madina/auth'
+import { initializeDatabase } from '../migrations/initializeDatabase.js'
 import { SqliteAuthRepository } from './SqliteAuthRepository.js'
 
 const now = new Date('2026-08-27T00:00:00.000Z')
@@ -50,7 +51,9 @@ async function withRepository(
   run: (repository: SqliteAuthRepository) => Promise<void>,
 ): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'madina-auth-repository-'))
-  const repository = new SqliteAuthRepository(join(directory, 'madina.sqlite'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  initializeDatabase(databaseFile)
+  const repository = new SqliteAuthRepository(databaseFile)
 
   try {
     await run(repository)
