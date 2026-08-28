@@ -57,6 +57,7 @@ export type {
   TransactionsListResponse,
   ImportCommerceSnapshotRequest,
   ImportCommerceSnapshotResponse,
+  ProductWorkbookRowError,
 } from './commerce/index.js'
 export type {
   CreateTaskRequest,

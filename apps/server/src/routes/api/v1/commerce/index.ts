@@ -45,6 +45,11 @@ import {
   getAuthenticatedCommandContext,
   requireTrustedOrigin,
 } from '../../../../plugins/authentication.js'
+import {
+  createProductExportWorkbook,
+  createProductImportTemplateWorkbook,
+  PRODUCT_WORKBOOK_MIME_TYPE,
+} from '../../../../workbooks/productsWorkbook.js'
 
 interface CommerceRoutesOptions {
   commerceRepository: CommerceRepository
@@ -285,6 +290,44 @@ export async function commerceRoutes(
       products: (await options.commerceRepository.findAllProducts())
         .map(toProductResponse),
     }),
+  )
+
+  app.get(
+    '/products/import-template',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (_request, reply): Promise<void> => {
+      const workbook = await createProductImportTemplateWorkbook()
+
+      reply
+        .header(
+          'Content-Disposition',
+          'attachment; filename="madina-products-import-template-v1.xlsx"',
+        )
+        .type(PRODUCT_WORKBOOK_MIME_TYPE)
+        .send(workbook)
+    },
+  )
+
+  app.get(
+    '/products/export',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (_request, reply): Promise<void> => {
+      const products = await options.commerceRepository.findAllProducts()
+      const workbook = await createProductExportWorkbook(products)
+      const date = new Date().toISOString().slice(0, 10)
+
+      reply
+        .header(
+          'Content-Disposition',
+          `attachment; filename="madina-products-${date}.xlsx"`,
+        )
+        .type(PRODUCT_WORKBOOK_MIME_TYPE)
+        .send(workbook)
+    },
   )
 
   app.post<{

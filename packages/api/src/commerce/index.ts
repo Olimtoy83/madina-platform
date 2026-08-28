@@ -164,3 +164,10 @@ export interface ImportCommerceSnapshotResponse {
   imported: boolean
   idempotent: boolean
 }
+
+export interface ProductWorkbookRowError {
+  row: number
+  column?: string
+  code: string
+  message: string
+}
