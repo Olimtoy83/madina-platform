@@ -1,53 +1,67 @@
-import { useMemo } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  getCurrentStockByUnit,
-  getFinancialKpis,
-  getInventoryProductSummary,
   getRecentTransactions,
   getReportingEligibleTransactions,
-  getSalesReportingSummary,
 } from '@madina/core'
 
-import { Button, Card } from '@madina/ui'
-import { useProducts } from '../../context/useProducts'
-import { useSales } from '../../context/useSales'
-import { useTransactions } from '../../context/useTransactions'
+import {
+  Alert,
+  Button,
+  Card,
+  Skeleton,
+} from '@madina/ui'
+import type { ReportingSummaryResponse } from '@madina/api'
+import { useTransactionalState } from '../../context/useTransactionalState'
+import { getReportingSummary } from '../../shared/api/reportingApi'
+import { toDashboardKpis } from './dashboardSummary'
 import './Dashboard.css'
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { snapshot } = useTransactionalState()
+  const [summary, setSummary] =
+    useState<ReportingSummaryResponse | null>(null)
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true)
+  const [summaryError, setSummaryError] = useState<Error | null>(null)
 
-  const { products } = useProducts()
-  const { sales } = useSales()
-  const { transactions } = useTransactions()
+  const { transactions } = snapshot
 
-  const salesSummary = useMemo(
-    () => getSalesReportingSummary(sales, 'all'),
-    [sales],
-  )
+  useEffect(() => {
+    let isCurrent = true
 
-  const financialKpis = useMemo(
-    () => getFinancialKpis(transactions, 'all'),
-    [transactions],
-  )
+    setIsSummaryLoading(true)
 
-  const {
-    totalIncome,
-    totalExpense,
-    financialBalance,
-  } = financialKpis
+    void getReportingSummary()
+      .then((nextSummary) => {
+        if (!isCurrent) return
 
-  const { completedCount: salesCount } = salesSummary
+        setSummary(nextSummary)
+        setSummaryError(null)
+      })
+      .catch((error: unknown) => {
+        if (!isCurrent) return
 
-  const { productCount: warehouseProductsCount } = useMemo(
-    () => getInventoryProductSummary(products),
-    [products],
-  )
+        setSummaryError(error instanceof Error
+          ? error
+          : new Error('Не удалось загрузить показатели Dashboard.'))
+      })
+      .finally(() => {
+        if (isCurrent) setIsSummaryLoading(false)
+      })
 
-  const stockByUnit = useMemo(
-    () => getCurrentStockByUnit(products),
-    [products],
+    return () => {
+      isCurrent = false
+    }
+  }, [snapshot])
+
+  const kpis = useMemo(
+    () => summary && toDashboardKpis(summary),
+    [summary],
   )
 
   const eligibleTransactions = useMemo(
@@ -73,15 +87,25 @@ export function Dashboard() {
   }
 
   function formatStockByUnit() {
-    if (stockByUnit.length === 0) {
+    if (!kpis || kpis.stockByUnit.length === 0) {
       return 'Нет остатков'
     }
 
-    return stockByUnit
+    return kpis.stockByUnit
       .map(({ quantity, unit }) =>
         `${quantity.toLocaleString('ru-RU')} ${unit}`,
       )
       .join(', ')
+  }
+
+  function renderKpiValue(value: string | number) {
+    if (kpis) return value
+
+    if (isSummaryLoading) {
+      return <Skeleton variant="text" width="70%" />
+    }
+
+    return '—'
   }
 
   function getTransactionLabel(
@@ -120,6 +144,15 @@ export function Dashboard() {
         </div>
       </div>
 
+      {summaryError && (
+        <Alert
+          variant="danger"
+          title="Не удалось загрузить показатели Dashboard"
+        >
+          {summaryError.message}
+        </Alert>
+      )}
+
       <div className="dashboard__kpi-grid">
         <Card className="dashboard__card">
           <span className="dashboard__card-label">
@@ -127,7 +160,7 @@ export function Dashboard() {
           </span>
 
           <strong className="dashboard__card-value">
-            {salesCount}
+            {renderKpiValue(kpis?.completedSalesCount ?? '—')}
           </strong>
         </Card>
 
@@ -137,7 +170,9 @@ export function Dashboard() {
           </span>
 
           <strong className="dashboard__card-value">
-            {formatMoney(totalIncome)}
+            {renderKpiValue(kpis
+              ? formatMoney(kpis.totalIncome)
+              : '—')}
           </strong>
         </Card>
 
@@ -147,7 +182,9 @@ export function Dashboard() {
           </span>
 
           <strong className="dashboard__card-value">
-            {formatMoney(totalExpense)}
+            {renderKpiValue(kpis
+              ? formatMoney(kpis.totalExpense)
+              : '—')}
           </strong>
         </Card>
 
@@ -157,7 +194,9 @@ export function Dashboard() {
           </span>
 
           <strong className="dashboard__card-value">
-            {formatMoney(financialBalance)}
+            {renderKpiValue(kpis
+              ? formatMoney(kpis.financialBalance)
+              : '—')}
           </strong>
         </Card>
 
@@ -167,7 +206,7 @@ export function Dashboard() {
           </span>
 
           <strong className="dashboard__card-value">
-            {warehouseProductsCount}
+            {renderKpiValue(kpis?.productCount ?? '—')}
           </strong>
         </Card>
 
@@ -177,7 +216,9 @@ export function Dashboard() {
           </span>
 
           <strong className="dashboard__card-value">
-            {formatStockByUnit()}
+            {renderKpiValue(kpis
+              ? formatStockByUnit()
+              : '—')}
           </strong>
         </Card>
       </div>
@@ -281,14 +322,16 @@ export function Dashboard() {
         <p>
           Товарных позиций:{' '}
           <strong>
-            {warehouseProductsCount}
+            {renderKpiValue(kpis?.productCount ?? '—')}
           </strong>
         </p>
 
         <p>
           Остатки по единицам:{' '}
           <strong>
-            {formatStockByUnit()}
+            {renderKpiValue(kpis
+              ? formatStockByUnit()
+              : '—')}
           </strong>
         </p>
       </Card>
