@@ -53,7 +53,7 @@ test('server starts on a fresh unified-initialized database', async () => {
         const migrations = database.prepare(`
           SELECT COUNT(*) AS count FROM schema_migrations
         `).get() as { count: number }
-        equal(migrations.count, 5)
+        equal(migrations.count, 6)
       } finally {
         database.close()
       }

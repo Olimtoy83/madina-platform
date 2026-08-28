@@ -6,6 +6,7 @@ import {
 import {
   ClientMutationService,
   CommerceService,
+  ReportingReadService,
   TaskMutationService,
 } from '@madina/core'
 import {
@@ -13,6 +14,7 @@ import {
   SqliteAuditQueryRepository,
   SqliteClientRepository,
   SqliteCommerceRepository,
+  SqliteReportingQueryRepository,
   SqliteTaskRepository,
   initializeDatabase,
 } from '@madina/database'
@@ -28,6 +30,7 @@ import { auditRoutes } from './audit/index.js'
 import { authRoutes } from './auth/index.js'
 import { clientsRoutes } from './clients/index.js'
 import { commerceRoutes } from './commerce/index.js'
+import { reportingRoutes } from './reporting/index.js'
 import { tasksRoutes } from './tasks/index.js'
 
 export async function apiV1Routes(
@@ -67,8 +70,14 @@ export async function apiV1Routes(
   const commerceRepository =
     new SqliteCommerceRepository(databaseFile)
 
+  const reportingQueryRepository =
+    new SqliteReportingQueryRepository(databaseFile)
+
   const commerceService = new CommerceService(
     commerceRepository,
+  )
+  const reportingReadService = new ReportingReadService(
+    reportingQueryRepository,
   )
 
   app.addHook('onClose', async () => {
@@ -76,6 +85,7 @@ export async function apiV1Routes(
     auditQueryRepository.close()
     clientRepository.close()
     commerceRepository.close()
+    reportingQueryRepository.close()
     taskRepository.close()
   })
 
@@ -120,5 +130,10 @@ export async function apiV1Routes(
     prefix: '/commerce',
     commerceRepository,
     commerceService,
+  })
+
+  app.register(reportingRoutes, {
+    prefix: '/reports',
+    reportingReadService,
   })
 }
