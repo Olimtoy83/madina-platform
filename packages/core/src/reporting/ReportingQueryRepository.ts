@@ -1,4 +1,8 @@
 import type { ProductUnit } from '../inventory/index.js'
+import type {
+  Transaction,
+  TransactionType,
+} from '../transactions/index.js'
 
 export interface ReportingStockByUnit {
   unit: ProductUnit
@@ -23,6 +27,27 @@ export interface ReportingAllTimeSummary {
   }
 }
 
+export interface IncomeReportQuery {
+  limit: number
+  type?: TransactionType
+  cursor?: {
+    transactionDate: Date
+    id: string
+  }
+}
+
+export interface IncomeReport {
+  summary: Pick<
+    ReportingAllTimeSummary['financial'],
+    'totalIncome' | 'totalExpense' | 'financialBalance'
+  >
+  transactions: Transaction[]
+}
+
 export interface ReportingQueryRepository {
   getAllTimeSummary(now?: Date): Promise<ReportingAllTimeSummary>
+  getIncomeReport(
+    query: IncomeReportQuery,
+    now?: Date,
+  ): Promise<IncomeReport>
 }

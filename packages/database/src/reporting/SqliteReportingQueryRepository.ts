@@ -1,8 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type {
+  IncomeReport,
+  IncomeReportQuery,
   ReportingAllTimeSummary,
   ReportingQueryRepository,
   ReportingStockByUnit,
+  Transaction,
 } from '@madina/core'
 import { openDatabaseConnection } from '../connectionPolicy.js'
 
@@ -25,6 +28,36 @@ interface InventoryRow {
 interface StockByUnitRow {
   unit: ReportingStockByUnit['unit']
   quantity: number
+}
+
+interface TransactionRow {
+  id: string
+  created_at: string
+  updated_at: string
+  type: Transaction['type']
+  category: Transaction['category']
+  amount: number
+  payment_method: Transaction['paymentMethod']
+  transaction_date: string
+  reference_id: string | null
+  description: string | null
+  status: Transaction['status']
+}
+
+function toTransaction(row: TransactionRow): Transaction {
+  return {
+    id: row.id,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+    type: row.type,
+    category: row.category,
+    amount: row.amount,
+    paymentMethod: row.payment_method,
+    transactionDate: new Date(row.transaction_date),
+    referenceId: row.reference_id ?? undefined,
+    description: row.description ?? undefined,
+    status: row.status,
+  }
 }
 
 export class SqliteReportingQueryRepository
@@ -103,6 +136,72 @@ export class SqliteReportingQueryRepository
             quantity: row.quantity,
           })),
         },
+      }
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getIncomeReport(
+    query: IncomeReportQuery,
+    now = new Date(),
+  ): Promise<IncomeReport> {
+    const effectiveNow = now.toISOString()
+    this.database.exec('BEGIN')
+
+    try {
+      const financial = this.database.prepare(`
+        SELECT
+          COALESCE(SUM(CASE
+            WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
+          COALESCE(SUM(CASE
+            WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense
+        FROM transactions
+        WHERE status = 'completed' AND transaction_date <= ?
+      `).get(effectiveNow) as unknown as Pick<
+        FinancialRow,
+        'total_income' | 'total_expense'
+      >
+
+      const parameters: Array<string | number> = [effectiveNow]
+      let filters = "status = 'completed' AND transaction_date <= ?"
+
+      if (query.type) {
+        filters += ' AND type = ?'
+        parameters.push(query.type)
+      }
+
+      if (query.cursor) {
+        filters += ` AND (
+          transaction_date < ? OR (
+            transaction_date = ? AND id < ?
+          )
+        )`
+        const cursorDate = query.cursor.transactionDate.toISOString()
+        parameters.push(cursorDate, cursorDate, query.cursor.id)
+      }
+
+      parameters.push(query.limit)
+      const rows = this.database.prepare(`
+        SELECT id, created_at, updated_at, type, category, amount,
+          payment_method, transaction_date, reference_id, description, status
+        FROM transactions
+        WHERE ${filters}
+        ORDER BY transaction_date DESC, id DESC
+        LIMIT ?
+      `).all(...parameters) as unknown as TransactionRow[]
+
+      this.database.exec('COMMIT')
+
+      return {
+        summary: {
+          totalIncome: financial.total_income,
+          totalExpense: financial.total_expense,
+          financialBalance:
+            financial.total_income - financial.total_expense,
+        },
+        transactions: rows.map(toTransaction),
       }
     } catch (error) {
       this.database.exec('ROLLBACK')

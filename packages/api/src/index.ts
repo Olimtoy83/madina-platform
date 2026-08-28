@@ -4,6 +4,10 @@ export type { ApiErrorResponse } from './errors/index.js'
 export type {
   ReportingStockByUnitResponse,
   ReportingSummaryResponse,
+  IncomeReportTransactionType,
+  IncomeReportQuery,
+  FinancialTransactionRowResponse,
+  IncomeReportResponse,
 } from './reporting/index.js'
 export type {
   AuditEventListItemResponse,

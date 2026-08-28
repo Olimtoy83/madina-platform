@@ -69,6 +69,36 @@ async function seedSession(
   return `madina-session=${secret}`
 }
 
+function insertTransaction(
+  database: DatabaseSync,
+  input: {
+    id: string
+    type: 'income' | 'expense'
+    amount: number
+    transactionDate: string
+    status?: 'pending' | 'completed' | 'cancelled'
+  },
+): void {
+  database.prepare(`
+    INSERT INTO transactions (
+      id, created_at, updated_at, type, category, amount, payment_method,
+      transaction_date, reference_id, description, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    input.id,
+    '2020-01-01T00:00:00.000Z',
+    '2020-01-01T00:00:00.000Z',
+    input.type,
+    input.type === 'income' ? 'sale' : 'purchase',
+    input.amount,
+    'cash',
+    input.transactionDate,
+    null,
+    'Reporting test transaction',
+    input.status ?? 'completed',
+  )
+}
+
 async function withApp(
   seed: (databaseFile: string) => void,
   run: (
@@ -201,5 +231,182 @@ test('reporting summary returns only the aggregate response DTO', async () => {
     equal(JSON.stringify(payload).includes('metadata'), false)
     equal(JSON.stringify(payload).includes('transactions'), false)
     equal(JSON.stringify(payload).includes('products'), false)
+  })
+})
+
+test('income report returns an all-time summary and a keyset-paginated effective list', async () => {
+  await withApp((databaseFile) => {
+    const database = new DatabaseSync(databaseFile)
+
+    try {
+      for (let index = 0; index < 52; index += 1) {
+        insertTransaction(database, {
+          id: `income-${String(index).padStart(3, '0')}`,
+          type: 'income',
+          amount: 1,
+          transactionDate: '2020-01-02T00:00:00.000Z',
+        })
+      }
+      insertTransaction(database, {
+        id: 'expense-001',
+        type: 'expense',
+        amount: 10,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+      })
+      insertTransaction(database, {
+        id: 'pending-income',
+        type: 'income',
+        amount: 999,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+        status: 'pending',
+      })
+      insertTransaction(database, {
+        id: 'cancelled-expense',
+        type: 'expense',
+        amount: 999,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+        status: 'cancelled',
+      })
+      insertTransaction(database, {
+        id: 'future-income',
+        type: 'income',
+        amount: 999,
+        transactionDate: '2099-01-01T00:00:00.000Z',
+      })
+    } finally {
+      database.close()
+    }
+  }, async (app, cookies) => {
+    equal((await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/income',
+    })).statusCode, 401)
+
+    const first = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/income',
+      headers: { cookie: cookies.viewer },
+    })
+    equal(first.statusCode, 200)
+    const firstPayload = first.json() as {
+      summary: Record<string, number>
+      transactions: {
+        items: Array<Record<string, unknown>>
+        nextCursor?: string
+      }
+    }
+    deepEqual(firstPayload.summary, {
+      totalIncome: 52,
+      totalExpense: 10,
+      financialBalance: 42,
+    })
+    equal(firstPayload.transactions.items.length, 50)
+    equal(firstPayload.transactions.items[0]?.id, 'income-051')
+    equal(firstPayload.transactions.items.at(-1)?.id, 'income-002')
+    equal(typeof firstPayload.transactions.nextCursor, 'string')
+    deepEqual(Object.keys(firstPayload.transactions.items[0] ?? {}).sort(), [
+      'amount', 'category', 'description', 'id', 'paymentMethod',
+      'status', 'transactionDate', 'type',
+    ])
+
+    const second = await app.inject({
+      method: 'GET',
+      url: `/api/v1/reports/income?cursor=${encodeURIComponent(firstPayload.transactions.nextCursor!)}`,
+      headers: { cookie: cookies.viewer },
+    })
+    equal(second.statusCode, 200)
+    const secondPayload = second.json() as {
+      transactions: { items: Array<{ id: string }>; nextCursor?: string }
+    }
+    deepEqual(secondPayload.transactions.items.map((item) => item.id), [
+      'income-001',
+      'income-000',
+      'expense-001',
+    ])
+    equal(secondPayload.transactions.nextCursor, undefined)
+
+    const incomeOnly = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/income?type=income&limit=2',
+      headers: { cookie: cookies.viewer },
+    })
+    equal(incomeOnly.statusCode, 200)
+    const incomePayload = incomeOnly.json() as {
+      summary: Record<string, number>
+      transactions: { items: Array<{ type: string }> }
+    }
+    deepEqual(incomePayload.summary, firstPayload.summary)
+    equal(incomePayload.transactions.items.every((item) => item.type === 'income'), true)
+
+    const expenseOnly = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/income?type=expense',
+      headers: { cookie: cookies.viewer },
+    })
+    equal(expenseOnly.statusCode, 200)
+    const expensePayload = expenseOnly.json() as {
+      summary: Record<string, number>
+      transactions: { items: Array<{ id: string; type: string }> }
+    }
+    deepEqual(expensePayload.summary, firstPayload.summary)
+    deepEqual(expensePayload.transactions.items.map((item) => ({
+      id: item.id,
+      type: item.type,
+    })), [{ id: 'expense-001', type: 'expense' }])
+  })
+})
+
+test('income report validates query parameters and cursor filters', async () => {
+  await withApp((databaseFile) => {
+    const database = new DatabaseSync(databaseFile)
+
+    try {
+      insertTransaction(database, {
+        id: 'income-001',
+        type: 'income',
+        amount: 1,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+      })
+      insertTransaction(database, {
+        id: 'income-000',
+        type: 'income',
+        amount: 1,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+      })
+    } finally {
+      database.close()
+    }
+  }, async (app, cookies) => {
+    for (const query of [
+      '?type=other',
+      '?limit=0',
+      '?limit=101',
+      '?limit=1.5',
+      '?cursor=not+a+cursor',
+      '?status=completed',
+    ]) {
+      equal((await app.inject({
+        method: 'GET',
+        url: `/api/v1/reports/income${query}`,
+        headers: { cookie: cookies.viewer },
+      })).statusCode, 400)
+    }
+
+    const first = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/income?type=income&limit=1',
+      headers: { cookie: cookies.viewer },
+    })
+    equal(first.statusCode, 200)
+    const cursor = (first.json() as {
+      transactions: { nextCursor?: string }
+    }).transactions.nextCursor
+    equal(typeof cursor, 'string')
+
+    equal((await app.inject({
+      method: 'GET',
+      url: `/api/v1/reports/income?type=expense&cursor=${encodeURIComponent(cursor!)}`,
+      headers: { cookie: cookies.viewer },
+    })).statusCode, 400)
   })
 })

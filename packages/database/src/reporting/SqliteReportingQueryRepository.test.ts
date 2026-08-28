@@ -251,3 +251,64 @@ test('SqliteReportingQueryRepository matches Core all-time financial, sales, and
     ])
   })
 })
+
+test('SqliteReportingQueryRepository returns an effective, keyset-paginated income report with an independent summary', async () => {
+  const transactions = [
+    {
+      ...createTransaction('transaction-b', 'income', 'sale', 100, 'completed'),
+      transactionDate: new Date('2026-08-15T12:00:00.000Z'),
+    },
+    {
+      ...createTransaction('transaction-a', 'expense', 'purchase', 40, 'completed'),
+      transactionDate: new Date('2026-08-15T12:00:00.000Z'),
+    },
+    {
+      ...createTransaction('transaction-old', 'income', 'other', 20, 'completed'),
+      transactionDate: new Date('2026-08-14T12:00:00.000Z'),
+    },
+    createTransaction('transaction-pending', 'income', 'sale', 999, 'pending'),
+    createTransaction('transaction-cancelled', 'expense', 'purchase', 999, 'cancelled'),
+    {
+      ...createTransaction('transaction-future', 'income', 'sale', 999, 'completed'),
+      transactionDate: new Date('2026-10-01T00:00:00.000Z'),
+    },
+  ]
+  const now = new Date('2026-09-01T00:00:00.000Z')
+
+  await withRepository((database) => {
+    for (const transaction of transactions) insertTransaction(database, transaction)
+  }, async (repository) => {
+    const firstPage = await repository.getIncomeReport({ limit: 3 }, now)
+
+    const expectedFinancial = getFinancialKpis(transactions, 'all', now)
+    deepEqual(firstPage.summary, {
+      totalIncome: expectedFinancial.totalIncome,
+      totalExpense: expectedFinancial.totalExpense,
+      financialBalance: expectedFinancial.financialBalance,
+    })
+    deepEqual(firstPage.transactions.map((transaction) => transaction.id), [
+      'transaction-b',
+      'transaction-a',
+      'transaction-old',
+    ])
+
+    const incomeOnly = await repository.getIncomeReport({
+      limit: 3,
+      type: 'income',
+    }, now)
+    deepEqual(incomeOnly.summary, firstPage.summary)
+    deepEqual(incomeOnly.transactions.map((transaction) => transaction.id), [
+      'transaction-b',
+      'transaction-old',
+    ])
+
+    const secondPage = await repository.getIncomeReport({
+      limit: 3,
+      cursor: {
+        transactionDate: firstPage.transactions.at(-1)!.transactionDate,
+        id: firstPage.transactions.at(-1)!.id,
+      },
+    }, now)
+    deepEqual(secondPage.transactions, [])
+  })
+})
