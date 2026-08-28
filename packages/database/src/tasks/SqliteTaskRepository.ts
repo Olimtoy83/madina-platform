@@ -4,7 +4,10 @@ import type {
   TaskPriority,
   TaskRepository,
   TaskStatus,
+  TaskUnitOfWork,
 } from '@madina/core'
+import type { AuditEvent } from '@madina/shared'
+import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
 import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface TaskRow {
@@ -35,12 +38,12 @@ function toTask(
   }
 }
 
-export class SqliteTaskRepository
-  implements TaskRepository {
+class SqliteTaskUnitOfWork
+  implements TaskUnitOfWork {
   private readonly database: DatabaseSync
 
-  constructor(filename: string) {
-    this.database = openDatabaseConnection(filename)
+  constructor(database: DatabaseSync) {
+    this.database = database
   }
 
   async findAll(): Promise<Task[]> {
@@ -106,6 +109,55 @@ export class SqliteTaskRepository
     this.database.prepare(
       'DELETE FROM tasks WHERE id = ?',
     ).run(taskId)
+  }
+
+  async appendAuditEvent(event: AuditEvent): Promise<void> {
+    appendAuditEvent(this.database, event)
+  }
+}
+
+export class SqliteTaskRepository
+  implements TaskRepository {
+  private readonly database: DatabaseSync
+
+  constructor(filename: string) {
+    this.database = openDatabaseConnection(filename)
+  }
+
+  async withTransaction<T>(
+    operation: (unitOfWork: TaskUnitOfWork) => Promise<T>,
+  ): Promise<T> {
+    this.database.exec('BEGIN IMMEDIATE')
+    try {
+      const result = await operation(
+        new SqliteTaskUnitOfWork(this.database),
+      )
+      this.database.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async findAll(): Promise<Task[]> {
+    return new SqliteTaskUnitOfWork(this.database).findAll()
+  }
+
+  async findById(taskId: string): Promise<Task | undefined> {
+    return new SqliteTaskUnitOfWork(this.database).findById(taskId)
+  }
+
+  async save(task: Task): Promise<void> {
+    await new SqliteTaskUnitOfWork(this.database).save(task)
+  }
+
+  async update(task: Task): Promise<void> {
+    await new SqliteTaskUnitOfWork(this.database).update(task)
+  }
+
+  async delete(taskId: string): Promise<void> {
+    await new SqliteTaskUnitOfWork(this.database).delete(taskId)
   }
 
   close(): void {

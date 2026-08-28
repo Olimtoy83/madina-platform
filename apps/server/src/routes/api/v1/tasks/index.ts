@@ -9,19 +9,22 @@ import type {
 } from '@madina/api'
 import {
   createTask,
+  TaskMutationService,
+  TaskNotFoundError,
   TaskValidationError,
-  updateTask,
   type Task,
   type TaskRepository,
 } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
 import {
+  getAuthenticatedCommandContext,
   requirePermission,
   requireTrustedOrigin,
 } from '../../../../plugins/authentication.js'
 
 interface TasksRoutesOptions {
   taskRepository: TaskRepository
+  taskMutationService: TaskMutationService
 }
 
 interface TaskParams {
@@ -47,13 +50,13 @@ function parseDueDate(
     : undefined
 }
 
-function toTask(
+function toCreateInput(
   input: CreateTaskRequest,
-): Task {
-  return createTask({
+): Omit<CreateTaskRequest, 'dueDate'> & { dueDate?: Date } {
+  return {
     ...input,
     dueDate: parseDueDate(input.dueDate),
-  })
+  }
 }
 
 function toUpdateInput(
@@ -71,7 +74,7 @@ function toUpdateInput(
   return updates
 }
 
-function toErrorResponse(error: TaskValidationError) {
+function toErrorResponse(error: { message: string }) {
   return {
     statusCode: 400,
     error: 'Bad Request',
@@ -79,11 +82,25 @@ function toErrorResponse(error: TaskValidationError) {
   }
 }
 
+function isTaskValidationError(
+  error: unknown,
+): error is TaskValidationError {
+  return typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    error.name === 'TaskValidationError' &&
+    'message' in error &&
+    typeof error.message === 'string'
+}
+
 export async function tasksRoutes(
   app: FastifyInstance,
   options: TasksRoutesOptions,
 ) {
-  const { taskRepository } = options
+  const {
+    taskRepository,
+    taskMutationService,
+  } = options
 
   app.get(
     '/',
@@ -109,14 +126,15 @@ export async function tasksRoutes(
     },
     async (request, reply): Promise<TaskResponse | ApiErrorResponse> => {
       try {
-        const task = toTask(request.body)
-
-        await taskRepository.save(task)
+        const task = await taskMutationService.create(
+          toCreateInput(request.body),
+          getAuthenticatedCommandContext(request),
+        )
         reply.code(201)
 
         return toTaskResponse(task)
       } catch (error) {
-        if (error instanceof TaskValidationError) {
+        if (isTaskValidationError(error)) {
           reply.code(400)
           return toErrorResponse(error)
         }
@@ -141,10 +159,7 @@ export async function tasksRoutes(
       reply,
     ): Promise<ImportTasksResponse | ApiErrorResponse> => {
       try {
-        let created = 0
-        let updated = 0
-
-        for (const input of request.body.tasks) {
+        const tasks = request.body.tasks.map((input): Task => {
           const id = input.id.trim()
           const createdAt = new Date(input.createdAt)
           const updatedAt = new Date(input.updatedAt)
@@ -164,35 +179,28 @@ export async function tasksRoutes(
             )
           }
 
-          const task = toTask({
+          const parsedTask = createTask(toCreateInput({
             title: input.title,
             description: input.description,
             status: input.status,
             priority: input.priority,
             dueDate: input.dueDate,
-          })
+          }))
 
-          const importedTask: Task = {
-            ...task,
+          return {
+            ...parsedTask,
             id,
             createdAt,
             updatedAt,
           }
+        })
 
-          const existing = await taskRepository.findById(id)
-
-          if (existing) {
-            await taskRepository.update(importedTask)
-            updated += 1
-          } else {
-            await taskRepository.save(importedTask)
-            created += 1
-          }
-        }
-
-        return { created, updated }
+        return await taskMutationService.import(
+          tasks,
+          getAuthenticatedCommandContext(request),
+        )
       } catch (error) {
-        if (error instanceof TaskValidationError) {
+        if (isTaskValidationError(error)) {
           reply.code(400)
           return toErrorResponse(error)
         }
@@ -214,30 +222,23 @@ export async function tasksRoutes(
       ],
     },
     async (request, reply): Promise<TaskResponse | ApiErrorResponse> => {
-      const task = await taskRepository.findById(
-        request.params.taskId,
-      )
-
-      if (!task) {
-        reply.code(404)
-        return {
-          statusCode: 404,
-          error: 'Not Found',
-          message: 'Task not found',
-        }
-      }
-
       try {
-        const updatedTask = updateTask(
-          task,
+        const updatedTask = await taskMutationService.update(
+          request.params.taskId,
           toUpdateInput(request.body),
+          getAuthenticatedCommandContext(request),
         )
-
-        await taskRepository.update(updatedTask)
-
         return toTaskResponse(updatedTask)
       } catch (error) {
-        if (error instanceof TaskValidationError) {
+        if (error instanceof TaskNotFoundError) {
+          reply.code(404)
+          return {
+            statusCode: 404,
+            error: 'Not Found',
+            message: error.message,
+          }
+        }
+        if (isTaskValidationError(error)) {
           reply.code(400)
           return toErrorResponse(error)
         }
@@ -258,11 +259,15 @@ export async function tasksRoutes(
       ],
     },
     async (request, reply): Promise<void | ApiErrorResponse> => {
-      const task = await taskRepository.findById(
-        request.params.taskId,
-      )
-
-      if (!task) {
+      try {
+        await taskMutationService.delete(
+          request.params.taskId,
+          getAuthenticatedCommandContext(request),
+        )
+      } catch (error) {
+        if (!(error instanceof TaskNotFoundError)) {
+          throw error
+        }
         reply.code(404)
         return {
           statusCode: 404,
@@ -270,8 +275,6 @@ export async function tasksRoutes(
           message: 'Task not found',
         }
       }
-
-      await taskRepository.delete(task.id)
       reply.code(204)
     },
   )

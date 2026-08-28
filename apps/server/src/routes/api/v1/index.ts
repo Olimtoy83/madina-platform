@@ -6,6 +6,7 @@ import {
 import {
   ClientMutationService,
   CommerceService,
+  TaskMutationService,
 } from '@madina/core'
 import {
   SqliteAuthRepository,
@@ -53,6 +54,9 @@ export async function apiV1Routes(
 
   const taskRepository =
     new SqliteTaskRepository(databaseFile)
+  const taskMutationService = new TaskMutationService(
+    taskRepository,
+  )
 
   const commerceRepository =
     new SqliteCommerceRepository(databaseFile)
@@ -97,6 +101,7 @@ export async function apiV1Routes(
   app.register(tasksRoutes, {
     prefix: '/tasks',
     taskRepository,
+    taskMutationService,
   })
 
   app.register(commerceRoutes, {

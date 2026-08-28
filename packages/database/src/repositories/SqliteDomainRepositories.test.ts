@@ -15,7 +15,10 @@ import type {
   Product,
   Task,
 } from '@madina/core'
-import { ClientMutationService } from '@madina/core'
+import {
+  ClientMutationService,
+  TaskMutationService,
+} from '@madina/core'
 import { SqliteAuditRepository } from '../audit/SqliteAuditRepository.js'
 import { SqliteClientRepository } from '../clients/SqliteClientRepository.js'
 import { SqliteCommerceRepository } from '../commerce/SqliteCommerceRepository.js'
@@ -187,6 +190,83 @@ test('client import audit failure rolls back every imported row', async () => {
       } finally {
         auditRepository.close()
       }
+    } finally {
+      repository.close()
+    }
+  })
+})
+
+test('task audit failure rolls back a hard delete', async () => {
+  await withDatabaseFile(async (filename) => {
+    initializeDatabase(filename)
+    const repository = new SqliteTaskRepository(filename)
+    const service = new TaskMutationService(repository)
+    const task: Task = {
+      id: 'task-rollback', createdAt: now, updatedAt: now,
+      title: 'Не удалять', status: 'todo', priority: 'medium',
+    }
+
+    try {
+      await repository.save(task)
+      const database = new DatabaseSync(filename)
+      try {
+        database.exec(`
+          CREATE TRIGGER reject_task_delete_audit
+          BEFORE INSERT ON audit_events
+          WHEN NEW.action = 'task.deleted'
+          BEGIN SELECT RAISE(ABORT, 'task audit rejected by test trigger'); END
+        `)
+      } finally {
+        database.close()
+      }
+
+      await rejects(
+        service.delete(task.id, {
+          actorType: 'user', actorUserId: 'admin-1', requestId: 'request-3',
+        }),
+        /task audit rejected by test trigger/,
+      )
+      equal((await repository.findById(task.id))?.title, 'Не удалять')
+      const auditRepository = new SqliteAuditRepository(filename)
+      try {
+        equal((await auditRepository.findAll()).length, 0)
+      } finally {
+        auditRepository.close()
+      }
+    } finally {
+      repository.close()
+    }
+  })
+})
+
+test('task import audit failure rolls back every imported row', async () => {
+  await withDatabaseFile(async (filename) => {
+    initializeDatabase(filename)
+    const repository = new SqliteTaskRepository(filename)
+    const service = new TaskMutationService(repository)
+    try {
+      const database = new DatabaseSync(filename)
+      try {
+        database.exec(`
+          CREATE TRIGGER reject_task_import_audit
+          BEFORE INSERT ON audit_events
+          WHEN NEW.action = 'tasks.imported'
+          BEGIN SELECT RAISE(ABORT, 'task import audit rejected by test trigger'); END
+        `)
+      } finally {
+        database.close()
+      }
+      await rejects(
+        service.import([
+          { id: 'task-import-1', createdAt: now, updatedAt: now, title: 'Первая', status: 'todo', priority: 'low' },
+          { id: 'task-import-2', createdAt: now, updatedAt: now, title: 'Вторая', status: 'completed', priority: 'high' },
+        ], {
+          actorType: 'user', actorUserId: 'admin-1', requestId: 'request-4',
+        }),
+        /task import audit rejected by test trigger/,
+      )
+      equal(await repository.findById('task-import-1'), undefined)
+      equal(await repository.findById('task-import-2'), undefined)
     } finally {
       repository.close()
     }
