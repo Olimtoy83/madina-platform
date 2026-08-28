@@ -32,6 +32,7 @@ import type {
 import {
   getSessionCookieName,
   getSessionSecret,
+  getAuthenticatedCommandContext,
   requireAuthentication,
   requirePermission,
   requireTrustedOrigin,
@@ -277,6 +278,7 @@ export async function authRoutes(
       try {
         const user = await options.userManagementService.createUser(
           request.body,
+          getAuthenticatedCommandContext(request),
         )
         reply.code(201)
         return toManagedUserResponse(user)
@@ -314,6 +316,7 @@ export async function authRoutes(
         const user = await options.userManagementService.updateUser(
           request.params.userId,
           request.body,
+          getAuthenticatedCommandContext(request),
         )
         return toManagedUserResponse(user)
       } catch (error) {
@@ -350,6 +353,7 @@ export async function authRoutes(
         await options.userManagementService.resetPassword(
           request.params.userId,
           request.body.password,
+          getAuthenticatedCommandContext(request),
         )
         return { success: true }
       } catch (error) {
@@ -379,6 +383,7 @@ export async function authRoutes(
       try {
         await options.userManagementService.revokeSessions(
           request.params.userId,
+          getAuthenticatedCommandContext(request),
         )
         return { success: true }
       } catch (error) {

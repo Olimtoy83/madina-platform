@@ -3,6 +3,7 @@ import type { AuthRepository } from './repositories/AuthRepository.js'
 import { hashPassword } from './passwords/scrypt.js'
 import { validateUsername } from './usernames.js'
 import type { User, UserRole, UserStatus } from './types.js'
+import type { AuditEvent, CommandContext } from '@madina/shared'
 
 const userRoles: readonly UserRole[] = ['admin', 'manager', 'operator', 'viewer']
 const userStatuses: readonly UserStatus[] = ['active', 'inactive']
@@ -105,6 +106,7 @@ export class UserManagementService {
 
   async createUser(
     input: CreateManagedUserInput,
+    context: CommandContext,
     now = new Date(),
   ): Promise<User> {
     validateRole(input.role)
@@ -141,6 +143,9 @@ export class UserManagementService {
         ...passwordHash,
         passwordChangedAt: now,
       })
+      await appendUserAudit(unitOfWork, context, 'user.created', user.id, {
+        role: user.role,
+      })
     })
 
     return user
@@ -149,6 +154,7 @@ export class UserManagementService {
   async updateUser(
     userId: string,
     input: UpdateManagedUserInput,
+    context: CommandContext,
     now = new Date(),
   ): Promise<User> {
     if (input.role === undefined && input.status === undefined) {
@@ -169,6 +175,11 @@ export class UserManagementService {
         status: input.status ?? currentUser.status,
         updatedAt: now,
       }
+      const roleChanged = nextUser.role !== currentUser.role
+      const statusChanged = nextUser.status !== currentUser.status
+
+      if (!roleChanged && !statusChanged) return currentUser
+
       const invalidatesSessions = nextUser.role !== currentUser.role ||
         (currentUser.status === 'active' && nextUser.status === 'inactive')
 
@@ -182,6 +193,20 @@ export class UserManagementService {
         await unitOfWork.revokeSessionsByUserId(userId, now)
       }
 
+      if (roleChanged) {
+        await appendUserAudit(unitOfWork, context, 'user.role_changed', userId, {
+          from: currentUser.role,
+          to: nextUser.role,
+        })
+      }
+
+      if (statusChanged) {
+        await appendUserAudit(unitOfWork, context, 'user.status_changed', userId, {
+          from: currentUser.status,
+          to: nextUser.status,
+        })
+      }
+
       return nextUser
     })
   }
@@ -189,6 +214,7 @@ export class UserManagementService {
   async resetPassword(
     userId: string,
     password: string,
+    context: CommandContext,
     now = new Date(),
   ): Promise<void> {
     const passwordHash = await hashPassword(password)
@@ -209,11 +235,13 @@ export class UserManagementService {
         updatedAt: now,
       })
       await unitOfWork.revokeSessionsByUserId(userId, now)
+      await appendUserAudit(unitOfWork, context, 'user.password_reset', userId)
     })
   }
 
   async revokeSessions(
     userId: string,
+    context: CommandContext,
     now = new Date(),
   ): Promise<void> {
     await this.repository.withUserManagementTransaction(async (unitOfWork) => {
@@ -227,6 +255,28 @@ export class UserManagementService {
         updatedAt: now,
       })
       await unitOfWork.revokeSessionsByUserId(userId, now)
+      await appendUserAudit(unitOfWork, context, 'user.sessions_revoked', userId)
     })
   }
+}
+
+async function appendUserAudit(
+  repository: AuthRepository,
+  context: CommandContext,
+  action: AuditEvent['action'],
+  userId: string,
+  metadata?: AuditEvent['metadata'],
+): Promise<void> {
+  await repository.appendAuditEvent({
+    id: randomUUID(),
+    occurredAt: new Date(),
+    actorType: context.actorType,
+    actorUserId: context.actorUserId,
+    requestId: context.requestId,
+    domain: 'users',
+    entityType: 'user',
+    entityId: userId,
+    action,
+    metadata,
+  })
 }

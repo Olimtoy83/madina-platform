@@ -8,16 +8,35 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
 import type {
   AuthSession,
   User,
 } from '@madina/auth'
-import { hashPassword } from '@madina/auth'
+import {
+  hashPassword,
+  UserManagementService,
+} from '@madina/auth'
+import type { CommandContext } from '@madina/shared'
 import { initializeDatabase } from '../migrations/initializeDatabase.js'
+import { SqliteAuditRepository } from '../audit/SqliteAuditRepository.js'
 import { SqliteAuthRepository } from './SqliteAuthRepository.js'
 
 const now = new Date('2026-08-27T00:00:00.000Z')
+
+function createBootstrapAuditEvent(userId: string) {
+  return {
+    id: 'bootstrap-audit-1',
+    occurredAt: now,
+    actorType: 'system' as const,
+    requestId: 'cli:request-1',
+    domain: 'users' as const,
+    entityType: 'user',
+    entityId: userId,
+    action: 'user.bootstrap_admin_created' as const,
+  }
+}
 
 function createUser(overrides: Partial<User> = {}): User {
   return {
@@ -48,7 +67,7 @@ function createSession(overrides: Partial<AuthSession> = {}): AuthSession {
 }
 
 async function withRepository(
-  run: (repository: SqliteAuthRepository) => Promise<void>,
+  run: (repository: SqliteAuthRepository, databaseFile: string) => Promise<void>,
 ): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'madina-auth-repository-'))
   const databaseFile = join(directory, 'madina.sqlite')
@@ -56,7 +75,7 @@ async function withRepository(
   const repository = new SqliteAuthRepository(databaseFile)
 
   try {
-    await run(repository)
+    await run(repository, databaseFile)
   } finally {
     repository.close()
     rmSync(directory, { recursive: true, force: true })
@@ -144,12 +163,16 @@ test('SqliteAuthRepository rolls back a failed first-admin creation', async () =
     const user = createUser()
     const passwordHash = await hashPassword('correct horse battery staple')
 
-    await rejects(repository.createFirstAdmin(user, {
-      userId: user.id,
-      ...passwordHash,
-      keyLength: 0,
-      passwordChangedAt: now,
-    }))
+    await rejects(repository.createFirstAdmin(
+      user,
+      {
+        userId: user.id,
+        ...passwordHash,
+        keyLength: 0,
+        passwordChangedAt: now,
+      },
+      createBootstrapAuditEvent(user.id),
+    ))
 
     equal(
       await repository.findUserByNormalizedUsername(user.normalizedUsername),
@@ -176,5 +199,42 @@ test('SqliteAuthRepository rolls back failed user lifecycle transactions', async
 
     equal(await repository.findUserById(user.id), undefined)
     equal(await repository.findCredentialByUserId(user.id), undefined)
+  })
+})
+
+test('user management rolls back user creation when its audit insert fails', async () => {
+  await withRepository(async (repository, databaseFile) => {
+    const database = new DatabaseSync(databaseFile)
+    database.exec(`CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT, 'audit failure'); END;`)
+    database.close()
+    const service = new UserManagementService(repository)
+    const context: CommandContext = {
+      actorType: 'user',
+      actorUserId: 'admin-1',
+      requestId: 'request-1',
+    }
+
+    await rejects(service.createUser({
+      username: 'audited.user',
+      role: 'viewer',
+      initialPassword: 'correct horse battery staple',
+    }, context), /audit failure/)
+
+    equal(await repository.findUserByNormalizedUsername('audited.user'), undefined)
+    const verificationDatabase = new DatabaseSync(databaseFile)
+    try {
+      const credentialCount = verificationDatabase.prepare(
+        'SELECT COUNT(*) AS count FROM user_credentials',
+      ).get() as { count: number }
+      equal(credentialCount.count, 0)
+    } finally {
+      verificationDatabase.close()
+    }
+    const auditRepository = new SqliteAuditRepository(databaseFile)
+    try {
+      equal((await auditRepository.findAll()).length, 0)
+    } finally {
+      auditRepository.close()
+    }
   })
 })

@@ -24,6 +24,7 @@ import type {
 import {
   initializeDatabase,
   SqliteAuthRepository,
+  SqliteAuditRepository,
   SqliteCommerceRepository,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
@@ -123,7 +124,7 @@ async function seedAdminSession(databaseFile: string): Promise<string> {
 
 async function withApp(
   seed: (repository: SqliteCommerceRepository) => Promise<void>,
-  run: (app: FastifyInstance) => Promise<void>,
+  run: (app: FastifyInstance, databaseFile: string) => Promise<void>,
 ): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'madina-commerce-routes-'))
   const databaseFile = join(directory, 'commerce.sqlite')
@@ -154,7 +155,7 @@ async function withApp(
 
   try {
     await app.ready()
-    await run(app)
+    await run(app, databaseFile)
   } finally {
     await app.close()
 
@@ -556,6 +557,69 @@ test('commerce snapshot import is idempotent and never overwrites state', async 
         (products.products as Array<{ name: string }>)[0]?.name,
         'Финики',
       )
+    },
+  )
+})
+
+test('commerce snapshot import records one migration audit event with a server UUID request id', async () => {
+  await withApp(
+    async () => {},
+    async (app, databaseFile) => {
+      const clientRequestId = 'client-controlled-request-id'
+      const snapshot = createSnapshot()
+      const first = await app.inject({
+        method: 'POST',
+        url: '/api/v1/commerce/import',
+        headers: {
+          'x-request-id': clientRequestId,
+        },
+        payload: snapshot,
+      })
+
+      equal(first.statusCode, 200)
+      deepEqual(first.json(), {
+        imported: true,
+        idempotent: false,
+      })
+
+      const auditRepository = new SqliteAuditRepository(databaseFile)
+      try {
+        const events = await auditRepository.findAll()
+        equal(events.length, 1)
+
+        const [event] = events
+        equal(event?.domain, 'commerce')
+        equal(event?.action, 'commerce.snapshot_imported')
+        equal(event?.actorType, 'migration')
+        equal(event?.actorUserId, 'commerce-routes-admin')
+        equal(event?.entityType, 'commerce_snapshot')
+        equal(event?.entityId, 'legacy-snapshot')
+        equal(event?.requestId === clientRequestId, false)
+        equal(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            event?.requestId ?? '',
+          ),
+          true,
+        )
+
+        const repeated = await app.inject({
+          method: 'POST',
+          url: '/api/v1/commerce/import',
+          headers: {
+            'x-request-id': 'another-client-request-id',
+          },
+          payload: snapshot,
+        })
+
+        equal(repeated.statusCode, 200)
+        deepEqual(repeated.json(), {
+          imported: false,
+          idempotent: true,
+        })
+        equal((await auditRepository.findAll()).length, 1)
+      } finally {
+        auditRepository.close()
+      }
     },
   )
 })

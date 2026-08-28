@@ -3,6 +3,7 @@ import type {
   PasswordCredential,
   User,
 } from '../types.js'
+import type { AuditEvent } from '@madina/shared'
 
 export interface AuthRepository {
   findAllUsers(): Promise<User[]>
@@ -15,6 +16,7 @@ export interface AuthRepository {
   createFirstAdmin(
     user: User,
     credential: PasswordCredential,
+    auditEvent: AuditEvent,
   ): Promise<boolean>
   updateUser(user: User): Promise<void>
   findCredentialByUserId(
@@ -29,6 +31,7 @@ export interface AuthRepository {
   updateSession(session: AuthSession): Promise<void>
   revokeSession(sessionId: string, revokedAt: Date): Promise<void>
   revokeSessionsByUserId(userId: string, revokedAt: Date): Promise<void>
+  appendAuditEvent(event: AuditEvent): Promise<void>
   withUserManagementTransaction<T>(
     operation: (unitOfWork: AuthRepository) => Promise<T>,
   ): Promise<T>

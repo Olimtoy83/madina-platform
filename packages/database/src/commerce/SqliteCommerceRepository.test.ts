@@ -8,6 +8,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
 import {
   CommerceService,
@@ -15,8 +16,12 @@ import {
   type Purchase,
   type Sale,
 } from '@madina/core'
+import type { CommandContext } from '@madina/shared'
 import { initializeDatabase } from '../migrations/initializeDatabase.js'
+import { SqliteAuditRepository } from '../audit/SqliteAuditRepository.js'
 import { SqliteCommerceRepository } from './SqliteCommerceRepository.js'
+
+const context: CommandContext = { actorType: 'user', actorUserId: 'user-1', requestId: 'request-1' }
 
 function createProduct(quantity = 10): Product {
   const now = new Date('2026-08-27T00:00:00.000Z')
@@ -113,10 +118,10 @@ test('SqliteCommerceRepository completes each document once', async () => {
       await repository.savePurchase(createPurchase())
       await repository.saveSale(createSale())
 
-      strictEqual((await service.completePurchase('purchase-1')).idempotent, false)
-      strictEqual((await service.completePurchase('purchase-1')).idempotent, true)
-      strictEqual((await service.completeSale('sale-1')).idempotent, false)
-      strictEqual((await service.completeSale('sale-1')).idempotent, true)
+      strictEqual((await service.completePurchase('purchase-1', context)).idempotent, false)
+      strictEqual((await service.completePurchase('purchase-1', context)).idempotent, true)
+      strictEqual((await service.completeSale('sale-1', context)).idempotent, false)
+      strictEqual((await service.completeSale('sale-1', context)).idempotent, true)
 
       strictEqual(await readProductQuantity(repository), 12)
       strictEqual(await readMovementCount(repository, 'purchase-1'), 1)
@@ -125,4 +130,31 @@ test('SqliteCommerceRepository completes each document once', async () => {
       repository.close()
       rmSync(directory, { recursive: true, force: true })
     }
+})
+
+test('audit insert failure rolls back a completed sale and its derived records', async () => {
+  const { directory, repository } = createRepository()
+  const service = new CommerceService(repository)
+  const databaseFile = join(directory, 'commerce.sqlite')
+  try {
+    await repository.saveProduct(createProduct())
+    await repository.saveSale(createSale())
+    const database = new DatabaseSync(databaseFile)
+    database.exec(`CREATE TRIGGER fail_audit_insert BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT, 'audit failure'); END;`)
+    database.close()
+    await rejects(service.completeSale('sale-1', context), /audit failure/)
+    strictEqual(await readProductQuantity(repository), 10)
+    strictEqual(await readMovementCount(repository, 'sale-1'), 0)
+    strictEqual((await repository.findAllTransactions()).length, 0)
+    strictEqual((await repository.findAllSales())[0]?.status, 'draft')
+    const auditRepository = new SqliteAuditRepository(databaseFile)
+    try {
+      strictEqual((await auditRepository.findAll()).length, 0)
+    } finally {
+      auditRepository.close()
+    }
+  } finally {
+    repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
 })

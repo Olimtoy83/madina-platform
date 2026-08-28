@@ -7,6 +7,8 @@ import type {
   UserRole,
   UserStatus,
 } from '@madina/auth'
+import type { AuditEvent } from '@madina/shared'
+import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
 import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface UserRow {
@@ -94,6 +96,10 @@ export class SqliteAuthRepository implements AuthRepository {
     this.database = openDatabaseConnection(filename)
   }
 
+  async appendAuditEvent(event: AuditEvent): Promise<void> {
+    appendAuditEvent(this.database, event)
+  }
+
   async findAllUsers(): Promise<User[]> {
     const rows = this.database.prepare(`
       SELECT id, username, normalized_username, email, role, status,
@@ -159,6 +165,7 @@ export class SqliteAuthRepository implements AuthRepository {
   async createFirstAdmin(
     user: User,
     credential: PasswordCredential,
+    auditEvent: AuditEvent,
   ): Promise<boolean> {
     this.database.exec('BEGIN IMMEDIATE')
 
@@ -174,6 +181,7 @@ export class SqliteAuthRepository implements AuthRepository {
 
       await this.createUser(user)
       await this.saveCredential(credential)
+      await this.appendAuditEvent(auditEvent)
       this.database.exec('COMMIT')
       return true
     } catch (error) {

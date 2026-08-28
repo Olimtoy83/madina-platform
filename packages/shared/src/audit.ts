@@ -78,3 +78,17 @@ export interface AuditEvent {
 export interface AuditRepository {
   append(event: AuditEvent): Promise<void>
 }
+
+export function createAuditEvent(
+  context: CommandContext,
+  input: Omit<AuditEvent, 'id' | 'occurredAt' | 'actorType' | 'actorUserId' | 'requestId'>,
+): AuditEvent {
+  return {
+    ...input,
+    id: crypto.randomUUID(),
+    occurredAt: new Date(),
+    actorType: context.actorType,
+    actorUserId: context.actorUserId,
+    requestId: context.requestId,
+  }
+}

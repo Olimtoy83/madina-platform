@@ -1,11 +1,13 @@
 import cookie from '@fastify/cookie'
 import Fastify from 'fastify'
+import { randomUUID } from 'node:crypto'
 import { apiV1Routes } from './routes/api/v1/index.js'
 import { healthRoutes } from './routes/health.js'
 
 export function buildApp() {
   const app = Fastify({
     logger: true,
+    genReqId: () => randomUUID(),
   })
 
   app.register(cookie)

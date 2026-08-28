@@ -58,8 +58,27 @@ export async function bootstrapAdmin(
     ...passwordHash,
     passwordChangedAt: now,
   }
+  const context = {
+    actorType: 'system' as const,
+    requestId: `cli:${randomUUID()}`,
+  }
+  const auditEvent = {
+    id: randomUUID(),
+    occurredAt: now,
+    actorType: context.actorType,
+    actorUserId: undefined,
+    requestId: context.requestId,
+    domain: 'users' as const,
+    entityType: 'user',
+    entityId: user.id,
+    action: 'user.bootstrap_admin_created' as const,
+  }
 
-  const created = await repository.createFirstAdmin(user, credential)
+  const created = await repository.createFirstAdmin(
+    user,
+    credential,
+    auditEvent,
+  )
 
   if (!created) {
     throw new FirstAdminAlreadyExistsError()

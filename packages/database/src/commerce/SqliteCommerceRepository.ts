@@ -9,6 +9,8 @@ import type {
   StockMovement,
   Transaction,
 } from '@madina/core'
+import type { AuditEvent } from '@madina/shared'
+import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
 import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface ProductRow {
@@ -145,6 +147,10 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
 
   constructor(database: DatabaseSync) {
     this.database = database
+  }
+
+  async appendAuditEvent(event: AuditEvent): Promise<void> {
+    appendAuditEvent(this.database, event)
   }
 
   async findProductsByIds(productIds: string[]): Promise<Product[]> {

@@ -3,6 +3,7 @@ import type { Purchase } from '../purchases/index.js'
 import type { Sale } from '../sales/index.js'
 import type { Transaction } from '../transactions/index.js'
 import type { CommerceSnapshot } from './CommerceSnapshot.js'
+import type { AuditEvent } from '@madina/shared'
 
 export interface CommerceReadRepository {
   findAllProducts(): Promise<Product[]>
@@ -43,6 +44,7 @@ export interface CommerceUnitOfWork
     transaction: Transaction,
   ): Promise<void>
   insertSnapshot(snapshot: CommerceSnapshot): Promise<void>
+  appendAuditEvent(event: AuditEvent): Promise<void>
 }
 
 export interface CommerceRepository

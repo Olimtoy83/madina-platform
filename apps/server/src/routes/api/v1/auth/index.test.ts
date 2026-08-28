@@ -18,6 +18,7 @@ import {
 import {
   initializeDatabase,
   SqliteAuthRepository,
+  SqliteAuditRepository,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
 import { buildApp } from '../../../../app.js'
@@ -621,6 +622,101 @@ test('password reset and explicit session revocation invalidate all sessions', a
     equal((await app.inject({
       method: 'GET', url: '/api/v1/auth/me', headers: { cookie: replacementCookie },
     })).statusCode, 401)
+  })
+})
+
+test('user management records minimal audit events only for real mutations', async () => {
+  await withApp(seedUser, async (app, databaseFile) => {
+    const adminCookie = readCookie(await login(app)).cookie
+    const suppliedRequestId = 'client-controlled-request-id'
+    const headers = {
+      ...managementHeaders(adminCookie),
+      'x-request-id': suppliedRequestId,
+    }
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/users',
+      headers,
+      payload: {
+        username: 'audited.user',
+        email: 'audited.user@example.test',
+        role: 'viewer',
+        initialPassword: 'initial audited password',
+      },
+    })
+    equal(created.statusCode, 201)
+    const userId = created.json().id as string
+
+    equal((await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/auth/users/${userId}`,
+      headers,
+      payload: { role: 'operator' },
+    })).statusCode, 200)
+    equal((await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/auth/users/${userId}`,
+      headers,
+      payload: { status: 'inactive' },
+    })).statusCode, 200)
+    equal((await app.inject({
+      method: 'POST',
+      url: `/api/v1/auth/users/${userId}/password`,
+      headers,
+      payload: { password: 'replacement audited password' },
+    })).statusCode, 200)
+    equal((await app.inject({
+      method: 'POST',
+      url: `/api/v1/auth/users/${userId}/revoke-sessions`,
+      headers,
+    })).statusCode, 200)
+
+    const auditRepository = new SqliteAuditRepository(databaseFile)
+    try {
+      const events = (await auditRepository.findAll())
+        .filter((event) => event.domain === 'users')
+      equal(events.length, 5)
+      deepEqual(
+        events.map((event) => event.action).sort(),
+        [
+          'user.created',
+          'user.password_reset',
+          'user.role_changed',
+          'user.sessions_revoked',
+          'user.status_changed',
+        ],
+      )
+
+      for (const event of events) {
+        equal(event.actorType, 'user')
+        equal(event.actorUserId, 'user-1')
+        equal(event.entityType, 'user')
+        equal(event.entityId, userId)
+        equal(event.requestId === suppliedRequestId, false)
+        equal(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+            event.requestId,
+          ),
+          true,
+        )
+      }
+
+      const serializedEvents = JSON.stringify(events)
+      equal(serializedEvents.includes('initial audited password'), false)
+      equal(serializedEvents.includes('replacement audited password'), false)
+      equal(serializedEvents.includes('tokenHash'), false)
+
+      const noOp = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/auth/users/${userId}`,
+        headers,
+        payload: { role: 'operator' },
+      })
+      equal(noOp.statusCode, 200)
+      equal((await auditRepository.findAll()).length, 5)
+    } finally {
+      auditRepository.close()
+    }
   })
 })
 

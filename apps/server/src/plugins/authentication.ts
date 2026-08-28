@@ -129,6 +129,18 @@ export function getSessionSecret(
   return request.cookies[getSessionCookieName()]
 }
 
+export function getAuthenticatedCommandContext(
+  request: FastifyRequest,
+): {
+  actorType: 'user'
+  actorUserId: string
+  requestId: string
+} {
+  const principal = request.authPrincipal
+  if (!principal) throw new Error('Authenticated command context is required.')
+  return { actorType: 'user', actorUserId: principal.id, requestId: request.id }
+}
+
 export function requireAuthentication(
   app: FastifyInstance,
 ): AuthenticationGuard {

@@ -42,6 +42,7 @@ import {
 import type { FastifyInstance } from 'fastify'
 import {
   requirePermission,
+  getAuthenticatedCommandContext,
   requireTrustedOrigin,
 } from '../../../../plugins/authentication.js'
 
@@ -299,7 +300,7 @@ export async function commerceRoutes(
     async (request, reply): Promise<ProductResponse | ApiErrorResponse> => {
       try {
         const product = await options.commerceService.createProduct(
-          request.body,
+          request.body, getAuthenticatedCommandContext(request),
         )
         reply.code(201)
         return toProductResponse(product)
@@ -328,7 +329,7 @@ export async function commerceRoutes(
       try {
         const product = await options.commerceService.updateProduct(
           request.params.productId,
-          request.body,
+          request.body, getAuthenticatedCommandContext(request),
         )
         return toProductResponse(product)
       } catch (error) {
@@ -356,6 +357,7 @@ export async function commerceRoutes(
         return toProductResponse(
           await options.commerceService.deactivateProduct(
             request.params.productId,
+            getAuthenticatedCommandContext(request),
           ),
         )
       } catch (error) {
@@ -383,7 +385,7 @@ export async function commerceRoutes(
       try {
         const result = await options.commerceService.adjustProductStock(
           request.params.productId,
-          request.body,
+          request.body, getAuthenticatedCommandContext(request),
         )
         return {
           product: toProductResponse(result.product),
@@ -460,7 +462,9 @@ export async function commerceRoutes(
     ): Promise<ImportCommerceSnapshotResponse | ApiErrorResponse> => {
       try {
         return await options.commerceService.importSnapshot(
-          toCommerceSnapshot(request.body),
+          toCommerceSnapshot(request.body), {
+            ...getAuthenticatedCommandContext(request), actorType: 'migration',
+          },
         )
       } catch (error) {
         if (error instanceof CommerceSnapshotValidationError) {
@@ -486,7 +490,7 @@ export async function commerceRoutes(
     async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
       try {
         const purchase = await options.commerceService.createPurchase(
-          toCreatePurchaseCommand(request.body),
+          toCreatePurchaseCommand(request.body), getAuthenticatedCommandContext(request),
         )
         reply.code(201)
         return toPurchaseResponse(purchase)
@@ -516,7 +520,7 @@ export async function commerceRoutes(
         return toPurchaseResponse(
           await options.commerceService.updatePurchase(
             request.params.purchaseId,
-            toUpdatePurchaseCommand(request.body),
+            toUpdatePurchaseCommand(request.body), getAuthenticatedCommandContext(request),
           ),
         )
       } catch (error) {
@@ -542,7 +546,7 @@ export async function commerceRoutes(
     async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
       try {
         return toPurchaseResponse(
-          await options.commerceService.cancelPurchase(request.params.purchaseId),
+          await options.commerceService.cancelPurchase(request.params.purchaseId, getAuthenticatedCommandContext(request)),
         )
       } catch (error) {
         if (isMutationError(error)) {
@@ -564,7 +568,7 @@ export async function commerceRoutes(
     },
     async (request, reply): Promise<CommerceCompletionResponse> => {
       const result = await options.commerceService.completePurchase(
-        request.params.purchaseId,
+        request.params.purchaseId, getAuthenticatedCommandContext(request),
       )
 
       if (!result.success) {
@@ -589,7 +593,7 @@ export async function commerceRoutes(
     },
     async (request, reply): Promise<CommerceCompletionResponse> => {
       const result = await options.commerceService.completeSale(
-        request.params.saleId,
+        request.params.saleId, getAuthenticatedCommandContext(request),
       )
 
       if (!result.success) {
@@ -617,7 +621,7 @@ export async function commerceRoutes(
     async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
       try {
         const sale = await options.commerceService.createSale(
-          toCreateSaleCommand(request.body),
+          toCreateSaleCommand(request.body), getAuthenticatedCommandContext(request),
         )
         reply.code(201)
         return toSaleResponse(sale)
@@ -647,7 +651,7 @@ export async function commerceRoutes(
         return toSaleResponse(
           await options.commerceService.updateSale(
             request.params.saleId,
-            toUpdateSaleCommand(request.body),
+            toUpdateSaleCommand(request.body), getAuthenticatedCommandContext(request),
           ),
         )
       } catch (error) {
@@ -673,7 +677,7 @@ export async function commerceRoutes(
     async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
       try {
         return toSaleResponse(
-          await options.commerceService.cancelSale(request.params.saleId),
+          await options.commerceService.cancelSale(request.params.saleId, getAuthenticatedCommandContext(request)),
         )
       } catch (error) {
         if (isMutationError(error)) {

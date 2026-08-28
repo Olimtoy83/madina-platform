@@ -40,6 +40,7 @@ import {
   type UpdatePurchaseCommand,
   type UpdateSaleCommand,
 } from './CommerceCommands.js'
+import type { AuditEvent, CommandContext } from '@madina/shared'
 
 export interface CommerceCompletionResult {
   success: boolean
@@ -83,6 +84,7 @@ export class CommerceService {
 
   async createProduct(
     command: CreateProductCommand,
+    context: CommandContext,
   ): Promise<Product> {
     return this.repository.withTransaction(async (unitOfWork) => {
       if (!Number.isFinite(command.initialQuantity) || command.initialQuantity < 0) {
@@ -108,6 +110,7 @@ export class CommerceService {
       await unitOfWork.insertProduct(product)
 
       if (command.initialQuantity === 0) {
+        await appendCommerceAudit(unitOfWork, context, 'product.created', 'product', product.id)
         return product
       }
 
@@ -127,6 +130,10 @@ export class CommerceService {
 
       await unitOfWork.saveProducts(result.products)
       await unitOfWork.saveStockMovements([result.movement])
+      await appendCommerceAudit(unitOfWork, context, 'product.created', 'product', result.product.id, {
+        initialQuantity: command.initialQuantity,
+        movementId: result.movement.id,
+      })
       return result.product
     })
   }
@@ -134,6 +141,7 @@ export class CommerceService {
   async updateProduct(
     productId: string,
     command: UpdateProductCommand,
+    context: CommandContext,
   ): Promise<Product> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const product = await findProduct(unitOfWork, productId)
@@ -149,16 +157,18 @@ export class CommerceService {
       )
 
       await unitOfWork.saveProducts([updatedProduct])
+      await appendCommerceAudit(unitOfWork, context, 'product.updated', 'product', updatedProduct.id)
       return updatedProduct
     })
   }
 
-  async deactivateProduct(productId: string): Promise<Product> {
+  async deactivateProduct(productId: string, context: CommandContext): Promise<Product> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const product = await findProduct(unitOfWork, productId)
       const deactivatedProduct = deactivateProduct(product)
 
       await unitOfWork.saveProducts([deactivatedProduct])
+      await appendCommerceAudit(unitOfWork, context, 'product.deactivated', 'product', deactivatedProduct.id)
       return deactivatedProduct
     })
   }
@@ -166,6 +176,7 @@ export class CommerceService {
   async adjustProductStock(
     productId: string,
     command: AdjustProductStockCommand,
+    context: CommandContext,
   ): Promise<{ product: Product; movement: StockMovement }> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const product = await findProduct(unitOfWork, productId)
@@ -185,6 +196,10 @@ export class CommerceService {
 
       await unitOfWork.saveProducts(result.products)
       await unitOfWork.saveStockMovements([result.movement])
+      await appendCommerceAudit(unitOfWork, context, 'stock.adjusted', 'product', result.product.id, {
+        productId: result.product.id, delta: command.quantity,
+        quantity: result.product.quantity, movementId: result.movement.id,
+      })
 
       return {
         product: result.product,
@@ -195,6 +210,7 @@ export class CommerceService {
 
   async createPurchase(
     command: CreatePurchaseCommand,
+    context: CommandContext,
   ): Promise<Purchase> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const now = new Date()
@@ -214,6 +230,7 @@ export class CommerceService {
 
       await validateDocumentProducts(unitOfWork, purchase.items)
       await unitOfWork.insertPurchase(purchase)
+      await appendCommerceAudit(unitOfWork, context, 'purchase.created', 'purchase', purchase.id)
       return purchase
     })
   }
@@ -221,6 +238,7 @@ export class CommerceService {
   async updatePurchase(
     purchaseId: string,
     command: UpdatePurchaseCommand,
+    context: CommandContext,
   ): Promise<Purchase> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const purchase = await unitOfWork.findPurchaseById(purchaseId)
@@ -232,11 +250,12 @@ export class CommerceService {
       const updatedPurchase = updatePurchaseCore(purchase, command)
       await validateDocumentProducts(unitOfWork, updatedPurchase.items)
       await unitOfWork.updatePurchase(updatedPurchase)
+      await appendCommerceAudit(unitOfWork, context, 'purchase.updated', 'purchase', updatedPurchase.id)
       return updatedPurchase
     })
   }
 
-  async cancelPurchase(purchaseId: string): Promise<Purchase> {
+  async cancelPurchase(purchaseId: string, context: CommandContext): Promise<Purchase> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const purchase = await unitOfWork.findPurchaseById(purchaseId)
 
@@ -246,11 +265,12 @@ export class CommerceService {
 
       const cancelledPurchase = cancelPurchase(purchase)
       await unitOfWork.updatePurchase(cancelledPurchase)
+      await appendCommerceAudit(unitOfWork, context, 'purchase.cancelled', 'purchase', cancelledPurchase.id)
       return cancelledPurchase
     })
   }
 
-  async createSale(command: CreateSaleCommand): Promise<Sale> {
+  async createSale(command: CreateSaleCommand, context: CommandContext): Promise<Sale> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const now = new Date()
       const sale = normalizeSale({
@@ -270,6 +290,7 @@ export class CommerceService {
 
       await validateDocumentProducts(unitOfWork, sale.items)
       await unitOfWork.insertSale(sale)
+      await appendCommerceAudit(unitOfWork, context, 'sale.created', 'sale', sale.id)
       return sale
     })
   }
@@ -277,6 +298,7 @@ export class CommerceService {
   async updateSale(
     saleId: string,
     command: UpdateSaleCommand,
+    context: CommandContext,
   ): Promise<Sale> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const sale = await unitOfWork.findSaleById(saleId)
@@ -288,11 +310,12 @@ export class CommerceService {
       const updatedSale = updateSaleCore(sale, command)
       await validateDocumentProducts(unitOfWork, updatedSale.items)
       await unitOfWork.updateSale(updatedSale)
+      await appendCommerceAudit(unitOfWork, context, 'sale.updated', 'sale', updatedSale.id)
       return updatedSale
     })
   }
 
-  async cancelSale(saleId: string): Promise<Sale> {
+  async cancelSale(saleId: string, context: CommandContext): Promise<Sale> {
     return this.repository.withTransaction(async (unitOfWork) => {
       const sale = await unitOfWork.findSaleById(saleId)
 
@@ -302,12 +325,14 @@ export class CommerceService {
 
       const cancelledSale = cancelSale(sale)
       await unitOfWork.updateSale(cancelledSale)
+      await appendCommerceAudit(unitOfWork, context, 'sale.cancelled', 'sale', cancelledSale.id)
       return cancelledSale
     })
   }
 
   async completePurchase(
     purchaseId: string,
+    context: CommandContext,
   ): Promise<CommerceCompletionResult> {
     return this.repository.withTransaction(
       async (unitOfWork) => {
@@ -361,6 +386,12 @@ export class CommerceService {
         await unitOfWork.updatePurchase(result.purchase)
         await unitOfWork.saveStockMovements(result.movements)
         await unitOfWork.saveTransaction(result.transaction)
+        await appendCommerceAudit(unitOfWork, context, 'purchase.completed', 'purchase', result.purchase.id, {
+          documentNumber: result.purchase.purchaseNumber,
+          totalAmount: result.purchase.totalAmount,
+          transactionId: result.transaction.id,
+          movementCount: result.movements.length,
+        })
 
         return {
           success: true,
@@ -374,6 +405,7 @@ export class CommerceService {
 
   async completeSale(
     saleId: string,
+    context: CommandContext,
   ): Promise<CommerceCompletionResult> {
     return this.repository.withTransaction(
       async (unitOfWork) => {
@@ -423,6 +455,12 @@ export class CommerceService {
         await unitOfWork.updateSale(result.sale)
         await unitOfWork.saveStockMovements(result.movements)
         await unitOfWork.saveTransaction(result.transaction)
+        await appendCommerceAudit(unitOfWork, context, 'sale.completed', 'sale', result.sale.id, {
+          documentNumber: result.sale.saleNumber,
+          totalAmount: result.sale.totalAmount,
+          transactionId: result.transaction.id,
+          movementCount: result.movements.length,
+        })
 
         return {
           success: true,
@@ -436,6 +474,7 @@ export class CommerceService {
 
   async importSnapshot(
     snapshot: CommerceSnapshot,
+    context: CommandContext,
   ): Promise<CommerceSnapshotImportResult> {
     return this.repository.withTransaction(
       async (unitOfWork) => {
@@ -457,6 +496,13 @@ export class CommerceService {
         }
 
         await unitOfWork.insertSnapshot(snapshot)
+        await appendCommerceAudit(unitOfWork, context, 'commerce.snapshot_imported', 'commerce_snapshot', 'legacy-snapshot', {
+          products: snapshot.products.length,
+          stockMovements: snapshot.stockMovements.length,
+          purchases: snapshot.purchases.length,
+          sales: snapshot.sales.length,
+          transactions: snapshot.transactions.length,
+        })
 
         return {
           imported: true,
@@ -465,6 +511,21 @@ export class CommerceService {
       },
     )
   }
+}
+
+async function appendCommerceAudit(
+  unitOfWork: CommerceUnitOfWork,
+  context: CommandContext,
+  action: AuditEvent['action'],
+  entityType: string,
+  entityId: string,
+  metadata?: AuditEvent['metadata'],
+): Promise<void> {
+  await unitOfWork.appendAuditEvent({
+    id: crypto.randomUUID(), occurredAt: new Date(),
+    actorType: context.actorType, actorUserId: context.actorUserId,
+    requestId: context.requestId, domain: 'commerce', action, entityType, entityId, metadata,
+  })
 }
 
 function pickProductUpdates(
