@@ -8,20 +8,22 @@ import type {
   UpdateClientRequest,
 } from '@madina/api'
 import {
+  ClientMutationService,
+  ClientNotFoundError,
   ClientValidationError,
-  createClient,
-  updateClient,
   type Client,
   type ClientRepository,
 } from '@madina/core'
 import type { FastifyInstance } from 'fastify'
 import {
+  getAuthenticatedCommandContext,
   requirePermission,
   requireTrustedOrigin,
 } from '../../../../plugins/authentication.js'
 
 interface ClientsRoutesOptions {
   clientRepository: ClientRepository
+  clientMutationService: ClientMutationService
 }
 
 interface ClientParams {
@@ -38,11 +40,25 @@ function toClientResponse(
   }
 }
 
+function isClientValidationError(
+  error: unknown,
+): error is ClientValidationError {
+  return typeof error === 'object' &&
+    error !== null &&
+    'name' in error &&
+    error.name === 'ClientValidationError' &&
+    'message' in error &&
+    typeof error.message === 'string'
+}
+
 export async function clientsRoutes(
   app: FastifyInstance,
   options: ClientsRoutesOptions,
 ) {
-  const { clientRepository } = options
+  const {
+    clientRepository,
+    clientMutationService,
+  } = options
 
   app.get(
     '/',
@@ -76,20 +92,16 @@ export async function clientsRoutes(
       ClientResponse | ApiErrorResponse
     > => {
       try {
-        const client = createClient(
+        const client = await clientMutationService.create(
           request.body,
+          getAuthenticatedCommandContext(request),
         )
-
-        await clientRepository.save(client)
 
         reply.code(201)
 
         return toClientResponse(client)
       } catch (error) {
-        if (
-          error instanceof
-          ClientValidationError
-        ) {
+        if (isClientValidationError(error)) {
           reply.code(400)
 
           return {
@@ -180,33 +192,12 @@ export async function clientsRoutes(
           },
         )
 
-        let created = 0
-        let updated = 0
-
-        for (const client of clients) {
-          const existing =
-            await clientRepository.findById(
-              client.id,
-            )
-
-          if (existing) {
-            await clientRepository.update(client)
-            updated += 1
-          } else {
-            await clientRepository.save(client)
-            created += 1
-          }
-        }
-
-        return {
-          created,
-          updated,
-        }
+        return await clientMutationService.import(
+          clients,
+          getAuthenticatedCommandContext(request),
+        )
       } catch (error) {
-        if (
-          error instanceof
-          ClientValidationError
-        ) {
+        if (isClientValidationError(error)) {
           reply.code(400)
 
           return {
@@ -238,37 +229,24 @@ export async function clientsRoutes(
     ): Promise<
       ClientResponse | ApiErrorResponse
     > => {
-      const client =
-        await clientRepository.findById(
-          request.params.clientId,
-        )
-
-      if (!client) {
-        reply.code(404)
-
-        return {
-          statusCode: 404,
-          error: 'Not Found',
-          message: 'Client not found',
-        }
-      }
-
       try {
-        const updatedClient = updateClient(
-          client,
+        const updatedClient = await clientMutationService.update(
+          request.params.clientId,
           request.body,
-        )
-
-        await clientRepository.update(
-          updatedClient,
+          getAuthenticatedCommandContext(request),
         )
 
         return toClientResponse(updatedClient)
       } catch (error) {
-        if (
-          error instanceof
-          ClientValidationError
-        ) {
+        if (error instanceof ClientNotFoundError) {
+          reply.code(404)
+          return {
+            statusCode: 404,
+            error: 'Not Found',
+            message: error.message,
+          }
+        }
+        if (isClientValidationError(error)) {
           reply.code(400)
 
           return {

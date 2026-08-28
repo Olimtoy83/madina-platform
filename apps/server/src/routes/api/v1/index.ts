@@ -3,7 +3,10 @@ import {
   AuthService,
   UserManagementService,
 } from '@madina/auth'
-import { CommerceService } from '@madina/core'
+import {
+  ClientMutationService,
+  CommerceService,
+} from '@madina/core'
 import {
   SqliteAuthRepository,
   SqliteClientRepository,
@@ -33,6 +36,9 @@ export async function apiV1Routes(
 
   const clientRepository =
     new SqliteClientRepository(databaseFile)
+  const clientMutationService = new ClientMutationService(
+    clientRepository,
+  )
 
   const authRepository =
     new SqliteAuthRepository(databaseFile)
@@ -85,6 +91,7 @@ export async function apiV1Routes(
   app.register(clientsRoutes, {
     prefix: '/clients',
     clientRepository,
+    clientMutationService,
   })
 
   app.register(tasksRoutes, {

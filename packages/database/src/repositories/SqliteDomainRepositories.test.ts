@@ -15,6 +15,8 @@ import type {
   Product,
   Task,
 } from '@madina/core'
+import { ClientMutationService } from '@madina/core'
+import { SqliteAuditRepository } from '../audit/SqliteAuditRepository.js'
 import { SqliteClientRepository } from '../clients/SqliteClientRepository.js'
 import { SqliteCommerceRepository } from '../commerce/SqliteCommerceRepository.js'
 import { initializeDatabase } from '../migrations/initializeDatabase.js'
@@ -96,6 +98,97 @@ test('domain repositories do not create tables on an unprepared database', async
       equal(tables.length, 0)
     } finally {
       database.close()
+    }
+  })
+})
+
+test('client audit failure rolls back a status and field update atomically', async () => {
+  await withDatabaseFile(async (filename) => {
+    initializeDatabase(filename)
+    const repository = new SqliteClientRepository(filename)
+    const service = new ClientMutationService(repository)
+    const client: Client = {
+      id: 'client-rollback', createdAt: now, updatedAt: now,
+      name: 'До обновления', status: 'active',
+    }
+
+    try {
+      await repository.save(client)
+      const database = new DatabaseSync(filename)
+      try {
+        database.exec(`
+          CREATE TRIGGER reject_client_status_audit
+          BEFORE INSERT ON audit_events
+          WHEN NEW.action = 'client.status_changed'
+          BEGIN SELECT RAISE(ABORT, 'audit rejected by test trigger'); END
+        `)
+      } finally {
+        database.close()
+      }
+
+      await rejects(
+        service.update(client.id, {
+          name: 'После обновления',
+          status: 'inactive',
+        }, {
+          actorType: 'user', actorUserId: 'admin-1', requestId: 'request-1',
+        }),
+        /audit rejected by test trigger/,
+      )
+
+      equal((await repository.findById(client.id))?.name, 'До обновления')
+      equal((await repository.findById(client.id))?.status, 'active')
+      const auditRepository = new SqliteAuditRepository(filename)
+      try {
+        equal((await auditRepository.findAll()).length, 0)
+      } finally {
+        auditRepository.close()
+      }
+    } finally {
+      repository.close()
+    }
+  })
+})
+
+test('client import audit failure rolls back every imported row', async () => {
+  await withDatabaseFile(async (filename) => {
+    initializeDatabase(filename)
+    const repository = new SqliteClientRepository(filename)
+    const service = new ClientMutationService(repository)
+
+    try {
+      const database = new DatabaseSync(filename)
+      try {
+        database.exec(`
+          CREATE TRIGGER reject_client_import_audit
+          BEFORE INSERT ON audit_events
+          WHEN NEW.action = 'clients.imported'
+          BEGIN SELECT RAISE(ABORT, 'import audit rejected by test trigger'); END
+        `)
+      } finally {
+        database.close()
+      }
+
+      await rejects(
+        service.import([
+          { id: 'import-1', createdAt: now, updatedAt: now, name: 'Первый', status: 'active' },
+          { id: 'import-2', createdAt: now, updatedAt: now, name: 'Второй', status: 'active' },
+        ], {
+          actorType: 'user', actorUserId: 'admin-1', requestId: 'request-2',
+        }),
+        /import audit rejected by test trigger/,
+      )
+
+      equal(await repository.findById('import-1'), undefined)
+      equal(await repository.findById('import-2'), undefined)
+      const auditRepository = new SqliteAuditRepository(filename)
+      try {
+        equal((await auditRepository.findAll()).length, 0)
+      } finally {
+        auditRepository.close()
+      }
+    } finally {
+      repository.close()
     }
   })
 })

@@ -1,7 +1,9 @@
 import type {
   Client,
   ClientRepository,
+  ClientUnitOfWork,
 } from '@madina/core'
+import type { AuditEvent } from '@madina/shared'
 
 export class InMemoryClientRepository
   implements ClientRepository {
@@ -42,5 +44,17 @@ export class InMemoryClientRepository
     }
 
     this.clients[index] = client
+  }
+
+  async withTransaction<T>(
+    operation: (unitOfWork: ClientUnitOfWork) => Promise<T>,
+  ): Promise<T> {
+    return operation({
+      findAll: () => this.findAll(),
+      findById: (clientId) => this.findById(clientId),
+      save: (client) => this.save(client),
+      update: (client) => this.update(client),
+      appendAuditEvent: async (_event: AuditEvent) => {},
+    })
   }
 }
