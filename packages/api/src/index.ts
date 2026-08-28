@@ -2,6 +2,11 @@ export type { HealthResponse } from './health/index.js'
 export type { ApiV1Response } from './v1/index.js'
 export type { ApiErrorResponse } from './errors/index.js'
 export type {
+  AuditEventListItemResponse,
+  AuditEventsListResponse,
+  AuditEventsListQuery,
+} from './audit/index.js'
+export type {
   AuthUserResponse,
   LoginRequest,
   LoginResponse,

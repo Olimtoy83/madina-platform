@@ -11,6 +11,7 @@ export type Permission =
   | 'products:write'
   | 'stock:adjust'
   | 'reports:read'
+  | 'audit:read'
   | 'data:import'
   | 'users:manage'
 
@@ -44,6 +45,7 @@ export const rolePermissions: Readonly<Record<
   manager: managerPermissions,
   admin: [
     ...managerPermissions,
+    'audit:read',
     'data:import',
     'users:manage',
   ],

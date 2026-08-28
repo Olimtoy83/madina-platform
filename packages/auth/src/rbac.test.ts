@@ -32,7 +32,14 @@ test('manager has purchase, product, and stock adjustment permissions', () => {
   equal(hasPermission('manager', 'users:manage'), false)
 })
 
-test('admin can manage users and import legacy data', () => {
+test('admin can manage users, read audit events, and import legacy data', () => {
   equal(hasPermission('admin', 'users:manage'), true)
+  equal(hasPermission('admin', 'audit:read'), true)
   equal(hasPermission('admin', 'data:import'), true)
+})
+
+test('non-admin roles cannot read audit events', () => {
+  equal(hasPermission('viewer', 'audit:read'), false)
+  equal(hasPermission('operator', 'audit:read'), false)
+  equal(hasPermission('manager', 'audit:read'), false)
 })

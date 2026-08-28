@@ -10,6 +10,7 @@ import {
 } from '@madina/core'
 import {
   SqliteAuthRepository,
+  SqliteAuditQueryRepository,
   SqliteClientRepository,
   SqliteCommerceRepository,
   SqliteTaskRepository,
@@ -22,6 +23,8 @@ import {
 } from '../../../database.js'
 import { authenticationPlugin } from '../../../plugins/authentication.js'
 import { LoginRateLimiter } from '../../../security/LoginRateLimiter.js'
+import { AuditReadService } from '../../../services/AuditReadService.js'
+import { auditRoutes } from './audit/index.js'
 import { authRoutes } from './auth/index.js'
 import { clientsRoutes } from './clients/index.js'
 import { commerceRoutes } from './commerce/index.js'
@@ -43,6 +46,8 @@ export async function apiV1Routes(
 
   const authRepository =
     new SqliteAuthRepository(databaseFile)
+  const auditQueryRepository =
+    new SqliteAuditQueryRepository(databaseFile)
 
   const authService = new AuthService(authRepository)
   // Fastify has no trustProxy configuration here, so request.ip remains the
@@ -51,6 +56,7 @@ export async function apiV1Routes(
   const userManagementService = new UserManagementService(
     authRepository,
   )
+  const auditReadService = new AuditReadService(auditQueryRepository)
 
   const taskRepository =
     new SqliteTaskRepository(databaseFile)
@@ -67,6 +73,7 @@ export async function apiV1Routes(
 
   app.addHook('onClose', async () => {
     authRepository.close()
+    auditQueryRepository.close()
     clientRepository.close()
     commerceRepository.close()
     taskRepository.close()
@@ -90,6 +97,11 @@ export async function apiV1Routes(
     authService,
     loginRateLimiter,
     userManagementService,
+  })
+
+  app.register(auditRoutes, {
+    prefix: '/audit',
+    auditReadService,
   })
 
   app.register(clientsRoutes, {
