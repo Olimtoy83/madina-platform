@@ -231,6 +231,18 @@ function normalizeAccountingPeriod(value: unknown): AccountingReportPeriod {
   )
 }
 
+function normalizeAccountingType(
+  value: unknown,
+): TransactionType | undefined {
+  if (value === undefined) return undefined
+
+  if (value === 'income' || value === 'expense') return value
+
+  throw new AccountingReportValidationError(
+    'Accounting report query type is invalid.',
+  )
+}
+
 function parseAccountingLimit(value: unknown): number {
   if (value === undefined) return DEFAULT_ACCOUNTING_LIMIT
 
@@ -328,7 +340,7 @@ function decodeAccountingCursor(value: unknown): AccountingCursor | undefined {
       id: decoded.id,
       filters: {
         period: normalizeAccountingPeriod(decoded.filters.period),
-        type: normalizeType(decoded.filters.type),
+        type: normalizeAccountingType(decoded.filters.type),
       },
       window: {
         from: from?.toISOString(),
@@ -353,7 +365,7 @@ function normalizeAccountingQuery(
 
   assertAccountingQueryKeys(input)
   const period = normalizeAccountingPeriod(input.period)
-  const type = normalizeType(input.type)
+  const type = normalizeAccountingType(input.type)
   const cursor = decodeAccountingCursor(input.cursor)
 
   if (

@@ -6,6 +6,7 @@ import {
   vi,
 } from 'vitest'
 import {
+  getAccountingReport,
   getIncomeReport,
   getReportingSummary,
 } from './reportingApi'
@@ -139,6 +140,72 @@ describe('reportingApi', () => {
     )))
 
     await expect(getIncomeReport({ type: 'income' })).rejects.toMatchObject({
+      status: 403,
+      message: 'Reporting is unavailable',
+    })
+  })
+
+  it('forwards accounting period, type, limit, and opaque cursor parameters', async () => {
+    const accountingReport = {
+      summary: {
+        totalIncome: 120,
+        totalExpense: 40,
+        financialBalance: 80,
+        transactionCount: 2,
+      },
+      categories: { sale: 100, purchase: 40, other: 20 },
+      transactions: { items: [] },
+    }
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify(accountingReport), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getAccountingReport()).resolves.toEqual(accountingReport)
+    await getAccountingReport({ period: 'today' })
+    await getAccountingReport({ period: '7days', type: 'income' })
+    await getAccountingReport({
+      period: 'month',
+      type: 'expense',
+      limit: 25,
+      cursor: 'cursor+/=',
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/reports/accounting',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/reports/accounting?period=today',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/reports/accounting?period=7days&type=income',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/v1/reports/accounting?period=month&type=expense&limit=25&cursor=cursor%2B%2F%3D',
+      expect.anything(),
+    )
+  })
+
+  it('preserves shared HTTP errors for the accounting endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ message: 'Reporting is unavailable' }),
+      {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )))
+
+    await expect(getAccountingReport({ period: 'month' })).rejects.toMatchObject({
       status: 403,
       message: 'Reporting is unavailable',
     })
