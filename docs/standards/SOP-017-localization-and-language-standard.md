@@ -289,6 +289,11 @@ Required:
 - store consistent timestamps;
 - display according to user context.
 
+For business and reporting calendar boundaries, Madina Platform uses the
+authoritative IANA timezone `Asia/Riyadh`. Stored timestamps remain absolute
+ISO instants; this timezone is used only when interpreting calendar periods.
+Browser and server host timezones are not the business authority.
+
 ---
 
 # Reports Localization
