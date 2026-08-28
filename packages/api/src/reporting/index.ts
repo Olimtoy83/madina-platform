@@ -53,3 +53,34 @@ export interface IncomeReportResponse {
     nextCursor?: string
   }
 }
+
+export type AccountingReportPeriod =
+  | 'all'
+  | 'today'
+  | '7days'
+  | 'month'
+
+export interface AccountingReportQuery {
+  period?: AccountingReportPeriod
+  type?: IncomeReportTransactionType
+  limit?: string
+  cursor?: string
+}
+
+export interface AccountingReportResponse {
+  summary: {
+    totalIncome: number
+    totalExpense: number
+    financialBalance: number
+    transactionCount: number
+  }
+  categories: {
+    sale: number
+    purchase: number
+    other: number
+  }
+  transactions: {
+    items: FinancialTransactionRowResponse[]
+    nextCursor?: string
+  }
+}

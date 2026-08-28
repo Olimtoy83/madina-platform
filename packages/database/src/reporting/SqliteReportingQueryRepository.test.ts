@@ -15,6 +15,7 @@ import {
   getFinancialKpis,
   getInventoryProductSummary,
   getSalesReportingSummary,
+  resolveAccountingReportWindow,
   type Product,
   type Sale,
   type Transaction,
@@ -310,5 +311,125 @@ test('SqliteReportingQueryRepository returns an effective, keyset-paginated inco
       },
     }, now)
     deepEqual(secondPage.transactions, [])
+  })
+})
+
+test('SqliteReportingQueryRepository reads a timezone-bounded, filtered, keyset-paginated accounting report', async () => {
+  const now = new Date('2026-03-01T01:30:00.000Z')
+  const todayWindow = resolveAccountingReportWindow('today', now)
+  const sevenDaysWindow = resolveAccountingReportWindow('7days', now)
+  const monthWindow = resolveAccountingReportWindow('month', now)
+  const transactions = [
+    {
+      ...createTransaction('before-today', 'income', 'sale', 100, 'completed'),
+      transactionDate: new Date('2026-02-28T20:59:59.999Z'),
+    },
+    {
+      ...createTransaction('today-income-b', 'income', 'sale', 30, 'completed'),
+      transactionDate: new Date('2026-02-28T21:00:00.000Z'),
+    },
+    {
+      ...createTransaction('today-income-a', 'income', 'other', 20, 'completed'),
+      transactionDate: new Date('2026-02-28T21:00:00.000Z'),
+    },
+    {
+      ...createTransaction('today-expense', 'expense', 'purchase', 10, 'completed'),
+      transactionDate: new Date('2026-03-01T00:00:00.000Z'),
+    },
+    {
+      ...createTransaction('before-seven-days', 'expense', 'other', 200, 'completed'),
+      transactionDate: new Date('2026-02-22T20:59:59.999Z'),
+    },
+    {
+      ...createTransaction('seven-days-start', 'expense', 'other', 5, 'completed'),
+      transactionDate: new Date('2026-02-22T21:00:00.000Z'),
+    },
+    {
+      ...createTransaction('future', 'income', 'sale', 999, 'completed'),
+      transactionDate: new Date('2026-03-01T01:30:00.001Z'),
+    },
+    {
+      ...createTransaction('pending', 'income', 'sale', 999, 'pending'),
+      transactionDate: new Date('2026-03-01T00:30:00.000Z'),
+    },
+  ]
+
+  await withRepository((database) => {
+    for (const transaction of transactions) insertTransaction(database, transaction)
+  }, async (repository) => {
+    const today = await repository.getAccountingReport({
+      period: 'today',
+      limit: 2,
+      window: todayWindow,
+    })
+
+    deepEqual(today.summary, {
+      totalIncome: 50,
+      totalExpense: 10,
+      financialBalance: 40,
+      transactionCount: 3,
+    })
+    deepEqual(today.categories, { sale: 30, purchase: 10, other: 20 })
+    deepEqual(today.transactions.map((transaction) => transaction.id), [
+      'today-expense',
+      'today-income-b',
+    ])
+
+    const secondPage = await repository.getAccountingReport({
+      period: 'today',
+      limit: 2,
+      window: todayWindow,
+      cursor: {
+        transactionDate: today.transactions.at(-1)!.transactionDate,
+        id: today.transactions.at(-1)!.id,
+      },
+    })
+    deepEqual(secondPage.transactions.map((transaction) => transaction.id), [
+      'today-income-a',
+    ])
+
+    const incomeOnly = await repository.getAccountingReport({
+      period: 'today',
+      type: 'income',
+      limit: 50,
+      window: todayWindow,
+    })
+    deepEqual(incomeOnly.summary, {
+      totalIncome: 50,
+      totalExpense: 0,
+      financialBalance: 50,
+      transactionCount: 2,
+    })
+    deepEqual(incomeOnly.categories, { sale: 30, purchase: 0, other: 20 })
+
+    const expenses = await repository.getAccountingReport({
+      period: '7days',
+      type: 'expense',
+      limit: 50,
+      window: sevenDaysWindow,
+    })
+    deepEqual(expenses.summary, {
+      totalIncome: 0,
+      totalExpense: 15,
+      financialBalance: -15,
+      transactionCount: 2,
+    })
+    deepEqual(expenses.categories, { sale: 0, purchase: 10, other: 5 })
+
+    const month = await repository.getAccountingReport({
+      period: 'month',
+      limit: 50,
+      window: monthWindow,
+    })
+    equal(month.transactions.some((transaction) => transaction.id === 'before-today'), false)
+    equal(month.transactions.some((transaction) => transaction.id === 'future'), false)
+
+    const all = await repository.getAccountingReport({
+      period: 'all',
+      limit: 50,
+      window: resolveAccountingReportWindow('all', now),
+    })
+    equal(all.transactions.some((transaction) => transaction.id === 'future'), false)
+    equal(all.transactions.some((transaction) => transaction.id === 'before-today'), true)
   })
 })

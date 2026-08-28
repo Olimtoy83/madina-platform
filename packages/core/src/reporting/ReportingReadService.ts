@@ -1,4 +1,6 @@
 import type {
+  AccountingReport,
+  AccountingReportQuery,
   IncomeReport,
   IncomeReportQuery,
   ReportingAllTimeSummary,
@@ -25,5 +27,11 @@ export class ReportingReadService {
     now?: Date,
   ): Promise<IncomeReport> {
     return this.repository.getIncomeReport(query, now)
+  }
+
+  async getAccountingReport(
+    query: AccountingReportQuery,
+  ): Promise<AccountingReport> {
+    return this.repository.getAccountingReport(query)
   }
 }

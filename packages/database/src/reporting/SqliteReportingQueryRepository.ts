@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type {
+  AccountingReport,
+  AccountingReportQuery,
   IncomeReport,
   IncomeReportQuery,
   ReportingAllTimeSummary,
@@ -42,6 +44,15 @@ interface TransactionRow {
   reference_id: string | null
   description: string | null
   status: Transaction['status']
+}
+
+interface AccountingAggregateRow {
+  total_income: number
+  total_expense: number
+  transaction_count: number
+  sale_total: number
+  purchase_total: number
+  other_total: number
 }
 
 function toTransaction(row: TransactionRow): Transaction {
@@ -200,6 +211,90 @@ export class SqliteReportingQueryRepository
           totalExpense: financial.total_expense,
           financialBalance:
             financial.total_income - financial.total_expense,
+        },
+        transactions: rows.map(toTransaction),
+      }
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getAccountingReport(
+    query: AccountingReportQuery,
+  ): Promise<AccountingReport> {
+    const parameters: Array<string | number> = [
+      query.window.to.toISOString(),
+    ]
+    let filters = "status = 'completed' AND transaction_date <= ?"
+
+    if (query.window.from) {
+      filters += ' AND transaction_date >= ?'
+      parameters.push(query.window.from.toISOString())
+    }
+
+    if (query.type) {
+      filters += ' AND type = ?'
+      parameters.push(query.type)
+    }
+
+    this.database.exec('BEGIN')
+
+    try {
+      const aggregate = this.database.prepare(`
+        SELECT
+          COALESCE(SUM(CASE
+            WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
+          COALESCE(SUM(CASE
+            WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense,
+          COUNT(*) AS transaction_count,
+          COALESCE(SUM(CASE
+            WHEN category = 'sale' THEN amount ELSE 0 END), 0) AS sale_total,
+          COALESCE(SUM(CASE
+            WHEN category = 'purchase' THEN amount ELSE 0 END), 0) AS purchase_total,
+          COALESCE(SUM(CASE
+            WHEN category = 'other' THEN amount ELSE 0 END), 0) AS other_total
+        FROM transactions
+        WHERE ${filters}
+      `).get(...parameters) as unknown as AccountingAggregateRow
+
+      const rowParameters = [...parameters]
+      let rowFilters = filters
+
+      if (query.cursor) {
+        rowFilters += ` AND (
+          transaction_date < ? OR (
+            transaction_date = ? AND id < ?
+          )
+        )`
+        const cursorDate = query.cursor.transactionDate.toISOString()
+        rowParameters.push(cursorDate, cursorDate, query.cursor.id)
+      }
+
+      rowParameters.push(query.limit)
+      const rows = this.database.prepare(`
+        SELECT id, created_at, updated_at, type, category, amount,
+          payment_method, transaction_date, reference_id, description, status
+        FROM transactions
+        WHERE ${rowFilters}
+        ORDER BY transaction_date DESC, id DESC
+        LIMIT ?
+      `).all(...rowParameters) as unknown as TransactionRow[]
+
+      this.database.exec('COMMIT')
+
+      return {
+        summary: {
+          totalIncome: aggregate.total_income,
+          totalExpense: aggregate.total_expense,
+          financialBalance:
+            aggregate.total_income - aggregate.total_expense,
+          transactionCount: aggregate.transaction_count,
+        },
+        categories: {
+          sale: aggregate.sale_total,
+          purchase: aggregate.purchase_total,
+          other: aggregate.other_total,
         },
         transactions: rows.map(toTransaction),
       }

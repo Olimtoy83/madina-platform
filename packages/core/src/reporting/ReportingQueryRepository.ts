@@ -44,10 +44,46 @@ export interface IncomeReport {
   transactions: Transaction[]
 }
 
+export type AccountingReportPeriod =
+  | 'all'
+  | 'today'
+  | '7days'
+  | 'month'
+
+export interface AccountingReportWindow {
+  from?: Date
+  to: Date
+}
+
+export interface AccountingReportQuery {
+  period: AccountingReportPeriod
+  type?: TransactionType
+  limit: number
+  window: AccountingReportWindow
+  cursor?: {
+    transactionDate: Date
+    id: string
+  }
+}
+
+export interface AccountingReport {
+  summary: {
+    totalIncome: number
+    totalExpense: number
+    financialBalance: number
+    transactionCount: number
+  }
+  categories: Record<Transaction['category'], number>
+  transactions: Transaction[]
+}
+
 export interface ReportingQueryRepository {
   getAllTimeSummary(now?: Date): Promise<ReportingAllTimeSummary>
   getIncomeReport(
     query: IncomeReportQuery,
     now?: Date,
   ): Promise<IncomeReport>
+  getAccountingReport(
+    query: AccountingReportQuery,
+  ): Promise<AccountingReport>
 }

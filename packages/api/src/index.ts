@@ -8,6 +8,9 @@ export type {
   IncomeReportQuery,
   FinancialTransactionRowResponse,
   IncomeReportResponse,
+  AccountingReportPeriod,
+  AccountingReportQuery,
+  AccountingReportResponse,
 } from './reporting/index.js'
 export type {
   AuditEventListItemResponse,
