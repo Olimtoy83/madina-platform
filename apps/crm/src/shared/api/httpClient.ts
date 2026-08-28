@@ -3,20 +3,25 @@ export interface HttpRequestOptions
   body?: unknown
 }
 
+export type HttpResponseOptions = RequestInit
+
 type UnauthorizedListener = () => void
 
 const unauthorizedListeners = new Set<UnauthorizedListener>()
 
 export class HttpError extends Error {
   readonly status: number
+  readonly body: unknown
 
   constructor(
     status: number,
     message: string,
+    body: unknown = undefined,
   ) {
     super(message)
     this.name = 'HttpError'
     this.status = status
+    this.body = body
   }
 }
 
@@ -52,23 +57,39 @@ export async function requestJson<T>(
     )
   }
 
-  const response = await fetch(url, {
+  const response = await requestResponse(url, {
     ...options,
     headers,
-    credentials: options.credentials ?? 'same-origin',
     body:
       options.body === undefined
         ? undefined
         : JSON.stringify(options.body),
   })
 
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return (await response.json()) as T
+}
+
+export async function requestResponse(
+  url: string,
+  options: HttpResponseOptions = {},
+): Promise<Response> {
+  const response = await fetch(url, {
+    ...options,
+    credentials: options.credentials ?? 'same-origin',
+  })
+
   if (!response.ok) {
     let message =
       `Request failed with status ${response.status}`
+    let body: unknown
 
     try {
-      const errorBody =
-        (await response.json()) as {
+      body = await response.json()
+      const errorBody = body as {
           message?: unknown
         }
 
@@ -82,6 +103,7 @@ export async function requestJson<T>(
     const error = new HttpError(
       response.status,
       message,
+      body,
     )
 
     if (response.status === 401) {
@@ -91,9 +113,5 @@ export async function requestJson<T>(
     throw error
   }
 
-  if (response.status === 204) {
-    return undefined as T
-  }
-
-  return (await response.json()) as T
+  return response
 }

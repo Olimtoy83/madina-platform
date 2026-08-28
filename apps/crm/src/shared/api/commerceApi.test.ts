@@ -9,11 +9,16 @@ import {
   createPurchase,
   createSale,
   deactivateProduct,
+  downloadProductImportTemplate,
+  exportProducts,
   getCommerceAggregate,
+  getProductWorkbookValidationError,
+  importProductsExcel,
   updateProduct,
   updatePurchase,
   updateSale,
 } from './commerceApi'
+import { HttpError } from './httpClient'
 
 function response(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -100,5 +105,100 @@ describe('commerceApi', () => {
       ['/api/v1/commerce/sales/sale%2F1/cancel', 'POST'],
       ['/api/v1/commerce/sales/sale%2F1/complete', 'POST'],
     ])
+  })
+
+  it('downloads server-generated product template and export workbooks', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('template', {
+        headers: { 'Content-Disposition': 'attachment; filename="template.xlsx"' },
+      }))
+      .mockResolvedValueOnce(new Response('export', {
+        headers: { 'Content-Disposition': 'attachment; filename="products-2026-08-28.xlsx"' },
+      }))
+    const createObjectURL = vi.fn().mockReturnValue('blob:product-workbook')
+    const revokeObjectURL = vi.fn()
+    const click = vi.fn()
+    const remove = vi.fn()
+    const appendChild = vi.fn()
+    const anchors: Array<{
+      href?: string
+      download?: string
+      style: { display?: string }
+      click: typeof click
+      remove: typeof remove
+    }> = []
+
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.stubGlobal('document', {
+      body: { appendChild },
+      createElement: vi.fn().mockImplementation(() => {
+        const anchor = { style: {}, click, remove }
+        anchors.push(anchor)
+        return anchor
+      }),
+    })
+
+    await downloadProductImportTemplate()
+    await exportProducts()
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/commerce/products/import-template',
+      '/api/v1/commerce/products/export',
+    ])
+    expect(appendChild).toHaveBeenCalledTimes(2)
+    expect(click).toHaveBeenCalledTimes(2)
+    expect(remove).toHaveBeenCalledTimes(2)
+    expect(revokeObjectURL).toHaveBeenCalledTimes(2)
+    expect(anchors.map((anchor) => anchor.download)).toEqual([
+      'template.xlsx',
+      'products-2026-08-28.xlsx',
+    ])
+  })
+
+  it('uploads a product workbook as multipart form data', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      importedCount: 2,
+      initialStockMovementCount: 1,
+    }, 201))
+    vi.stubGlobal('fetch', fetchMock)
+    const file = new File(['workbook'], 'products.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    await expect(importProductsExcel(file)).resolves.toEqual({
+      importedCount: 2,
+      initialStockMovementCount: 1,
+    })
+
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/v1/commerce/products/import')
+    expect(options?.method).toBe('POST')
+    expect(options?.body).toBeInstanceOf(FormData)
+    expect(new Headers(options?.headers).has('Content-Type')).toBe(false)
+  })
+
+  it('recognizes structured workbook validation errors from an import response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      statusCode: 422,
+      error: 'Unprocessable Entity',
+      message: 'Workbook validation failed.',
+      errors: [{ row: 4, column: 'name', code: 'invalid_product', message: 'Name is required.' }],
+    }, 422)))
+
+    let capturedError: unknown
+    try {
+      await importProductsExcel(new File(['workbook'], 'products.xlsx'))
+    } catch (error) {
+      capturedError = error
+    }
+
+    expect(capturedError).toBeInstanceOf(HttpError)
+    expect(getProductWorkbookValidationError(capturedError)).toMatchObject({
+      errors: [{ row: 4, column: 'name', message: 'Name is required.' }],
+    })
+    expect(getProductWorkbookValidationError(
+      new HttpError(422, 'Bad input.', { message: 'Bad input.' }),
+    )).toBeUndefined()
   })
 })

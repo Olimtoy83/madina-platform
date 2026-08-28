@@ -28,6 +28,13 @@
   font-size: var(--font-size-page-description);
 }
 
+.warehouse__header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 /* =========================================================
    Stock integrity
    ========================================================= */
@@ -62,6 +69,61 @@
 
 .warehouse__toolbar select {
   min-width: 180px;
+}
+
+/* =========================================================
+   Excel import
+   ========================================================= */
+
+.warehouse__import-instructions {
+  margin: 0 0 16px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.warehouse__import-template-action {
+  margin-bottom: 16px;
+}
+
+.warehouse__selected-file {
+  margin: 12px 0 0;
+  color: #334155;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.warehouse__import-errors {
+  max-height: 220px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  overflow-y: auto;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md);
+}
+
+.warehouse__import-errors p {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.warehouse__import-errors ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.warehouse__import-errors li + li {
+  margin-top: 6px;
+}
+
+.warehouse__import-result p {
+  margin: 0;
+  color: #334155;
+}
+
+.warehouse__import-result p + p {
+  margin-top: 8px;
 }
 
 /* =========================================================
@@ -212,6 +274,10 @@
   .warehouse__toolbar input {
     width: 100%;
   }
+
+  .warehouse__header-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 700px) {
@@ -220,7 +286,7 @@
     align-items: stretch;
   }
 
-  .warehouse__add-button {
+  .warehouse__header-actions .mb-button {
     width: 100%;
   }
 }

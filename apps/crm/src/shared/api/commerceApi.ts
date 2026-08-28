@@ -6,6 +6,9 @@ import type {
   CreateSaleRequest,
   ImportCommerceSnapshotRequest,
   ImportCommerceSnapshotResponse,
+  ImportProductsResponse,
+  ProductWorkbookRowError,
+  ProductWorkbookValidationErrorResponse,
   ProductResponse,
   ProductsListResponse,
   PurchaseResponse,
@@ -20,9 +23,16 @@ import type {
   UpdatePurchaseRequest,
   UpdateSaleRequest,
 } from '@madina/api'
-import { requestJson } from './httpClient'
+import {
+  HttpError,
+  requestJson,
+  requestResponse,
+} from './httpClient'
 
 const commerceUrl = '/api/v1/commerce'
+const productImportTemplateFilename =
+  'madina-products-import-template-v1.xlsx'
+const productExportFilename = 'madina-products.xlsx'
 
 export interface CommerceAggregateResponse {
   products: ProductResponse[]
@@ -162,4 +172,124 @@ export function importCommerceSnapshot(
       body: input,
     },
   )
+}
+
+export async function downloadProductImportTemplate(): Promise<void> {
+  await downloadProductWorkbook(
+    `${commerceUrl}/products/import-template`,
+    productImportTemplateFilename,
+  )
+}
+
+export async function exportProducts(): Promise<void> {
+  await downloadProductWorkbook(
+    `${commerceUrl}/products/export`,
+    productExportFilename,
+  )
+}
+
+export async function importProductsExcel(
+  file: File,
+): Promise<ImportProductsResponse> {
+  const formData = new FormData()
+  formData.append('file', file, file.name)
+
+  const response = await requestResponse(
+    `${commerceUrl}/products/import`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  )
+
+  return (await response.json()) as ImportProductsResponse
+}
+
+export function getProductWorkbookValidationError(
+  error: unknown,
+): ProductWorkbookValidationErrorResponse | undefined {
+  if (!(error instanceof HttpError) || error.status !== 422) {
+    return undefined
+  }
+
+  const body = error.body
+  if (!isProductWorkbookValidationErrorResponse(body)) {
+    return undefined
+  }
+
+  return body
+}
+
+async function downloadProductWorkbook(
+  url: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const response = await requestResponse(url)
+  const blob = await response.blob()
+  const filename = getDownloadFilename(
+    response.headers.get('Content-Disposition'),
+    fallbackFilename,
+  )
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+
+  try {
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+  } finally {
+    anchor.remove()
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
+function getDownloadFilename(
+  contentDisposition: string | null,
+  fallbackFilename: string,
+): string {
+  const filename = contentDisposition
+    ?.match(/filename="?([^";]+)"?/i)?.[1]
+
+  return filename && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(filename)
+    ? filename
+    : fallbackFilename
+}
+
+function isProductWorkbookValidationErrorResponse(
+  value: unknown,
+): value is ProductWorkbookValidationErrorResponse {
+  if (!value || typeof value !== 'object') return false
+
+  const record = value as {
+    statusCode?: unknown
+    error?: unknown
+    message?: unknown
+    errors?: unknown
+  }
+
+  return record.statusCode === 422 &&
+    record.error === 'Unprocessable Entity' &&
+    typeof record.message === 'string' &&
+    Array.isArray(record.errors) &&
+    record.errors.every(isProductWorkbookRowError)
+}
+
+function isProductWorkbookRowError(
+  value: unknown,
+): value is ProductWorkbookRowError {
+  if (!value || typeof value !== 'object') return false
+
+  const record = value as {
+    row?: unknown
+    column?: unknown
+    code?: unknown
+    message?: unknown
+  }
+
+  return typeof record.row === 'number' &&
+    (record.column === undefined || typeof record.column === 'string') &&
+    typeof record.code === 'string' &&
+    typeof record.message === 'string'
 }

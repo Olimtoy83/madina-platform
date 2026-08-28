@@ -2,6 +2,15 @@ import { useState } from 'react'
 import { useProducts } from '../../context/useProducts'
 import { useStockMovements } from '../../context/useStockMovements'
 import { useToast } from '../../context/ToastProvider'
+import { useAuth } from '../../context/useAuth'
+import { useTransactionalState } from '../../context/useTransactionalState'
+import {
+  downloadProductImportTemplate,
+  exportProducts,
+  getProductWorkbookValidationError,
+  importProductsExcel,
+} from '../../shared/api/commerceApi'
+import { HttpError } from '../../shared/api/httpClient'
 
 import {
   getStockIntegrityDiscrepancies,
@@ -17,6 +26,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  FileUpload,
   Input,
   Modal,
   Select,
@@ -27,6 +37,10 @@ import {
   TableHeader,
   TableRow,
 } from '@madina/ui'
+import type {
+  ImportProductsResponse,
+  ProductWorkbookRowError,
+} from '@madina/api'
 
 import './Warehouse.css'
 
@@ -44,8 +58,46 @@ const unitLabels: Record<ProductUnit, string> = {
   box: 'кор.',
 }
 
+const maxProductImportBytes = 10 * 1_024 * 1_024
+
+function getProductWorkbookErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    if (error.status === 401) {
+      return 'Сессия истекла. Войдите в систему повторно.'
+    }
+
+    if (error.status === 403) {
+      return 'У вас нет прав для этого действия.'
+    }
+
+    if (error.status === 413) {
+      return 'Размер файла превышает допустимый предел 10 МиБ.'
+    }
+
+    return error.message
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось выполнить запрос. Повторите попытку.'
+}
+
+function formatProductWorkbookRowError(
+  error: ProductWorkbookRowError,
+): string {
+  const location = error.row > 0
+    ? `Строка ${error.row}${error.column ? `, поле ${error.column}` : ''}`
+    : error.column
+      ? `Поле ${error.column}`
+      : 'Файл'
+
+  return `${location}: ${error.message}`
+}
+
 export function Warehouse() {
   const { showToast } = useToast()
+  const { user } = useAuth()
+  const { reload } = useTransactionalState()
   const {
     products,
     addProduct,
@@ -71,6 +123,20 @@ export function Warehouse() {
 
   const [isDeactivateConfirmOpen, setIsDeactivateConfirmOpen] =
     useState(false)
+
+  const [isProductImportOpen, setIsProductImportOpen] =
+    useState(false)
+
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importFileKey, setImportFileKey] = useState(0)
+  const [isImportingProducts, setIsImportingProducts] = useState(false)
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false)
+  const [isExportingProducts, setIsExportingProducts] = useState(false)
+  const [productImportError, setProductImportError] = useState<string | null>(null)
+  const [productImportRowErrors, setProductImportRowErrors] =
+    useState<ProductWorkbookRowError[]>([])
+  const [productImportResult, setProductImportResult] =
+    useState<ImportProductsResponse | null>(null)
 
   const [validationError, setValidationError] =
     useState<string | null>(null)
@@ -271,6 +337,109 @@ export function Warehouse() {
     })
   }
 
+  function openProductImport() {
+    setImportFile(null)
+    setImportFileKey((key) => key + 1)
+    setProductImportError(null)
+    setProductImportRowErrors([])
+    setProductImportResult(null)
+    setIsProductImportOpen(true)
+  }
+
+  function closeProductImport() {
+    if (isImportingProducts) return
+
+    setIsProductImportOpen(false)
+  }
+
+  function handleProductImportFiles(files: File[]) {
+    setProductImportError(null)
+    setProductImportRowErrors([])
+    setProductImportResult(null)
+
+    if (files.length !== 1) {
+      setImportFile(null)
+      setProductImportError('Выберите один файл Excel.')
+      return
+    }
+
+    const [file] = files
+    if (!file) return
+
+    if (!/\.xlsx$/i.test(file.name)) {
+      setImportFile(null)
+      setProductImportError('Поддерживаются только файлы Excel в формате .xlsx.')
+      return
+    }
+
+    if (file.size > maxProductImportBytes) {
+      setImportFile(null)
+      setProductImportError('Размер файла не должен превышать 10 МиБ.')
+      return
+    }
+
+    setImportFile(file)
+  }
+
+  async function handleDownloadTemplate() {
+    setIsDownloadingTemplate(true)
+
+    try {
+      await downloadProductImportTemplate()
+    } catch (error) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось скачать шаблон',
+        message: getProductWorkbookErrorMessage(error),
+      })
+    } finally {
+      setIsDownloadingTemplate(false)
+    }
+  }
+
+  async function handleExportProducts() {
+    setIsExportingProducts(true)
+
+    try {
+      await exportProducts()
+    } catch (error) {
+      showToast({
+        variant: 'error',
+        title: 'Не удалось экспортировать товары',
+        message: getProductWorkbookErrorMessage(error),
+      })
+    } finally {
+      setIsExportingProducts(false)
+    }
+  }
+
+  async function handleProductImport() {
+    if (!importFile || isImportingProducts) return
+
+    setIsImportingProducts(true)
+    setProductImportError(null)
+    setProductImportRowErrors([])
+
+    try {
+      const result = await importProductsExcel(importFile)
+      await reload()
+      setProductImportResult(result)
+      setImportFile(null)
+      setImportFileKey((key) => key + 1)
+    } catch (error) {
+      const validationError = getProductWorkbookValidationError(error)
+
+      if (validationError) {
+        setProductImportError(validationError.message)
+        setProductImportRowErrors([...validationError.errors])
+      } else {
+        setProductImportError(getProductWorkbookErrorMessage(error))
+      }
+    } finally {
+      setIsImportingProducts(false)
+    }
+  }
+
   function cancelAdding() {
     setIsAdding(false)
   }
@@ -364,13 +533,47 @@ export function Warehouse() {
           </p>
         </div>
 
-        <Button
-          type="button"
-          className="warehouse__add-button"
-          onClick={startAdding}
-        >
-          Добавить товар
-        </Button>
+        <div className="warehouse__header-actions">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleDownloadTemplate}
+            disabled={isDownloadingTemplate}
+          >
+            {isDownloadingTemplate
+              ? 'Скачивание шаблона…'
+              : 'Скачать шаблон Excel'}
+          </Button>
+
+          {user?.role === 'admin' && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={openProductImport}
+            >
+              Импорт Excel
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleExportProducts}
+            disabled={isExportingProducts}
+          >
+            {isExportingProducts
+              ? 'Экспорт…'
+              : 'Экспорт Excel'}
+          </Button>
+
+          <Button
+            type="button"
+            className="warehouse__add-button"
+            onClick={startAdding}
+          >
+            Добавить товар
+          </Button>
+        </div>
       </div>
 
       {validationError && (
@@ -458,6 +661,104 @@ export function Warehouse() {
           </option>
         </Select>
       </div>
+
+      <Modal
+        open={isProductImportOpen}
+        onClose={closeProductImport}
+        title="Импорт товаров из Excel"
+        description="Импорт создаёт новые товары. Существующие товары не обновляются."
+        size="lg"
+        closeOnEscape={!isImportingProducts}
+        closeOnOverlayClick={!isImportingProducts}
+      >
+        {productImportResult ? (
+          <div className="warehouse__import-result" role="status">
+            <p>Импорт завершён успешно.</p>
+            <p>Импортировано товаров: {productImportResult.importedCount}</p>
+            <p>
+              Создано начальных складских движений:{' '}
+              {productImportResult.initialStockMovementCount}
+            </p>
+
+            <div className="warehouse__product-card-actions">
+              <Button type="button" onClick={closeProductImport}>
+                Готово
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="warehouse__import-instructions">
+              Скачайте шаблон, заполните его и выберите готовый файл .xlsx.
+              Проверка данных выполняется сервером до создания товаров.
+            </p>
+
+            <div className="warehouse__import-template-action">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleDownloadTemplate}
+                disabled={isDownloadingTemplate || isImportingProducts}
+              >
+                {isDownloadingTemplate
+                  ? 'Скачивание шаблона…'
+                  : 'Скачать шаблон'}
+              </Button>
+            </div>
+
+            <FileUpload
+              key={importFileKey}
+              label="Файл Excel"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              multiple={false}
+              disabled={isImportingProducts}
+              hint="Файл .xlsx, не более 10 МиБ"
+              error={productImportError ?? undefined}
+              onFilesChange={handleProductImportFiles}
+            />
+
+            {importFile && (
+              <p className="warehouse__selected-file" aria-live="polite">
+                Выбран файл: {importFile.name}
+              </p>
+            )}
+
+            {productImportRowErrors.length > 0 && (
+              <div className="warehouse__import-errors" role="alert">
+                <p>Исправьте следующие ошибки в файле:</p>
+                <ul>
+                  {productImportRowErrors.map((error, index) => (
+                    <li key={`${error.row}-${error.column ?? 'file'}-${index}`}>
+                      {formatProductWorkbookRowError(error)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="warehouse__product-card-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={closeProductImport}
+                disabled={isImportingProducts}
+              >
+                Отмена
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleProductImport}
+                disabled={!importFile || isImportingProducts}
+              >
+                {isImportingProducts
+                  ? 'Импортирование…'
+                  : 'Импортировать'}
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       <Card className="warehouse__table-wrapper">
         <Table className="warehouse__table">
