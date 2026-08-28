@@ -1,15 +1,18 @@
-﻿import { useMemo, useState } from 'react'
-import { useTransactions } from '../../context/useTransactions'
 import {
-  getFinancialKpis,
-  getReportingEligibleTransactions,
-  type Transaction,
-} from '@madina/core'
-
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import type {
+  FinancialTransactionRowResponse,
+  IncomeReportResponse,
+} from '@madina/api'
 import {
+  Alert,
   Badge,
   Button,
   Card,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -17,27 +20,27 @@ import {
   TableHeader,
   TableRow,
 } from '@madina/ui'
+import { getIncomeReport } from '../../shared/api/reportingApi'
+import { HttpError } from '../../shared/api/httpClient'
 
 import './Income.css'
 
 type Filter = 'all' | 'income' | 'expense'
+type IncomeTransaction = FinancialTransactionRowResponse
 
-const typeLabels: Record<Transaction['type'], string> = {
+const typeLabels: Record<IncomeTransaction['type'], string> = {
   income: 'Доход',
   expense: 'Расход',
 }
 
-const categoryLabels: Record<
-  Transaction['category'],
-  string
-> = {
+const categoryLabels: Record<IncomeTransaction['category'], string> = {
   sale: 'Продажа',
   purchase: 'Закупка',
   other: 'Прочее',
 }
 
 const paymentMethodLabels: Record<
-  Transaction['paymentMethod'],
+  IncomeTransaction['paymentMethod'],
   string
 > = {
   cash: 'Наличные',
@@ -46,44 +49,104 @@ const paymentMethodLabels: Record<
   other: 'Другое',
 }
 
-const statusLabels: Record<
-  Transaction['status'],
-  string
-> = {
-  pending: 'Ожидает',
+const statusLabels: Record<IncomeTransaction['status'], string> = {
   completed: 'Завершено',
-  cancelled: 'Отменено',
+}
+
+function getReportType(filter: Filter): 'income' | 'expense' | undefined {
+  return filter === 'all'
+    ? undefined
+    : filter
+}
+
+function getIncomeReportErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    if (error.status === 403) {
+      return 'Отчёт по доходам и расходам недоступен для вашей роли.'
+    }
+
+    return error.message
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось загрузить отчёт. Повторите попытку.'
 }
 
 export function Income() {
-  const { transactions } = useTransactions()
+  const [filter, setFilter] = useState<Filter>('all')
+  const [summary, setSummary] = useState<
+    IncomeReportResponse['summary'] | null
+  >(null)
+  const [transactions, setTransactions] = useState<IncomeTransaction[]>([])
+  const [nextCursor, setNextCursor] = useState<string | undefined>()
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [initialError, setInitialError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const requestGeneration = useRef(0)
 
-  const [filter, setFilter] =
-    useState<Filter>('all')
+  useEffect(() => {
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
 
-  const eligibleTransactions = useMemo(
-    () => getReportingEligibleTransactions(transactions, 'all'),
-    [transactions],
-  )
+    setTransactions([])
+    setNextCursor(undefined)
+    setIsInitialLoading(true)
+    setInitialError(null)
+    setLoadMoreError(null)
 
-  const filteredTransactions = useMemo(
-    () =>
-      filter === 'all'
-        ? eligibleTransactions
-        : eligibleTransactions.filter(
-          (transaction) => transaction.type === filter,
-        ),
-    [eligibleTransactions, filter],
-  )
+    void getIncomeReport({ type: getReportType(filter) })
+      .then((response) => {
+        if (requestGeneration.current !== generation) return
 
-  const {
-    totalIncome,
-    totalExpense,
-    financialBalance,
-  } = useMemo(
-    () => getFinancialKpis(transactions, 'all'),
-    [transactions],
-  )
+        setSummary(response.summary)
+        setTransactions(response.transactions.items)
+        setNextCursor(response.transactions.nextCursor)
+      })
+      .catch((error: unknown) => {
+        if (requestGeneration.current !== generation) return
+
+        setInitialError(getIncomeReportErrorMessage(error))
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) {
+          setIsInitialLoading(false)
+        }
+      })
+  }, [filter])
+
+  async function loadMore(): Promise<void> {
+    if (!nextCursor || isLoadingMore || isInitialLoading) return
+
+    const generation = requestGeneration.current
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
+
+    try {
+      const response = await getIncomeReport({
+        type: getReportType(filter),
+        cursor: nextCursor,
+      })
+
+      if (requestGeneration.current !== generation) return
+
+      setSummary(response.summary)
+      setTransactions((currentTransactions) => [
+        ...currentTransactions,
+        ...response.transactions.items,
+      ])
+      setNextCursor(response.transactions.nextCursor)
+    } catch (error) {
+      if (requestGeneration.current !== generation) return
+
+      setLoadMoreError(getIncomeReportErrorMessage(error))
+    } finally {
+      if (requestGeneration.current === generation) {
+        setIsLoadingMore(false)
+      }
+    }
+  }
 
   function formatAmount(amount: number) {
     return new Intl.NumberFormat('ru-RU', {
@@ -92,10 +155,22 @@ export function Income() {
     }).format(amount)
   }
 
-  function formatDate(date: Date) {
+  function formatDate(date: string) {
     return new Intl.DateTimeFormat('ru-RU').format(
       new Date(date),
     )
+  }
+
+  function renderSummaryValue(value: number | undefined) {
+    if (value !== undefined) {
+      return `${formatAmount(value)} SAR`
+    }
+
+    if (isInitialLoading) {
+      return <Skeleton variant="text" width="70%" />
+    }
+
+    return '—'
   }
 
   return (
@@ -103,30 +178,28 @@ export function Income() {
       <div className="income-page__header">
         <div>
           <h1>Доходы и расходы</h1>
-          <p>
-            Финансовые операции CRM
-          </p>
+          <p>Финансовые операции CRM</p>
         </div>
       </div>
 
+      {initialError && (
+        <Alert variant="danger" title="Не удалось загрузить отчёт">
+          {initialError}
+        </Alert>
+      )}
+
       <div className="income-summary">
         <Card className="income-card">
-          <span className="income-card__label">
-            Доход
-          </span>
-
+          <span className="income-card__label">Доход</span>
           <strong className="income-card__value">
-            {formatAmount(totalIncome)} SAR
+            {renderSummaryValue(summary?.totalIncome)}
           </strong>
         </Card>
 
         <Card className="income-card">
-          <span className="income-card__label">
-            Расход
-          </span>
-
+          <span className="income-card__label">Расход</span>
           <strong className="income-card__value">
-            {formatAmount(totalExpense)} SAR
+            {renderSummaryValue(summary?.totalExpense)}
           </strong>
         </Card>
 
@@ -134,9 +207,8 @@ export function Income() {
           <span className="income-card__label">
             Финансовый результат
           </span>
-
           <strong className="income-card__value">
-            {formatAmount(financialBalance)} SAR
+            {renderSummaryValue(summary?.financialBalance)}
           </strong>
         </Card>
       </div>
@@ -144,36 +216,27 @@ export function Income() {
       <div className="income-filters">
         <Button
           type="button"
-          variant={
-            filter === 'all'
-              ? 'primary'
-              : 'secondary'
-          }
+          variant={filter === 'all' ? 'primary' : 'secondary'}
           onClick={() => setFilter('all')}
+          disabled={isInitialLoading && filter === 'all'}
         >
           Все
         </Button>
 
         <Button
           type="button"
-          variant={
-            filter === 'income'
-              ? 'primary'
-              : 'secondary'
-          }
+          variant={filter === 'income' ? 'primary' : 'secondary'}
           onClick={() => setFilter('income')}
+          disabled={isInitialLoading && filter === 'income'}
         >
           Доходы
         </Button>
 
         <Button
           type="button"
-          variant={
-            filter === 'expense'
-              ? 'primary'
-              : 'secondary'
-          }
+          variant={filter === 'expense' ? 'primary' : 'secondary'}
           onClick={() => setFilter('expense')}
+          disabled={isInitialLoading && filter === 'expense'}
         >
           Расходы
         </Button>
@@ -194,79 +257,69 @@ export function Income() {
           </TableHead>
 
           <TableBody>
-            {filteredTransactions.length === 0 ? (
+            {isInitialLoading ? (
               <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="income-table__empty"
-                >
-                  Операций пока нет
+                <TableCell colSpan={7} className="income-table__empty">
+                  Загрузка операций…
+                </TableCell>
+              </TableRow>
+            ) : transactions.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="income-table__empty">
+                  {filter === 'all'
+                    ? 'Операций пока нет'
+                    : 'Операций по выбранному фильтру пока нет'}
                 </TableCell>
               </TableRow>
             ) : (
-              filteredTransactions.map(
-                (transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>
-                      {formatDate(
-                        transaction.transactionDate,
-                      )}
-                    </TableCell>
-
-                    <TableCell>
-                      {typeLabels[transaction.type]}
-                    </TableCell>
-
-                    <TableCell>
-                      {
-                        categoryLabels[
-                        transaction.category
-                        ]
-                      }
-                    </TableCell>
-
-                    <TableCell>
-                      {transaction.description ?? '—'}
-                    </TableCell>
-
-                    <TableCell>
-                      {
-                        paymentMethodLabels[
-                        transaction.paymentMethod
-                        ]
-                      }
-                    </TableCell>
-
-                    <TableCell>
-                      {formatAmount(
-                        transaction.amount,
-                      )}{' '}
-                      SAR
-                    </TableCell>
-
-                    <TableCell>
-                      <Badge
-                        variant={
-                          transaction.status === 'completed'
-                            ? 'success'
-                            : transaction.status === 'cancelled'
-                              ? 'danger'
-                              : 'warning'
-                        }
-                      >
-                        {
-                          statusLabels[
-                          transaction.status
-                          ]
-                        }
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ),
-              )
+              transactions.map((transaction) => (
+                <TableRow key={transaction.id}>
+                  <TableCell>
+                    {formatDate(transaction.transactionDate)}
+                  </TableCell>
+                  <TableCell>{typeLabels[transaction.type]}</TableCell>
+                  <TableCell>
+                    {categoryLabels[transaction.category]}
+                  </TableCell>
+                  <TableCell>{transaction.description ?? '—'}</TableCell>
+                  <TableCell>
+                    {paymentMethodLabels[transaction.paymentMethod]}
+                  </TableCell>
+                  <TableCell>{formatAmount(transaction.amount)} SAR</TableCell>
+                  <TableCell>
+                    <Badge variant="success">
+                      {statusLabels[transaction.status]}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>
+
+        {loadMoreError && (
+          <div className="income-table__load-more-error">
+            <Alert
+              variant="danger"
+              title="Не удалось загрузить следующие операции"
+            >
+              {loadMoreError}
+            </Alert>
+          </div>
+        )}
+
+        {nextCursor && !isInitialLoading && (
+          <div className="income-table__load-more">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void loadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? 'Загрузка…' : 'Показать ещё'}
+            </Button>
+          </div>
+        )}
       </Card>
     </section>
   )
