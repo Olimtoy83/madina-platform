@@ -236,7 +236,34 @@ test('product workbook parser reports enum and numeric locations without adding 
   equal(unresolvedDomainRules.ok, true)
 })
 
+test('product workbook parser rejects exact trimmed duplicate names but keeps case-distinct names', async () => {
+  const duplicates = await parseProductImportWorkbook(await writeWorkbook([
+    ['Dates', 'dates', 'kg', 0, 10, 15, 'active'],
+    ['  Dates  ', 'dates', 'kg', 0, 10, 15, 'active'],
+  ]))
+  equal(duplicates.ok, false)
+  if (!duplicates.ok) {
+    equal(duplicates.errors.some((error) =>
+      error.row === 5 && error.column === 'name' && error.code === 'duplicate_row',
+    ), true)
+  }
+
+  const caseDistinct = await parseProductImportWorkbook(await writeWorkbook([
+    ['Dates', 'dates', 'kg', 0, 10, 15, 'active'],
+    ['dates', 'dates', 'kg', 0, 10, 15, 'active'],
+  ]))
+  equal(caseDistinct.ok, true)
+})
+
 test('product workbook parser enforces row and error bounds', async () => {
+  const atLimit = await parseProductImportWorkbook(await writeWorkbook(
+    Array.from({ length: 1_000 }, (_, index) => [
+      `Dates ${index}`, 'dates', 'kg', 0, 10, 15, 'active',
+    ] as const),
+  ))
+  equal(atLimit.ok, true)
+  if (atLimit.ok) equal(atLimit.rows.length, 1_000)
+
   const tooManyRows = await parseProductImportWorkbook(await writeWorkbook(
     Array.from({ length: 1_001 }, (_, index) => [
       `Dates ${index}`, 'dates', 'kg', 0, 10, 15, 'active',

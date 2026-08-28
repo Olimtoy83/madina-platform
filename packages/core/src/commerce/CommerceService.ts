@@ -17,7 +17,10 @@ import {
   adjustStock,
   deactivateProduct,
   getStockIntegrityDiscrepancies,
+  normalizeProductName,
   updateProduct as updateProductCore,
+  validateInitialProductQuantity,
+  validateProductPrice,
   type Product,
   type StockMovement,
 } from '../inventory/index.js'
@@ -33,6 +36,10 @@ import {
 import {
   CommerceCommandError,
   type AdjustProductStockCommand,
+  type BulkCreateProductRowCommand,
+  type BulkCreateProductsCommand,
+  type BulkCreateProductsResult,
+  BulkCreateProductValidationError,
   type CreateProductCommand,
   type CreatePurchaseCommand,
   type CreateSaleCommand,
@@ -86,55 +93,58 @@ export class CommerceService {
     command: CreateProductCommand,
     context: CommandContext,
   ): Promise<Product> {
+    const validatedCommand = validateCreateProductCommand(command)
+
     return this.repository.withTransaction(async (unitOfWork) => {
-      if (!Number.isFinite(command.initialQuantity) || command.initialQuantity < 0) {
-        throw new CommerceCommandError(
-          'Initial product quantity must be a non-negative finite number.',
-        )
-      }
-
-      const now = new Date()
-      const product: Product = {
-        id: crypto.randomUUID(),
-        createdAt: now,
-        updatedAt: now,
-        name: command.name,
-        category: command.category,
-        quantity: 0,
-        unit: command.unit,
-        costPrice: command.costPrice,
-        salePrice: command.salePrice,
-        status: command.status,
-      }
-
-      await unitOfWork.insertProduct(product)
-
-      if (command.initialQuantity === 0) {
-        await appendCommerceAudit(unitOfWork, context, 'product.created', 'product', product.id)
-        return product
-      }
-
-      const result = adjustStock(
-        [product],
-        product.id,
-        command.initialQuantity,
-        undefined,
-        'Начальный остаток',
+      const result = await createProductInUnitOfWork(
+        unitOfWork,
+        validatedCommand,
       )
 
-      if (!result.success || !result.product || !result.movement) {
-        throw new CommerceCommandError(
-          result.message ?? 'Unable to set initial product quantity.',
-        )
+      if (!result.movement) {
+        await appendCommerceAudit(unitOfWork, context, 'product.created', 'product', result.product.id)
+        return result.product
       }
 
-      await unitOfWork.saveProducts(result.products)
-      await unitOfWork.saveStockMovements([result.movement])
       await appendCommerceAudit(unitOfWork, context, 'product.created', 'product', result.product.id, {
-        initialQuantity: command.initialQuantity,
+        initialQuantity: validatedCommand.initialQuantity,
         movementId: result.movement.id,
       })
       return result.product
+    })
+  }
+
+  async importProducts(
+    command: BulkCreateProductsCommand,
+    context: CommandContext,
+  ): Promise<BulkCreateProductsResult> {
+    const rows = validateBulkCreateProductsCommand(command)
+
+    return this.repository.withTransaction(async (unitOfWork) => {
+      let initialStockMovementCount = 0
+
+      for (const row of rows) {
+        const result = await createProductInUnitOfWork(unitOfWork, row)
+        if (result.movement) initialStockMovementCount += 1
+      }
+
+      await appendCommerceAudit(
+        unitOfWork,
+        context,
+        'products.bulk_imported',
+        'product_import',
+        crypto.randomUUID(),
+        {
+          templateVersion: command.templateVersion,
+          importedCount: rows.length,
+          initialStockMovementCount,
+        },
+      )
+
+      return {
+        importedCount: rows.length,
+        initialStockMovementCount,
+      }
     })
   }
 
@@ -525,6 +535,179 @@ async function appendCommerceAudit(
     id: crypto.randomUUID(), occurredAt: new Date(),
     actorType: context.actorType, actorUserId: context.actorUserId,
     requestId: context.requestId, domain: 'commerce', action, entityType, entityId, metadata,
+  })
+}
+
+interface CreatedProductInUnitOfWork {
+  product: Product
+  movement?: StockMovement
+}
+
+async function createProductInUnitOfWork(
+  unitOfWork: CommerceUnitOfWork,
+  command: CreateProductCommand,
+): Promise<CreatedProductInUnitOfWork> {
+  const now = new Date()
+  const product: Product = {
+    id: crypto.randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    name: command.name,
+    category: command.category,
+    quantity: 0,
+    unit: command.unit,
+    costPrice: command.costPrice,
+    salePrice: command.salePrice,
+    status: command.status,
+  }
+
+  await unitOfWork.insertProduct(product)
+
+  if (command.initialQuantity === 0) {
+    return { product }
+  }
+
+  const result = adjustStock(
+    [product],
+    product.id,
+    command.initialQuantity,
+    undefined,
+    'Начальный остаток',
+  )
+
+  if (!result.success || !result.product || !result.movement) {
+    throw new CommerceCommandError(
+      result.message ?? 'Unable to set initial product quantity.',
+    )
+  }
+
+  await unitOfWork.saveProducts(result.products)
+  await unitOfWork.saveStockMovements([result.movement])
+
+  return {
+    product: result.product,
+    movement: result.movement,
+  }
+}
+
+function validateCreateProductCommand(
+  command: CreateProductCommand,
+): CreateProductCommand {
+  return {
+    ...command,
+    name: normalizeProductName(command.name),
+    costPrice: validateProductPrice(command.costPrice, 'costPrice'),
+    salePrice: validateProductPrice(command.salePrice, 'salePrice'),
+    initialQuantity: validateInitialProductQuantity(command.initialQuantity),
+  }
+}
+
+function validateBulkCreateProductsCommand(
+  command: BulkCreateProductsCommand,
+): CreateProductCommand[] {
+  const issues: Array<{
+    row: number
+    column: string
+    code: string
+    message: string
+  }> = []
+  const rows: CreateProductCommand[] = []
+
+  if (command.rows.length === 0) {
+    throw new BulkCreateProductValidationError([{
+      row: 0,
+      column: 'file',
+      code: 'empty_import',
+      message: 'Workbook must contain at least one product row.',
+    }])
+  }
+
+  for (const row of command.rows) {
+    const validated = validateBulkCreateProductRow(row, issues)
+    if (validated) rows.push(validated)
+  }
+
+  if (issues.length > 0) {
+    throw new BulkCreateProductValidationError(issues)
+  }
+
+  return rows
+}
+
+function validateBulkCreateProductRow(
+  row: BulkCreateProductRowCommand,
+  issues: Array<{
+    row: number
+    column: string
+    code: string
+    message: string
+  }>,
+): CreateProductCommand | undefined {
+  let name: string | undefined
+  let costPrice: number | undefined
+  let salePrice: number | undefined
+  let initialQuantity: number | undefined
+
+  try {
+    name = normalizeProductName(row.name)
+  } catch (error) {
+    addBulkValidationIssue(row.sourceRow, 'name', error, issues)
+  }
+
+  try {
+    costPrice = validateProductPrice(row.costPrice, 'costPrice')
+  } catch (error) {
+    addBulkValidationIssue(row.sourceRow, 'cost_price', error, issues)
+  }
+
+  try {
+    salePrice = validateProductPrice(row.salePrice, 'salePrice')
+  } catch (error) {
+    addBulkValidationIssue(row.sourceRow, 'sale_price', error, issues)
+  }
+
+  try {
+    initialQuantity = validateInitialProductQuantity(row.initialQuantity)
+  } catch (error) {
+    addBulkValidationIssue(row.sourceRow, 'initial_quantity', error, issues)
+  }
+
+  if (
+    name === undefined || costPrice === undefined ||
+    salePrice === undefined || initialQuantity === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    name,
+    category: row.category,
+    unit: row.unit,
+    costPrice,
+    salePrice,
+    status: row.status,
+    initialQuantity,
+  }
+}
+
+function addBulkValidationIssue(
+  row: number,
+  column: string,
+  error: unknown,
+  issues: Array<{
+    row: number
+    column: string
+    code: string
+    message: string
+  }>,
+): void {
+  issues.push({
+    row,
+    column,
+    code: 'invalid_product',
+    message: error instanceof Error
+      ? error.message
+      : 'Product validation failed.',
   })
 }
 

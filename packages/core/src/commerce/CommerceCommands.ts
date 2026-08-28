@@ -12,6 +12,27 @@ export interface CreateProductCommand {
   initialQuantity: number
 }
 
+export interface BulkCreateProductRowCommand extends CreateProductCommand {
+  sourceRow: number
+}
+
+export interface BulkCreateProductsCommand {
+  templateVersion: string
+  rows: readonly BulkCreateProductRowCommand[]
+}
+
+export interface BulkCreateProductsResult {
+  importedCount: number
+  initialStockMovementCount: number
+}
+
+export interface BulkCreateProductValidationIssue {
+  row: number
+  column: string
+  code: string
+  message: string
+}
+
 export type UpdateProductCommand = Partial<Pick<
   Product,
   'name' | 'category' | 'unit' | 'costPrice' | 'salePrice' | 'status'
@@ -55,5 +76,15 @@ export class CommerceCommandError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'CommerceCommandError'
+  }
+}
+
+export class BulkCreateProductValidationError extends CommerceCommandError {
+  readonly issues: readonly BulkCreateProductValidationIssue[]
+
+  constructor(issues: readonly BulkCreateProductValidationIssue[]) {
+    super('Product import validation failed.')
+    this.name = 'BulkCreateProductValidationError'
+    this.issues = issues
   }
 }

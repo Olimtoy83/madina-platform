@@ -250,4 +250,104 @@ describe('CommerceService', () => {
       actorType: 'user', actorUserId: 'user-1', requestId: 'request-1',
     })
   })
+
+  it('applies global product validation to normal product creation', async () => {
+    const repository = new InMemoryCommerceRepository()
+    const service = new CommerceService(repository)
+
+    await expect(service.createProduct({
+      name: '  Valid Dates  ', category: 'dates', unit: 'kg',
+      costPrice: 0, salePrice: 0, status: 'active', initialQuantity: 0,
+    }, context)).resolves.toMatchObject({ name: 'Valid Dates' })
+    await expect(service.createProduct({
+      name: ' ', category: 'dates', unit: 'kg',
+      costPrice: 1, salePrice: 1, status: 'active', initialQuantity: 0,
+    }, context)).rejects.toThrow('Product name must not be empty.')
+    await expect(service.createProduct({
+      name: 'Dates', category: 'dates', unit: 'kg',
+      costPrice: -1, salePrice: 1, status: 'active', initialQuantity: 0,
+    }, context)).rejects.toThrow('costPrice must be a non-negative finite number.')
+    await expect(service.createProduct({
+      name: 'Dates', category: 'dates', unit: 'kg',
+      costPrice: 1, salePrice: -1, status: 'active', initialQuantity: 0,
+    }, context)).rejects.toThrow('salePrice must be a non-negative finite number.')
+    await expect(service.createProduct({
+      name: 'Dates', category: 'dates', unit: 'kg',
+      costPrice: Number.NaN, salePrice: 1, status: 'active', initialQuantity: 0,
+    }, context)).rejects.toThrow('costPrice must be a non-negative finite number.')
+    await expect(service.createProduct({
+      name: 'Dates', category: 'dates', unit: 'kg',
+      costPrice: 1, salePrice: Number.POSITIVE_INFINITY, status: 'active', initialQuantity: 0,
+    }, context)).rejects.toThrow('salePrice must be a non-negative finite number.')
+    await expect(service.createProduct({
+      name: 'Dates', category: 'dates', unit: 'kg',
+      costPrice: 1, salePrice: 1, status: 'active', initialQuantity: -1,
+    }, context)).rejects.toThrow('Initial product quantity must be a non-negative finite number.')
+  })
+
+  it('creates bulk products with movement-backed initial stock and one aggregate audit event', async () => {
+    const repository = new InMemoryCommerceRepository()
+    const service = new CommerceService(repository)
+
+    const result = await service.importProducts({
+      templateVersion: 'v1',
+      rows: [
+        {
+          sourceRow: 4, name: 'Dates', category: 'dates', unit: 'kg',
+          costPrice: 10, salePrice: 15, status: 'active', initialQuantity: 0,
+        },
+        {
+          sourceRow: 5, name: 'Perfume', category: 'perfume', unit: 'piece',
+          costPrice: 20, salePrice: 30, status: 'active', initialQuantity: 3,
+        },
+      ],
+    }, context)
+
+    expect(result).toEqual({ importedCount: 2, initialStockMovementCount: 1 })
+    expect(repository.products).toHaveLength(3)
+    const imported = repository.products.find((product) => product.name === 'Perfume')
+    expect(imported?.quantity).toBe(3)
+    expect(repository.movements).toHaveLength(1)
+    expect(repository.movements[0]).toMatchObject({
+      productId: imported?.id,
+      type: 'adjustment',
+      quantity: 3,
+      unit: 'piece',
+    })
+    expect(repository.auditEvents).toHaveLength(1)
+    expect(repository.auditEvents[0]).toMatchObject({
+      action: 'products.bulk_imported',
+      domain: 'commerce',
+      actorType: 'user',
+      actorUserId: 'user-1',
+      requestId: 'request-1',
+      metadata: {
+        templateVersion: 'v1',
+        importedCount: 2,
+        initialStockMovementCount: 1,
+      },
+    })
+  })
+
+  it('completes bulk product domain validation before opening a transaction', async () => {
+    const repository = new InMemoryCommerceRepository()
+    const service = new CommerceService(repository)
+
+    await expect(service.importProducts({
+      templateVersion: 'v1',
+      rows: [
+        {
+          sourceRow: 4, name: 'Valid', category: 'dates', unit: 'kg',
+          costPrice: 1, salePrice: 2, status: 'active', initialQuantity: 0,
+        },
+        {
+          sourceRow: 5, name: ' ', category: 'dates', unit: 'kg',
+          costPrice: -1, salePrice: -2, status: 'active', initialQuantity: -1,
+        },
+      ],
+    }, context)).rejects.toThrow('Product import validation failed.')
+    expect(repository.products).toHaveLength(1)
+    expect(repository.movements).toHaveLength(0)
+    expect(repository.auditEvents).toHaveLength(0)
+  })
 })

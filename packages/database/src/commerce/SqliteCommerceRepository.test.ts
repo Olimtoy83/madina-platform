@@ -158,3 +158,42 @@ test('audit insert failure rolls back a completed sale and its derived records',
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test('audit insert failure rolls back every product and movement in a bulk import', async () => {
+  const { directory, repository } = createRepository()
+  const service = new CommerceService(repository)
+  const databaseFile = join(directory, 'commerce.sqlite')
+
+  try {
+    const database = new DatabaseSync(databaseFile)
+    database.exec(`CREATE TRIGGER fail_bulk_audit_insert BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT, 'bulk audit failure'); END;`)
+    database.close()
+
+    await rejects(service.importProducts({
+      templateVersion: 'v1',
+      rows: [
+        {
+          sourceRow: 4, name: 'Dates', category: 'dates', unit: 'kg',
+          costPrice: 10, salePrice: 15, status: 'active', initialQuantity: 0,
+        },
+        {
+          sourceRow: 5, name: 'Perfume', category: 'perfume', unit: 'piece',
+          costPrice: 20, salePrice: 30, status: 'active', initialQuantity: 3,
+        },
+      ],
+    }, context), /bulk audit failure/)
+
+    strictEqual((await repository.findAllProducts()).length, 0)
+    strictEqual((await repository.findAllStockMovements()).length, 0)
+
+    const auditRepository = new SqliteAuditRepository(databaseFile)
+    try {
+      strictEqual((await auditRepository.findAll()).length, 0)
+    } finally {
+      auditRepository.close()
+    }
+  } finally {
+    repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

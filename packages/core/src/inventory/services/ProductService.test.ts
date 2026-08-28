@@ -5,8 +5,11 @@ import type { Product } from '../types/product'
 import type { StockMovement } from '../types/stockMovement'
 import {
   deactivateProduct,
+  normalizeProductName,
   ProductValidationError,
   updateProduct,
+  validateInitialProductQuantity,
+  validateProductPrice,
 } from './ProductService'
 
 function createProduct(
@@ -82,6 +85,25 @@ function createPurchase(
 }
 
 describe('ProductService', () => {
+  it('normalizes a valid product name and rejects a whitespace-only name', () => {
+    expect(normalizeProductName('  Dates  ')).toBe('Dates')
+    expect(() => normalizeProductName('   ')).toThrow(ProductValidationError)
+  })
+
+  it('accepts zero product prices and rejects negative or non-finite values', () => {
+    expect(validateProductPrice(0, 'costPrice')).toBe(0)
+    expect(validateProductPrice(0, 'salePrice')).toBe(0)
+    expect(() => validateProductPrice(-1, 'costPrice')).toThrow(ProductValidationError)
+    expect(() => validateProductPrice(-1, 'salePrice')).toThrow(ProductValidationError)
+    expect(() => validateProductPrice(Number.NaN, 'costPrice')).toThrow(ProductValidationError)
+    expect(() => validateProductPrice(Number.POSITIVE_INFINITY, 'salePrice')).toThrow(ProductValidationError)
+  })
+
+  it('accepts non-negative initial quantity and rejects a negative value', () => {
+    expect(validateInitialProductQuantity(0)).toBe(0)
+    expect(() => validateInitialProductQuantity(-1)).toThrow(ProductValidationError)
+  })
+
   it('deactivates a product without removing its identity', () => {
     const product = createProduct()
 
@@ -158,6 +180,19 @@ describe('ProductService', () => {
       name: 'Updated Dates',
       unit: 'kg',
     })
+  })
+
+  it('normalizes product name updates and rejects invalid price updates', () => {
+    const product = createProduct()
+
+    expect(updateProduct(product, { name: '  Updated Dates  ' }, [], []).name)
+      .toBe('Updated Dates')
+    expect(() => updateProduct(product, { name: '  ' }, [], []))
+      .toThrow(ProductValidationError)
+    expect(() => updateProduct(product, { costPrice: -1 }, [], []))
+      .toThrow(ProductValidationError)
+    expect(() => updateProduct(product, { salePrice: -1 }, [], []))
+      .toThrow(ProductValidationError)
   })
 
   it('does not let completed or cancelled records block a valid unit change', () => {

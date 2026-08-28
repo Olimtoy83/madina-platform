@@ -43,6 +43,7 @@ export type AuditAction =
   | 'sale.cancelled'
   | 'sale.completed'
   | 'commerce.snapshot_imported'
+  | 'products.bulk_imported'
   | 'user.created'
   | 'user.role_changed'
   | 'user.status_changed'

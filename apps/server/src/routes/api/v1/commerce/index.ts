@@ -7,7 +7,10 @@ import type {
   CreateSaleRequest,
   ImportCommerceSnapshotRequest,
   ImportCommerceSnapshotResponse,
+  ImportProductsResponse,
   ProductResponse,
+  ProductWorkbookRowError,
+  ProductWorkbookValidationErrorResponse,
   ProductsListResponse,
   PurchaseResponse,
   PurchasesListResponse,
@@ -35,11 +38,15 @@ import type {
 import {
   CommerceCommandError,
   CommerceSnapshotValidationError,
+  BulkCreateProductValidationError,
   ProductValidationError,
   PurchaseValidationError,
   SaleValidationError,
 } from '@madina/core'
-import type { FastifyInstance } from 'fastify'
+import type {
+  FastifyInstance,
+  FastifyRequest,
+} from 'fastify'
 import {
   requirePermission,
   getAuthenticatedCommandContext,
@@ -48,6 +55,7 @@ import {
 import {
   createProductExportWorkbook,
   createProductImportTemplateWorkbook,
+  parseProductImportWorkbook,
   PRODUCT_WORKBOOK_MIME_TYPE,
 } from '../../../../workbooks/productsWorkbook.js'
 
@@ -230,6 +238,85 @@ function toMutationError(error: Error): ApiErrorResponse {
   }
 }
 
+function toProductWorkbookValidationError(
+  errors: readonly ProductWorkbookRowError[],
+): ProductWorkbookValidationErrorResponse {
+  return {
+    statusCode: 422,
+    error: 'Unprocessable Entity',
+    message: 'Product workbook validation failed.',
+    errors: [...errors],
+  }
+}
+
+async function readProductImportFile(
+  request: FastifyRequest,
+): Promise<
+  | { ok: true; bytes: Buffer }
+  | { ok: false; errors: ProductWorkbookRowError[] }
+> {
+  let fileCount = 0
+  let bytes: Buffer | undefined
+  const errors: ProductWorkbookRowError[] = []
+
+  try {
+    for await (const part of request.parts()) {
+      if (part.type !== 'file') {
+        errors.push({
+          row: 0,
+          code: 'unexpected_field',
+          message: 'Product import accepts only one file field.',
+        })
+        continue
+      }
+
+      fileCount += 1
+      const content = await part.toBuffer()
+
+      if (part.fieldname !== 'file') {
+        errors.push({
+          row: 0,
+          code: 'unexpected_file_field',
+          message: 'Product import file field must be named file.',
+        })
+        continue
+      }
+
+      if (fileCount > 1) {
+        errors.push({
+          row: 0,
+          code: 'multiple_files',
+          message: 'Product import accepts exactly one file.',
+        })
+        continue
+      }
+
+      bytes = content
+    }
+  } catch {
+    return {
+      ok: false,
+      errors: [{
+        row: 0,
+        code: 'invalid_multipart',
+        message: 'Product import multipart payload is invalid or exceeds limits.',
+      }],
+    }
+  }
+
+  if (fileCount === 0 || !bytes) {
+    errors.push({
+      row: 0,
+      code: 'missing_file',
+      message: 'Product import requires one XLSX file.',
+    })
+  }
+
+  return errors.length > 0 || !bytes
+    ? { ok: false, errors }
+    : { ok: true, bytes }
+}
+
 function isMutationError(error: unknown): error is Error {
   return error instanceof CommerceCommandError ||
     error instanceof ProductValidationError ||
@@ -327,6 +414,62 @@ export async function commerceRoutes(
         )
         .type(PRODUCT_WORKBOOK_MIME_TYPE)
         .send(workbook)
+    },
+  )
+
+  app.post(
+    '/products/import',
+    {
+      preHandler: [
+        requirePermission(app, 'data:import'),
+        requireTrustedOrigin(),
+      ],
+    },
+    async (
+      request,
+      reply,
+    ): Promise<
+      | ImportProductsResponse
+      | ProductWorkbookValidationErrorResponse
+    > => {
+      const upload = await readProductImportFile(request)
+      if (!upload.ok) {
+        reply.code(422)
+        return toProductWorkbookValidationError(upload.errors)
+      }
+
+      const preflight = await parseProductImportWorkbook(upload.bytes)
+      if (!preflight.ok) {
+        reply.code(422)
+        return toProductWorkbookValidationError(preflight.errors)
+      }
+
+      try {
+        const result = await options.commerceService.importProducts(
+          {
+            templateVersion: 'v1',
+            rows: preflight.rows.map((row) => ({
+              sourceRow: row.row,
+              name: row.name,
+              category: row.category,
+              unit: row.unit,
+              initialQuantity: row.initialQuantity,
+              costPrice: row.costPrice,
+              salePrice: row.salePrice,
+              status: row.status,
+            })),
+          },
+          getAuthenticatedCommandContext(request),
+        )
+        reply.code(201)
+        return result
+      } catch (error) {
+        if (error instanceof BulkCreateProductValidationError) {
+          reply.code(422)
+          return toProductWorkbookValidationError(error.issues)
+        }
+        throw error
+      }
     },
   )
 

@@ -185,6 +185,45 @@ test('commerce mutation routes create, update, and deactivate products', async (
   })
 })
 
+test('product mutation routes enforce shared name and numeric validation', async () => {
+  await withApp(async () => {}, async (app) => {
+    const invalid = await app.inject({
+      method: 'POST', url: '/api/v1/commerce/products',
+      payload: {
+        name: '   ', category: 'dates', unit: 'kg',
+        costPrice: -1, salePrice: Number.POSITIVE_INFINITY,
+        status: 'active', initialQuantity: -1,
+      },
+    })
+    equal(invalid.statusCode, 400)
+
+    const created = await app.inject({
+      method: 'POST', url: '/api/v1/commerce/products',
+      payload: {
+        name: '  Zero price dates  ', category: 'dates', unit: 'kg',
+        costPrice: 0, salePrice: 0, status: 'active', initialQuantity: 0,
+      },
+    })
+    equal(created.statusCode, 201)
+    const product = created.json() as { id: string; name: string }
+    equal(product.name, 'Zero price dates')
+
+    const invalidUpdate = await app.inject({
+      method: 'PATCH', url: `/api/v1/commerce/products/${product.id}`,
+      payload: { salePrice: -1 },
+    })
+    equal(invalidUpdate.statusCode, 400)
+
+    const update = await app.inject({
+      method: 'PATCH', url: `/api/v1/commerce/products/${product.id}`,
+      payload: { name: '  Updated dates  ', salePrice: 0 },
+    })
+    equal(update.statusCode, 200)
+    equal((update.json() as { name: string; salePrice: number }).name, 'Updated dates')
+    equal((update.json() as { name: string; salePrice: number }).salePrice, 0)
+  })
+})
+
 test('stock adjustment persists product and movement atomically', async () => {
   await withApp(async (repository) => {
     await repository.saveProduct(createProduct(2))

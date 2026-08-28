@@ -58,6 +58,8 @@ export type {
   ImportCommerceSnapshotRequest,
   ImportCommerceSnapshotResponse,
   ProductWorkbookRowError,
+  ImportProductsResponse,
+  ProductWorkbookValidationErrorResponse,
 } from './commerce/index.js'
 export type {
   CreateTaskRequest,

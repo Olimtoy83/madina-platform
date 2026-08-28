@@ -171,3 +171,15 @@ export interface ProductWorkbookRowError {
   code: string
   message: string
 }
+
+export interface ImportProductsResponse {
+  importedCount: number
+  initialStockMovementCount: number
+}
+
+export interface ProductWorkbookValidationErrorResponse {
+  statusCode: 422
+  error: 'Unprocessable Entity'
+  message: string
+  errors: ProductWorkbookRowError[]
+}

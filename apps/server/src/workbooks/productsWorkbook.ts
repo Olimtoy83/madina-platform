@@ -255,7 +255,7 @@ export async function parseProductImportWorkbook(
       salePrice === undefined || status === undefined
     ) return
 
-    const nameKey = name.toLocaleLowerCase()
+    const nameKey = name
     if (nameKey && seenNames.has(nameKey)) {
       addError(errors, {
         row: rowNumber,
