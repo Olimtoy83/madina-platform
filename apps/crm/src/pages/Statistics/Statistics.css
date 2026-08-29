@@ -216,6 +216,17 @@
   font-size: 14px;
 }
 
+.statistics-load-more,
+.statistics-load-more-error {
+  padding: 16px 20px;
+}
+
+.statistics-load-more {
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #e2e8f0;
+}
+
 /* =========================================================
    Responsive
    ========================================================= */

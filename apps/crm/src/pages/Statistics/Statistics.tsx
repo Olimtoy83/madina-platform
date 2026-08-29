@@ -1,20 +1,19 @@
-﻿import { useMemo, useState } from 'react'
 import {
-  calculateCategoryTotals,
-  getCurrentStockByUnit,
-  getFinancialKpis,
-  getInventoryProductSummary,
-  getPurchasesReportingSummary,
-  getReportingEligibleTransactions,
-  getSalesReportingSummary,
-  getTaskStats,
-  type PresetReportingPeriod,
-  type Transaction,
-} from '@madina/core'
-
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import type {
+  FinancialTransactionRowResponse,
+  StatisticsReportPeriod,
+  StatisticsReportResponse,
+} from '@madina/api'
 import {
+  Alert,
+  Button,
   Card,
   Select,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -22,13 +21,23 @@ import {
   TableHeader,
   TableRow,
 } from '@madina/ui'
-import { useProducts } from '../../context/useProducts'
-import { usePurchases } from '../../context/usePurchases'
-import { useSales } from '../../context/useSales'
 import { useTasks } from '../../context/useTasks'
-import { useTransactions } from '../../context/useTransactions'
+import { useTransactionalState } from '../../context/useTransactionalState'
+import { HttpError } from '../../shared/api/httpClient'
+import { getStatisticsReport } from '../../shared/api/reportingApi'
 
 import './Statistics.css'
+
+type StatisticsOperation = FinancialTransactionRowResponse
+
+const categoryLabels: Record<
+  StatisticsOperation['category'],
+  string
+> = {
+  sale: 'Продажи',
+  purchase: 'Поступления',
+  other: 'Другое',
+}
 
 function formatAmount(amount: number) {
   return new Intl.NumberFormat('ru-RU', {
@@ -37,84 +46,147 @@ function formatAmount(amount: number) {
   }).format(amount)
 }
 
-const categoryLabels: Record<
-  Transaction['category'],
-  string
-> = {
-  sale: 'Продажи',
-  purchase: 'Поступления',
-  other: 'Другое',
+function formatDate(date: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
+function getStatisticsReportErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    if (error.status === 403) {
+      return 'Статистика недоступна для вашей роли.'
+    }
+
+    return error.message
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось загрузить статистику. Повторите попытку.'
+}
+
+function formatStockByUnit(
+  stockByUnit: StatisticsReportResponse['inventory']['stockByUnit'],
+) {
+  if (stockByUnit.length === 0) {
+    return 'Нет остатков'
+  }
+
+  return stockByUnit
+    .map(({ quantity, unit }) =>
+      `${quantity.toLocaleString('ru-RU')} ${unit}`,
+    )
+    .join(', ')
 }
 
 export function Statistics() {
-  const { transactions } = useTransactions()
-  const { products } = useProducts()
-  const { sales } = useSales()
-  const { purchases } = usePurchases()
+  const { snapshot: commerceSnapshot } = useTransactionalState()
   const { tasks } = useTasks()
+  const [period, setPeriod] = useState<StatisticsReportPeriod>('all')
+  const [report, setReport] = useState<StatisticsReportResponse | null>(null)
+  const [operations, setOperations] = useState<StatisticsOperation[]>([])
+  const [nextCursor, setNextCursor] = useState<string | undefined>()
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [initialError, setInitialError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const requestGeneration = useRef(0)
 
-  const [period, setPeriod] =
-    useState<PresetReportingPeriod>('all')
+  useEffect(() => {
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
 
-  const eligibleTransactions = useMemo(
-    () => getReportingEligibleTransactions(transactions, period),
-    [transactions, period],
-  )
+    setReport(null)
+    setOperations([])
+    setNextCursor(undefined)
+    setIsInitialLoading(true)
+    setIsLoadingMore(false)
+    setInitialError(null)
+    setLoadMoreError(null)
 
-  const financialKpis = useMemo(
-    () => getFinancialKpis(transactions, period),
-    [transactions, period],
-  )
+    void getStatisticsReport({ period })
+      .then((response) => {
+        if (requestGeneration.current !== generation) return
 
-  const {
-    totalIncome,
-    totalExpense,
-    financialBalance,
-  } = financialKpis
+        setReport(response)
+        setOperations(response.operations.items)
+        setNextCursor(response.operations.nextCursor)
+      })
+      .catch((error: unknown) => {
+        if (requestGeneration.current !== generation) return
 
-  const salesSummary = useMemo(
-    () => getSalesReportingSummary(sales, period),
-    [sales, period],
-  )
+        setInitialError(getStatisticsReportErrorMessage(error))
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) {
+          setIsInitialLoading(false)
+        }
+      })
+  }, [period, commerceSnapshot, tasks])
 
-  const purchasesSummary = useMemo(
-    () => getPurchasesReportingSummary(purchases, period),
-    [purchases, period],
-  )
+  async function loadMore(): Promise<void> {
+    if (!nextCursor || isLoadingMore || isInitialLoading) return
 
-  const productSummary = useMemo(
-    () => getInventoryProductSummary(products),
-    [products],
-  )
+    const generation = requestGeneration.current
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
 
-  const stockByUnit = useMemo(
-    () => getCurrentStockByUnit(products),
-    [products],
-  )
+    try {
+      const response = await getStatisticsReport({
+        period,
+        cursor: nextCursor,
+      })
 
-  const categoryTotals = useMemo(
-    () =>
-      calculateCategoryTotals(
-        eligibleTransactions,
-      ),
-    [eligibleTransactions],
-  )
+      if (requestGeneration.current !== generation) return
 
-  const taskStats = useMemo(
-    () => getTaskStats(tasks),
-    [tasks],
-  )
+      setReport(response)
+      setOperations((currentOperations) => [
+        ...currentOperations,
+        ...response.operations.items,
+      ])
+      setNextCursor(response.operations.nextCursor)
+    } catch (error) {
+      if (requestGeneration.current !== generation) return
 
-  function formatStockByUnit() {
-    if (stockByUnit.length === 0) {
-      return 'Нет остатков'
+      setLoadMoreError(getStatisticsReportErrorMessage(error))
+    } finally {
+      if (requestGeneration.current === generation) {
+        setIsLoadingMore(false)
+      }
+    }
+  }
+
+  function renderNumber(value: number | undefined) {
+    if (value !== undefined) return value
+
+    if (isInitialLoading) {
+      return <Skeleton variant="text" width="55%" />
     }
 
-    return stockByUnit
-      .map(({ quantity, unit }) =>
-        `${quantity.toLocaleString('ru-RU')} ${unit}`,
-      )
-      .join(', ')
+    return '—'
+  }
+
+  function renderAmount(value: number | undefined) {
+    if (value !== undefined) return `${formatAmount(value)} SAR`
+
+    if (isInitialLoading) {
+      return <Skeleton variant="text" width="70%" />
+    }
+
+    return '—'
+  }
+
+  function renderStockByUnit() {
+    if (report) return formatStockByUnit(report.inventory.stockByUnit)
+
+    if (isInitialLoading) {
+      return <Skeleton variant="text" width="70%" />
+    }
+
+    return '—'
   }
 
   return (
@@ -133,72 +205,60 @@ export function Statistics() {
           className="statistics-page__period"
           value={period}
           onChange={(event) =>
-            setPeriod(
-              event.target.value as PresetReportingPeriod,
-            )
-          }
+            setPeriod(event.target.value as StatisticsReportPeriod)}
+          disabled={isInitialLoading}
         >
-          <option value="all">
-            Всё время
-          </option>
-
-          <option value="today">
-            Сегодня
-          </option>
-
-          <option value="7days">
-            Последние 7 дней
-          </option>
-
-          <option value="month">
-            Текущий месяц
-          </option>
+          <option value="all">Всё время</option>
+          <option value="today">Сегодня</option>
+          <option value="7days">Последние 7 дней</option>
+          <option value="month">Текущий месяц</option>
         </Select>
       </header>
+
+      {initialError && (
+        <Alert variant="danger" title="Не удалось загрузить статистику">
+          {initialError}
+        </Alert>
+      )}
 
       <div className="statistics-page__summary">
         <Card className="statistics-card">
           <span>Завершённые продажи</span>
-          <strong>{salesSummary.completedCount}</strong>
+          <strong>{renderNumber(report?.sales.completedCount)}</strong>
         </Card>
 
         <Card className="statistics-card">
           <span>Общий доход</span>
-          <strong>
-            {formatAmount(totalIncome)} SAR
-          </strong>
+          <strong>{renderAmount(report?.financial.totalIncome)}</strong>
         </Card>
 
         <Card className="statistics-card">
           <span>Общие расходы</span>
-          <strong>
-            {formatAmount(totalExpense)} SAR
-          </strong>
+          <strong>{renderAmount(report?.financial.totalExpense)}</strong>
         </Card>
 
         <Card className="statistics-card">
           <span>Финансовый результат</span>
-          <strong>
-            {formatAmount(financialBalance)} SAR
-          </strong>
+          <strong>{renderAmount(report?.financial.financialBalance)}</strong>
         </Card>
 
         <Card className="statistics-card">
           <span>Завершённые поступления</span>
-          <strong>
-            {purchasesSummary.completedCount}
-          </strong>
+          <strong>{renderNumber(report?.purchases.completedCount)}</strong>
         </Card>
 
         <Card className="statistics-card">
           <span>Товарных позиций</span>
-          <strong>{productSummary.productCount}</strong>
+          <strong>{renderNumber(report?.inventory.productCount)}</strong>
         </Card>
 
         <Card className="statistics-card">
           <span>Остатки на складе</span>
-          <strong title={formatStockByUnit()}>
-            {formatStockByUnit()}
+          <strong title={report
+            ? formatStockByUnit(report.inventory.stockByUnit)
+            : undefined}
+          >
+            {renderStockByUnit()}
           </strong>
         </Card>
       </div>
@@ -211,42 +271,18 @@ export function Statistics() {
 
           <div className="statistics-list">
             <div>
-              <span>
-                {categoryLabels.sale}
-              </span>
-
-              <strong>
-                {formatAmount(
-                  categoryTotals.sale,
-                )}{' '}
-                SAR
-              </strong>
+              <span>{categoryLabels.sale}</span>
+              <strong>{renderAmount(report?.financial.categories.sale)}</strong>
             </div>
 
             <div>
-              <span>
-                {categoryLabels.purchase}
-              </span>
-
-              <strong>
-                {formatAmount(
-                  categoryTotals.purchase,
-                )}{' '}
-                SAR
-              </strong>
+              <span>{categoryLabels.purchase}</span>
+              <strong>{renderAmount(report?.financial.categories.purchase)}</strong>
             </div>
 
             <div>
-              <span>
-                {categoryLabels.other}
-              </span>
-
-              <strong>
-                {formatAmount(
-                  categoryTotals.other,
-                )}{' '}
-                SAR
-              </strong>
+              <span>{categoryLabels.other}</span>
+              <strong>{renderAmount(report?.financial.categories.other)}</strong>
             </div>
           </div>
         </Card>
@@ -259,30 +295,22 @@ export function Statistics() {
           <div className="statistics-list">
             <div>
               <span>Всего</span>
-              <strong>
-                {taskStats.total}
-              </strong>
+              <strong>{renderNumber(report?.tasks.total)}</strong>
             </div>
 
             <div>
               <span>К выполнению</span>
-              <strong>
-                {taskStats.todo}
-              </strong>
+              <strong>{renderNumber(report?.tasks.todo)}</strong>
             </div>
 
             <div>
               <span>В работе</span>
-              <strong>
-                {taskStats.inProgress}
-              </strong>
+              <strong>{renderNumber(report?.tasks.inProgress)}</strong>
             </div>
 
             <div>
               <span>Завершено</span>
-              <strong>
-                {taskStats.completed}
-              </strong>
+              <strong>{renderNumber(report?.tasks.completed)}</strong>
             </div>
           </div>
         </Card>
@@ -292,15 +320,13 @@ export function Statistics() {
         <div className="statistics-panel__header">
           <div>
             <h2>Финансовые операции</h2>
-
-            <span>
-              {eligibleTransactions.length}{' '}
-              операций
-            </span>
+            <span>{renderNumber(report?.financial.transactionCount)} операций</span>
           </div>
         </div>
 
-        {eligibleTransactions.length === 0 ? (
+        {isInitialLoading ? (
+          <div className="statistics-empty">Загрузка операций…</div>
+        ) : operations.length === 0 ? (
           <div className="statistics-empty">
             Операций за выбранный период нет.
           </div>
@@ -318,48 +344,40 @@ export function Statistics() {
               </TableHead>
 
               <TableBody>
-                {eligibleTransactions.map(
-                  (transaction) => (
-                    <TableRow
-                      key={transaction.id}
-                    >
-                      <TableCell>
-                        {new Date(
-                          transaction.transactionDate,
-                        ).toLocaleDateString(
-                          'ru-RU',
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        {transaction.type === 'income'
-                          ? 'Доход'
-                          : 'Расход'}
-                      </TableCell>
-
-                      <TableCell>
-                        {
-                          categoryLabels[
-                          transaction.category
-                          ]
-                        }
-                      </TableCell>
-
-                      <TableCell>
-                        {transaction.description ?? '—'}
-                      </TableCell>
-
-                      <TableCell>
-                        {formatAmount(
-                          transaction.amount,
-                        )}{' '}
-                        SAR
-                      </TableCell>
-                    </TableRow>
-                  ),
-                )}
+                {operations.map((operation) => (
+                  <TableRow key={operation.id}>
+                    <TableCell>{formatDate(operation.transactionDate)}</TableCell>
+                    <TableCell>
+                      {operation.type === 'income' ? 'Доход' : 'Расход'}
+                    </TableCell>
+                    <TableCell>{categoryLabels[operation.category]}</TableCell>
+                    <TableCell>{operation.description ?? '—'}</TableCell>
+                    <TableCell>{formatAmount(operation.amount)} SAR</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {loadMoreError && (
+          <div className="statistics-load-more-error">
+            <Alert variant="danger" title="Не удалось загрузить следующие операции">
+              {loadMoreError}
+            </Alert>
+          </div>
+        )}
+
+        {nextCursor && !isInitialLoading && (
+          <div className="statistics-load-more">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void loadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? 'Загрузка…' : 'Показать ещё'}
+            </Button>
           </div>
         )}
       </Card>

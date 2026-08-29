@@ -7,6 +7,8 @@ import type {
   ReportingSummaryResponse,
   SalesReportPeriod,
   SalesReportResponse,
+  StatisticsReportPeriod,
+  StatisticsReportResponse,
 } from '@madina/api'
 import { requestJson } from './httpClient'
 
@@ -104,4 +106,35 @@ export function getSalesReport(
     : `${reportingUrl}/sales`
 
   return requestJson<SalesReportResponse>(url)
+}
+
+export interface StatisticsReportRequest {
+  period?: StatisticsReportPeriod
+  limit?: number
+  cursor?: string
+}
+
+export function getStatisticsReport(
+  input: StatisticsReportRequest = {},
+): Promise<StatisticsReportResponse> {
+  const searchParams = new URLSearchParams()
+
+  if (input.period) {
+    searchParams.set('period', input.period)
+  }
+
+  if (input.limit !== undefined) {
+    searchParams.set('limit', String(input.limit))
+  }
+
+  if (input.cursor) {
+    searchParams.set('cursor', input.cursor)
+  }
+
+  const query = searchParams.toString()
+  const url = query
+    ? `${reportingUrl}/statistics?${query}`
+    : `${reportingUrl}/statistics`
+
+  return requestJson<StatisticsReportResponse>(url)
 }

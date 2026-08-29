@@ -10,6 +10,7 @@ import {
   getIncomeReport,
   getReportingSummary,
   getSalesReport,
+  getStatisticsReport,
 } from './reportingApi'
 
 afterEach(() => {
@@ -255,6 +256,61 @@ describe('reportingApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
       '/api/v1/reports/sales?period=month',
+      expect.anything(),
+    )
+  })
+
+  it('loads statistics reports with server-owned periods and cursors', async () => {
+    const statisticsReport = {
+      period: 'all' as const,
+      financial: {
+        totalIncome: 120,
+        totalExpense: 40,
+        financialBalance: 80,
+        transactionCount: 2,
+        categories: { sale: 100, purchase: 40, other: 20 },
+      },
+      sales: { completedCount: 1 },
+      purchases: { completedCount: 1 },
+      inventory: { productCount: 2, stockByUnit: [] },
+      tasks: { total: 3, todo: 1, inProgress: 1, completed: 1 },
+      operations: { items: [] },
+    }
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify(statisticsReport), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getStatisticsReport()).resolves.toEqual(statisticsReport)
+    await getStatisticsReport({ period: 'today' })
+    await getStatisticsReport({ period: '7days', limit: 25 })
+    await getStatisticsReport({
+      period: 'month',
+      limit: 50,
+      cursor: 'cursor+/=',
+    })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/reports/statistics',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/reports/statistics?period=today',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/reports/statistics?period=7days&limit=25',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/v1/reports/statistics?period=month&limit=50&cursor=cursor%2B%2F%3D',
       expect.anything(),
     )
   })
