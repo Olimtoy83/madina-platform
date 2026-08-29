@@ -14,6 +14,7 @@ export interface CommerceReadRepository {
   findAllStockMovements(): Promise<StockMovement[]>
   findAllPurchases(): Promise<Purchase[]>
   findAllSales(): Promise<Sale[]>
+  findSaleById(saleId: string): Promise<Sale | undefined>
   findAllTransactions(): Promise<Transaction[]>
   getStockMovementHistory(
     query: StockMovementHistoryQuery,
@@ -21,6 +22,66 @@ export interface CommerceReadRepository {
   getStockIntegrityDiscrepancies(): Promise<
     StockIntegrityDiscrepancy[]
   >
+  getSalesHistory(query: SalesHistoryQuery): Promise<SalesHistory>
+  getClientSalesHistory(
+    clientId: string,
+    query: ClientSalesHistoryQuery,
+  ): Promise<ClientSalesHistory>
+  getClientSalesMetrics(
+    clientIds: string[],
+  ): Promise<ClientSalesReadMetric[]>
+  getNextSaleNumber(): Promise<string>
+}
+
+export interface SaleListItem {
+  id: string
+  saleNumber: string
+  saleDate: Date
+  clientId?: string
+  clientName: string
+  totalAmount: number
+  paymentMethod: Sale['paymentMethod']
+  status: Sale['status']
+}
+
+export interface SalesHistoryQuery {
+  status?: Sale['status']
+  clientId?: string
+  throughCreatedAt: Date
+  limit: number
+  cursor?: { saleDate: Date; id: string }
+}
+
+export interface SalesHistory {
+  summary: {
+    totalCount: number
+    draftCount: number
+    completedCount: number
+    totalAmount: number
+  }
+  sales: SaleListItem[]
+}
+
+export interface ClientSalesHistoryQuery {
+  throughCreatedAt: Date
+  limit: number
+  cursor?: { saleDate: Date; id: string }
+}
+
+export interface ClientSalesHistory {
+  summary: {
+    completedCount: number
+    completedTotalAmount: number
+    lastSaleDate?: Date
+  }
+  sales: SaleListItem[]
+}
+
+export interface ClientSalesReadMetric {
+  clientId: string
+  completedCount: number
+  completedTotalAmount: number
+  lastSaleDate?: Date
 }
 
 export interface StockMovementHistoryQuery {
@@ -53,9 +114,6 @@ export interface CommerceUnitOfWork
   findPurchaseById(
     purchaseId: string,
   ): Promise<Purchase | undefined>
-  findSaleById(
-    saleId: string,
-  ): Promise<Sale | undefined>
   findTransactionByReference(
     category: Transaction['category'],
     referenceId: string,

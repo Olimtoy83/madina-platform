@@ -2,6 +2,11 @@ import type { DatabaseSync } from 'node:sqlite'
 import type {
   CommerceRepository,
   CommerceSnapshot,
+  ClientSalesHistory,
+  ClientSalesHistoryQuery,
+  ClientSalesReadMetric,
+  SalesHistory,
+  SalesHistoryQuery,
   StockMovementHistory,
   StockMovementHistoryQuery,
   CommerceUnitOfWork,
@@ -13,6 +18,7 @@ import type {
 } from '@madina/core'
 import {
   STOCK_INTEGRITY_EPSILON,
+  normalizeClientName,
   type StockIntegrityDiscrepancy,
 } from '@madina/core'
 import type { AuditEvent } from '@madina/shared'
@@ -146,6 +152,196 @@ function toStockMovement(
     referenceId: row.reference_id ?? undefined,
     note: row.note ?? undefined,
   }
+}
+
+function toSaleListItem(row: SaleRow) {
+  return {
+    id: row.id,
+    saleNumber: row.sale_number,
+    saleDate: new Date(row.sale_date),
+    clientId: row.client_id ?? undefined,
+    clientName: row.client_name,
+    totalAmount: row.total_amount,
+    paymentMethod: row.payment_method,
+    status: row.status,
+  }
+}
+
+interface ClientOwnershipLookup {
+  hasClient(clientId: string): boolean
+  ownsSale(sale: SaleRow, clientId: string): boolean
+}
+
+function createClientOwnershipLookup(
+  database: DatabaseSync,
+): ClientOwnershipLookup {
+  const clients = database.prepare('SELECT id, name FROM clients').all() as Array<{
+    id: string
+    name: string
+  }>
+  const names = new Map<string, string[]>()
+  const ids = new Set<string>()
+  for (const client of clients) {
+    ids.add(client.id)
+    const normalized = normalizeClientName(client.name)
+    names.set(normalized, [...(names.get(normalized) ?? []), client.id])
+  }
+  return {
+    hasClient: (clientId) => ids.has(clientId),
+    ownsSale: (sale, clientId) => sale.client_id
+      ? sale.client_id === clientId
+      : names.get(normalizeClientName(sale.client_name))?.[0] === clientId &&
+        names.get(normalizeClientName(sale.client_name))?.length === 1,
+  }
+}
+
+function salesPredicates(
+  query: SalesHistoryQuery,
+): { predicates: string[]; parameters: Array<string | number> } {
+  const predicates = ['created_at <= ?']
+  const parameters: Array<string | number> = [
+    query.throughCreatedAt.toISOString(),
+  ]
+
+  if (query.status) {
+    predicates.push('status = ?')
+    parameters.push(query.status)
+  }
+
+  if (query.clientId) {
+    const client = query.clientId
+    predicates.push(`(
+      client_id = ? OR (
+        client_id IS NULL AND lower(trim(client_name)) = (
+          SELECT lower(trim(name)) FROM clients WHERE id = ?
+        ) AND 1 = (
+          SELECT COUNT(*) FROM clients
+          WHERE lower(trim(name)) = (
+            SELECT lower(trim(name)) FROM clients WHERE id = ?
+          )
+        )
+      )
+    )`)
+    parameters.push(client, client, client)
+  }
+
+  if (query.cursor) {
+    predicates.push(`(
+      sale_date < ? OR (sale_date = ? AND id < ?)
+    )`)
+    const saleDate = query.cursor.saleDate.toISOString()
+    parameters.push(saleDate, saleDate, query.cursor.id)
+  }
+
+  return { predicates, parameters }
+}
+
+function readSalesHistory(
+  database: DatabaseSync,
+  query: SalesHistoryQuery,
+): SalesHistory {
+  const { predicates, parameters } = salesPredicates(query)
+  const summary = database.prepare(`
+    SELECT
+      COUNT(*) AS total_count,
+      COALESCE(SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END), 0)
+        AS draft_count,
+      COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0)
+        AS completed_count,
+      COALESCE(SUM(total_amount), 0) AS total_amount
+    FROM sales
+    WHERE created_at <= ?
+  `).get(query.throughCreatedAt.toISOString()) as {
+    total_count: number
+    draft_count: number
+    completed_count: number
+    total_amount: number
+  }
+  const rows = database.prepare(`
+    SELECT id, created_at, updated_at, sale_number, sale_date, client_id,
+      client_name, total_amount, payment_method, status, note
+    FROM sales
+    WHERE ${predicates.join(' AND ')}
+    ORDER BY sale_date DESC, id DESC
+    LIMIT ?
+  `).all(...parameters, query.limit) as unknown as SaleRow[]
+
+  return {
+    summary: {
+      totalCount: summary.total_count,
+      draftCount: summary.draft_count,
+      completedCount: summary.completed_count,
+      totalAmount: summary.total_amount,
+    },
+    sales: rows.map(toSaleListItem),
+  }
+}
+
+function readClientSalesHistory(
+  database: DatabaseSync,
+  clientId: string,
+  query: ClientSalesHistoryQuery,
+): ClientSalesHistory {
+  const ownership = createClientOwnershipLookup(database)
+  if (!ownership.hasClient(clientId)) {
+    return { summary: { completedCount: 0, completedTotalAmount: 0 }, sales: [] }
+  }
+  const predicates = ["status = 'completed'", 'created_at <= ?', '(client_id = ? OR client_id IS NULL)']
+  const parameters: string[] = [query.throughCreatedAt.toISOString(), clientId]
+  const selectSales = (where: readonly string[], values: readonly string[]) => database.prepare(`
+    SELECT id, created_at, updated_at, sale_number, sale_date, client_id,
+      client_name, total_amount, payment_method, status, note
+    FROM sales WHERE ${where.join(' AND ')}
+    ORDER BY sale_date DESC, id DESC
+  `).all(...values) as unknown as SaleRow[]
+  const allMatching = selectSales(predicates, parameters)
+  const ownedBy = (sales: SaleRow[]) => sales.filter((sale) =>
+    ownership.ownsSale(sale, clientId),
+  )
+  const owned = ownedBy(allMatching)
+  const pagePredicates = [...predicates]
+  const pageParameters = [...parameters]
+  if (query.cursor) {
+    pagePredicates.push('(sale_date < ? OR (sale_date = ? AND id < ?))')
+    const saleDate = query.cursor.saleDate.toISOString()
+    pageParameters.push(saleDate, saleDate, query.cursor.id)
+  }
+  const page = ownedBy(selectSales(pagePredicates, pageParameters))
+
+  return {
+    summary: {
+      completedCount: owned.length,
+      completedTotalAmount: owned.reduce((sum, row) => sum + row.total_amount, 0),
+      lastSaleDate: owned[0] ? new Date(owned[0].sale_date) : undefined,
+    },
+    sales: page.slice(0, query.limit).map(toSaleListItem),
+  }
+}
+
+function readClientSalesMetrics(
+  database: DatabaseSync,
+  clientIds: string[],
+): ClientSalesReadMetric[] {
+  if (clientIds.length === 0) return []
+  const placeholders = clientIds.map(() => '?').join(', ')
+  const clients = database.prepare(`SELECT id, name FROM clients WHERE id IN (${placeholders})`)
+    .all(...clientIds) as Array<{ id: string; name: string }>
+  const ownership = createClientOwnershipLookup(database)
+  const sales = database.prepare(`
+    SELECT id, created_at, updated_at, sale_number, sale_date, client_id,
+      client_name, total_amount, payment_method, status, note
+    FROM sales WHERE status = 'completed' AND (client_id IN (${placeholders}) OR client_id IS NULL)
+  `).all(...clientIds) as unknown as SaleRow[]
+  return clients.map((client) => {
+    const completed = sales.filter((sale) => ownership.ownsSale(sale, client.id))
+      .sort((a, b) => b.sale_date.localeCompare(a.sale_date) || b.id.localeCompare(a.id))
+    return {
+      clientId: client.id,
+      completedCount: completed.length,
+      completedTotalAmount: completed.reduce((sum, sale) => sum + sale.total_amount, 0),
+      lastSaleDate: completed[0] ? new Date(completed[0].sale_date) : undefined,
+    }
+  }).sort((a, b) => a.clientId.localeCompare(b.clientId))
 }
 
 function readStockMovementHistory(
@@ -436,6 +632,30 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
     StockIntegrityDiscrepancy[]
   > {
     return readStockIntegrityDiscrepancies(this.database)
+  }
+
+  async getSalesHistory(query: SalesHistoryQuery): Promise<SalesHistory> {
+    return readSalesHistory(this.database, query)
+  }
+
+  async getClientSalesHistory(
+    clientId: string,
+    query: ClientSalesHistoryQuery,
+  ): Promise<ClientSalesHistory> {
+    return readClientSalesHistory(this.database, clientId, query)
+  }
+
+  async getClientSalesMetrics(
+    clientIds: string[],
+  ): Promise<ClientSalesReadMetric[]> {
+    return readClientSalesMetrics(this.database, clientIds)
+  }
+
+  async getNextSaleNumber(): Promise<string> {
+    const row = this.database.prepare(
+      'SELECT COUNT(*) AS count FROM sales',
+    ).get() as { count: number }
+    return `SAL-${String(row.count + 1).padStart(4, '0')}`
   }
 
   async saveProducts(products: Product[]): Promise<void> {
@@ -794,6 +1014,10 @@ export class SqliteCommerceRepository implements CommerceRepository {
     return sales.filter((sale): sale is Sale => sale !== undefined)
   }
 
+  async findSaleById(saleId: string): Promise<Sale | undefined> {
+    return new SqliteCommerceUnitOfWork(this.database).findSaleById(saleId)
+  }
+
   async findAllTransactions(): Promise<Transaction[]> {
     const rows = this.database.prepare(`
       SELECT id, created_at, updated_at, type, category, amount,
@@ -832,6 +1056,54 @@ export class SqliteCommerceRepository implements CommerceRepository {
       this.database.exec('ROLLBACK')
       throw error
     }
+  }
+
+  async getSalesHistory(query: SalesHistoryQuery): Promise<SalesHistory> {
+    this.database.exec('BEGIN DEFERRED')
+    try {
+      const result = readSalesHistory(this.database, query)
+      this.database.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getClientSalesHistory(
+    clientId: string,
+    query: ClientSalesHistoryQuery,
+  ): Promise<ClientSalesHistory> {
+    this.database.exec('BEGIN DEFERRED')
+    try {
+      const result = readClientSalesHistory(this.database, clientId, query)
+      this.database.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getClientSalesMetrics(
+    clientIds: string[],
+  ): Promise<ClientSalesReadMetric[]> {
+    this.database.exec('BEGIN DEFERRED')
+    try {
+      const result = readClientSalesMetrics(this.database, clientIds)
+      this.database.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getNextSaleNumber(): Promise<string> {
+    const row = this.database.prepare(
+      'SELECT COUNT(*) AS count FROM sales',
+    ).get() as { count: number }
+    return `SAL-${String(row.count + 1).padStart(4, '0')}`
   }
 
   async saveProduct(product: Product): Promise<void> {

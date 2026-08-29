@@ -121,7 +121,7 @@ export interface ClientSalesStats {
   lastSaleDate?: Date
 }
 
-function normalizeName(name: string): string {
+export function normalizeClientName(name: string): string {
   return name.trim().toLowerCase()
 }
 
@@ -137,8 +137,8 @@ export function getCompletedSalesForClient(
           sale.clientId === client.id ||
           (
             !sale.clientId &&
-            normalizeName(sale.clientName) ===
-              normalizeName(client.name)
+              normalizeClientName(sale.clientName) ===
+              normalizeClientName(client.name)
           )
         ),
     )

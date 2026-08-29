@@ -182,6 +182,54 @@ export interface StockMovementIntegrityResponse {
 }
 export interface PurchasesListResponse { purchases: PurchaseResponse[] }
 export interface SalesListResponse { sales: SaleResponse[] }
+export interface SaleListItemResponse {
+  id: string
+  saleNumber: string
+  saleDate: string
+  clientId?: string
+  clientName: string
+  totalAmount: number
+  paymentMethod: SaleResponse['paymentMethod']
+  status: SaleResponse['status']
+}
+
+export interface SalesHistoryQuery {
+  status?: SaleResponse['status']
+  clientId?: string
+  limit?: string
+  cursor?: string
+}
+
+export interface SalesHistoryResponse {
+  summary: {
+    totalCount: number
+    draftCount: number
+    completedCount: number
+    totalAmount: number
+  }
+  sales: { items: SaleListItemResponse[]; nextCursor?: string }
+}
+
+export interface ClientSalesHistoryResponse {
+  summary: {
+    completedCount: number
+    completedTotalAmount: number
+    lastSaleDate?: string
+  }
+  sales: { items: SaleListItemResponse[]; nextCursor?: string }
+}
+
+export interface ClientSalesMetricsRequest { clientIds: string[] }
+export interface ClientSalesMetricsResponse {
+  metrics: Array<{
+    clientId: string
+    completedCount: number
+    completedTotalAmount: number
+    lastSaleDate?: string
+  }>
+}
+
+export interface NextSaleNumberResponse { saleNumber: string }
 export interface TransactionsListResponse { transactions: TransactionResponse[] }
 
 export interface ImportCommerceSnapshotRequest {

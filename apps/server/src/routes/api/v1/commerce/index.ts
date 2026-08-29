@@ -16,6 +16,12 @@ import type {
   PurchasesListResponse,
   SaleResponse,
   SalesListResponse,
+  SaleListItemResponse,
+  SalesHistoryQuery,
+  SalesHistoryResponse,
+  ClientSalesHistoryResponse,
+  ClientSalesMetricsResponse,
+  NextSaleNumberResponse,
   StockMovementResponse,
   StockAdjustmentResponse,
   StockIntegrityDiscrepancyResponse,
@@ -39,6 +45,7 @@ import type {
   Sale,
   StockMovement,
   Transaction,
+  SaleListItem,
 } from '@madina/core'
 import {
   CommerceCommandError,
@@ -88,6 +95,8 @@ interface ProductParams {
 
 const DEFAULT_STOCK_MOVEMENT_HISTORY_LIMIT = 50
 const MAX_STOCK_MOVEMENT_HISTORY_LIMIT = 100
+const DEFAULT_SALES_HISTORY_LIMIT = 50
+const MAX_SALES_HISTORY_LIMIT = 100
 
 interface StockMovementHistoryCursor {
   version: 1
@@ -120,6 +129,130 @@ class StockMovementHistoryValidationError extends Error {
     super(message)
     this.name = 'StockMovementHistoryValidationError'
   }
+}
+
+class SalesHistoryValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
+
+interface SalesHistoryCursor {
+  version: 1
+  saleDate: string
+  id: string
+  filters: { status?: SaleResponse['status']; clientId?: string }
+  throughCreatedAt: string
+}
+
+interface NormalizedSalesHistoryQuery {
+  status?: SaleResponse['status']
+  clientId?: string
+  limit: number
+  throughCreatedAt: Date
+  cursor?: { saleDate: Date; id: string }
+}
+
+function parseSalesHistoryLimit(value: unknown): number {
+  if (value === undefined) return DEFAULT_SALES_HISTORY_LIMIT
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new SalesHistoryValidationError('Sales history limit is invalid.')
+  }
+  const limit = Number(value)
+  if (!Number.isSafeInteger(limit) || limit > MAX_SALES_HISTORY_LIMIT) {
+    throw new SalesHistoryValidationError(
+      `Sales history limit must be between 1 and ${MAX_SALES_HISTORY_LIMIT}.`,
+    )
+  }
+  return limit
+}
+
+function normalizeSaleStatus(value: unknown): SaleResponse['status'] | undefined {
+  if (value === undefined) return undefined
+  if (value === 'draft' || value === 'completed' || value === 'cancelled') return value
+  throw new SalesHistoryValidationError('Sales history status is invalid.')
+}
+
+function parseSalesCursorInstant(value: unknown): Date {
+  if (typeof value !== 'string') throw new SalesHistoryValidationError('Sales history cursor is invalid.')
+  const instant = new Date(value)
+  if (Number.isNaN(instant.getTime()) || instant.toISOString() !== value) {
+    throw new SalesHistoryValidationError('Sales history cursor is invalid.')
+  }
+  return instant
+}
+
+function decodeSalesHistoryCursor(value: unknown): SalesHistoryCursor | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new SalesHistoryValidationError('Sales history cursor is invalid.')
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!isRecord(decoded) || !isRecord(decoded.filters)) throw new Error()
+    const allowedKeys = ['version', 'saleDate', 'id', 'filters', 'throughCreatedAt']
+    const allowedFilters = ['status', 'clientId']
+    if (Object.keys(decoded).some((key) => !allowedKeys.includes(key)) ||
+      Object.keys(decoded.filters).some((key) => !allowedFilters.includes(key)) ||
+      decoded.version !== 1 || typeof decoded.id !== 'string' || !decoded.id.trim()) {
+      throw new Error()
+    }
+    return {
+      version: 1,
+      saleDate: parseSalesCursorInstant(decoded.saleDate).toISOString(),
+      id: decoded.id,
+      filters: {
+        status: normalizeSaleStatus(decoded.filters.status),
+        clientId: normalizeOptionalText(decoded.filters.clientId, 'cursor filter'),
+      },
+      throughCreatedAt: parseSalesCursorInstant(decoded.throughCreatedAt).toISOString(),
+    }
+  } catch (error) {
+    if (error instanceof SalesHistoryValidationError) throw error
+    throw new SalesHistoryValidationError('Sales history cursor is invalid.')
+  }
+}
+
+function normalizeSalesHistoryQuery(
+  input: SalesHistoryQuery | unknown,
+  now: Date,
+): NormalizedSalesHistoryQuery {
+  if (!isRecord(input) || Object.keys(input).some((key) => ![
+    'status', 'clientId', 'limit', 'cursor',
+  ].includes(key))) {
+    throw new SalesHistoryValidationError('Sales history query is invalid.')
+  }
+  const status = normalizeSaleStatus(input.status)
+  const clientId = normalizeOptionalText(input.clientId, 'clientId')
+  const cursor = decodeSalesHistoryCursor(input.cursor)
+  if (cursor && (cursor.filters.status !== status || cursor.filters.clientId !== clientId)) {
+    throw new SalesHistoryValidationError(
+      'Sales history cursor does not match the current filters.',
+    )
+  }
+  if (clientId && status !== undefined && status !== 'completed') {
+    throw new SalesHistoryValidationError(
+      'Client sales history supports completed sales only.',
+    )
+  }
+  return {
+    status,
+    clientId,
+    limit: parseSalesHistoryLimit(input.limit),
+    throughCreatedAt: cursor ? new Date(cursor.throughCreatedAt) : now,
+    cursor: cursor ? { saleDate: new Date(cursor.saleDate), id: cursor.id } : undefined,
+  }
+}
+
+function encodeSalesHistoryCursor(
+  sale: SaleListItemResponse,
+  query: NormalizedSalesHistoryQuery,
+): string {
+  return Buffer.from(JSON.stringify({
+    version: 1, saleDate: sale.saleDate, id: sale.id,
+    filters: { status: query.status, clientId: query.clientId },
+    throughCreatedAt: query.throughCreatedAt.toISOString(),
+  } satisfies SalesHistoryCursor)).toString('base64url')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -368,6 +501,19 @@ function toSaleResponse(sale: Sale): SaleResponse {
       unitPrice: item.unitPrice,
       totalAmount: item.totalAmount,
     })),
+  }
+}
+
+function toSaleListItemResponse(sale: SaleListItem): SaleListItemResponse {
+  return {
+    id: sale.id,
+    saleNumber: sale.saleNumber,
+    saleDate: sale.saleDate.toISOString(),
+    clientId: sale.clientId,
+    clientName: sale.clientName,
+    totalAmount: sale.totalAmount,
+    paymentMethod: sale.paymentMethod,
+    status: sale.status,
   }
 }
 
@@ -911,6 +1057,131 @@ export async function commerceRoutes(
       sales: (await options.commerceRepository.findAllSales())
         .map(toSaleResponse),
     }),
+  )
+
+  app.get<{
+    Querystring: SalesHistoryQuery
+  }>(
+    '/sales/history',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (request, reply): Promise<
+      SalesHistoryResponse | ClientSalesHistoryResponse | ApiErrorResponse
+    > => {
+      try {
+        const query = normalizeSalesHistoryQuery(request.query, new Date())
+        if (query.clientId) {
+          const result = await options.commerceRepository.getClientSalesHistory(query.clientId, {
+            throughCreatedAt: query.throughCreatedAt,
+            limit: query.limit + 1,
+            cursor: query.cursor,
+          })
+          const items = result.sales.slice(0, query.limit).map(toSaleListItemResponse)
+          const last = items.at(-1)
+          return {
+            summary: {
+              ...result.summary,
+              lastSaleDate: result.summary.lastSaleDate?.toISOString(),
+            },
+            sales: {
+              items,
+              nextCursor: result.sales.length > query.limit && last
+                ? encodeSalesHistoryCursor(last, query)
+                : undefined,
+            },
+          }
+        }
+        const result = await options.commerceRepository.getSalesHistory({
+            status: query.status,
+            throughCreatedAt: query.throughCreatedAt,
+            limit: query.limit + 1,
+            cursor: query.cursor,
+          })
+        const items = result.sales.slice(0, query.limit).map(toSaleListItemResponse)
+        const last = items.at(-1)
+        return {
+          summary: result.summary,
+          sales: {
+            items,
+            nextCursor: result.sales.length > query.limit && last
+              ? encodeSalesHistoryCursor(last, query)
+              : undefined,
+          },
+        }
+      } catch (error) {
+        if (error instanceof SalesHistoryValidationError) {
+          reply.code(400)
+          return { statusCode: 400, error: 'Bad Request', message: error.message }
+        }
+        throw error
+      }
+    },
+  )
+
+  app.get<{
+    Querystring: { clientIds?: string }
+  }>(
+    '/sales/client-metrics',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (request, reply): Promise<ClientSalesMetricsResponse | ApiErrorResponse> => {
+      const value = request.query.clientIds
+      if (typeof value !== 'string' || !value.trim()) {
+        reply.code(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Client sales metrics clientIds is invalid.',
+        }
+      }
+      const clientIds = value.split(',').map((id) => id.trim())
+      if (clientIds.some((id) => !id) || new Set(clientIds).size !== clientIds.length) {
+        reply.code(400)
+        return {
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Client sales metrics clientIds is invalid.',
+        }
+      }
+      const metrics = await options.commerceRepository.getClientSalesMetrics(clientIds)
+      return {
+        metrics: metrics.map((metric) => ({
+          ...metric,
+          lastSaleDate: metric.lastSaleDate?.toISOString(),
+        })),
+      }
+    },
+  )
+
+  app.get(
+    '/sales/next-number',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (): Promise<NextSaleNumberResponse> => ({
+      saleNumber: await options.commerceRepository.getNextSaleNumber(),
+    }),
+  )
+
+  app.get<{
+    Params: SaleParams
+  }>(
+    '/sales/:saleId',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (request, reply): Promise<SaleResponse | ApiErrorResponse> => {
+      const sale = await options.commerceRepository.findSaleById(
+        request.params.saleId,
+      )
+      if (!sale) {
+        reply.code(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Sale not found.' }
+      }
+      return toSaleResponse(sale)
+    },
   )
 
   app.get(
