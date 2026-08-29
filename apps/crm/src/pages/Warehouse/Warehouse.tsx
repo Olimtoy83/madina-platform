@@ -1,6 +1,9 @@
-import { useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useProducts } from '../../context/useProducts'
-import { useStockMovements } from '../../context/useStockMovements'
 import { useToast } from '../../context/ToastProvider'
 import { useAuth } from '../../context/useAuth'
 import { useTransactionalState } from '../../context/useTransactionalState'
@@ -8,12 +11,12 @@ import {
   downloadProductImportTemplate,
   exportProducts,
   getProductWorkbookValidationError,
+  getStockMovementIntegrity,
   importProductsExcel,
 } from '../../shared/api/commerceApi'
 import { HttpError } from '../../shared/api/httpClient'
 
 import {
-  getStockIntegrityDiscrepancies,
   type Product,
   type ProductCategory,
   type ProductUnit,
@@ -40,6 +43,7 @@ import {
 import type {
   ImportProductsResponse,
   ProductWorkbookRowError,
+  StockIntegrityDiscrepancyResponse,
 } from '@madina/api'
 
 import './Warehouse.css'
@@ -97,7 +101,7 @@ function formatProductWorkbookRowError(
 export function Warehouse() {
   const { showToast } = useToast()
   const { user } = useAuth()
-  const { reload } = useTransactionalState()
+  const { reload, snapshot } = useTransactionalState()
   const {
     products,
     addProduct,
@@ -105,8 +109,6 @@ export function Warehouse() {
     updateProduct,
     adjustProductStock,
   } = useProducts()
-
-  const { movements } = useStockMovements()
 
   const [search, setSearch] = useState('')
   const [category, setCategory] =
@@ -140,6 +142,11 @@ export function Warehouse() {
 
   const [validationError, setValidationError] =
     useState<string | null>(null)
+  const [stockIntegrityDiscrepancies, setStockIntegrityDiscrepancies] =
+    useState<StockIntegrityDiscrepancyResponse[]>([])
+  const [stockIntegrityError, setStockIntegrityError] =
+    useState<string | null>(null)
+  const integrityRequestGeneration = useRef(0)
 
   const [isAdjustmentOpen, setIsAdjustmentOpen] =
     useState(false)
@@ -172,11 +179,27 @@ export function Warehouse() {
     status: 'active' as 'active' | 'inactive',
   })
 
-  const stockIntegrityDiscrepancies =
-    getStockIntegrityDiscrepancies(
-      products,
-      movements,
-    )
+  useEffect(() => {
+    const generation = integrityRequestGeneration.current + 1
+    integrityRequestGeneration.current = generation
+
+    void getStockMovementIntegrity()
+      .then((response) => {
+        if (integrityRequestGeneration.current !== generation) return
+
+        setStockIntegrityDiscrepancies(response.discrepancies)
+        setStockIntegrityError(null)
+      })
+      .catch((error: unknown) => {
+        if (integrityRequestGeneration.current !== generation) return
+
+        setStockIntegrityError(
+          error instanceof Error
+            ? error.message
+            : 'Не удалось проверить согласованность остатков.',
+        )
+      })
+  }, [snapshot])
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name
@@ -587,7 +610,16 @@ export function Warehouse() {
         </Alert>
       )}
 
-      {stockIntegrityDiscrepancies.length > 0 && (
+      {stockIntegrityError && (
+        <Alert
+          variant="danger"
+          title="Не удалось проверить согласованность остатков"
+        >
+          {stockIntegrityError}
+        </Alert>
+      )}
+
+      {!stockIntegrityError && stockIntegrityDiscrepancies.length > 0 && (
         <Alert
           variant="danger"
           title="Обнаружено расхождение остатков"

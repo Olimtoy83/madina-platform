@@ -13,6 +13,8 @@ import {
   exportProducts,
   getCommerceAggregate,
   getProductWorkbookValidationError,
+  getStockMovementHistory,
+  getStockMovementIntegrity,
   importProductsExcel,
   updateProduct,
   updatePurchase,
@@ -71,6 +73,117 @@ describe('commerceApi', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(getCommerceAggregate()).rejects.toThrow('Unavailable')
+  })
+
+  it('loads bounded stock movement history with encoded filters and maps dates', async () => {
+    const fetchMock = installFetch([{
+      summary: {
+        totalMovements: 4,
+        totalPurchases: 7,
+        totalSales: 3,
+      },
+      stockMovements: {
+        items: [{
+          id: 'movement-1',
+          productId: 'product-1',
+          type: 'purchase',
+          quantity: 2,
+          unit: 'kg',
+          createdAt: '2026-08-29T12:00:00.000Z',
+          updatedAt: '2026-08-29T12:00:00.000Z',
+        }],
+        nextCursor: 'next-cursor',
+      },
+    }])
+
+    const history = await getStockMovementHistory({
+      productId: 'product/1',
+      type: 'purchase',
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-29',
+      limit: '50',
+      cursor: 'cursor value',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/commerce/stock-movements/history?productId=product%2F1&type=purchase&dateFrom=2026-08-01&dateTo=2026-08-29&limit=50&cursor=cursor+value',
+      expect.anything(),
+    )
+    expect(history.stockMovements.items[0]?.createdAt).toEqual(
+      new Date('2026-08-29T12:00:00.000Z'),
+    )
+    expect(history.stockMovements.nextCursor).toBe('next-cursor')
+  })
+
+  it('uses the history endpoint defaults without an empty query string', async () => {
+    const fetchMock = installFetch([{
+      summary: {
+        totalMovements: 0,
+        totalPurchases: 0,
+        totalSales: 0,
+      },
+      stockMovements: { items: [] },
+    }])
+
+    await getStockMovementHistory()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/commerce/stock-movements/history',
+      expect.anything(),
+    )
+  })
+
+  it('serializes each supported history filter without local defaults', async () => {
+    const fetchMock = installFetch(Array.from({ length: 6 }, () => ({
+      summary: {
+        totalMovements: 0,
+        totalPurchases: 0,
+        totalSales: 0,
+      },
+      stockMovements: { items: [] },
+    })))
+
+    await getStockMovementHistory({ productId: 'product-1' })
+    await getStockMovementHistory({ type: 'sale' })
+    await getStockMovementHistory({ dateFrom: '2026-08-01' })
+    await getStockMovementHistory({ dateTo: '2026-08-29' })
+    await getStockMovementHistory({ limit: '25' })
+    await getStockMovementHistory({ cursor: 'next' })
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/commerce/stock-movements/history?productId=product-1',
+      '/api/v1/commerce/stock-movements/history?type=sale',
+      '/api/v1/commerce/stock-movements/history?dateFrom=2026-08-01',
+      '/api/v1/commerce/stock-movements/history?dateTo=2026-08-29',
+      '/api/v1/commerce/stock-movements/history?limit=25',
+      '/api/v1/commerce/stock-movements/history?cursor=next',
+    ])
+  })
+
+  it('loads stock movement integrity from the dedicated server endpoint', async () => {
+    const fetchMock = installFetch([{
+      discrepancies: [{
+        productId: 'product-1',
+        productName: 'Dates',
+        actualQuantity: 2,
+        calculatedQuantity: 1,
+        difference: 1,
+      }],
+    }])
+
+    await expect(getStockMovementIntegrity()).resolves.toEqual({
+      discrepancies: [{
+        productId: 'product-1',
+        productName: 'Dates',
+        actualQuantity: 2,
+        calculatedQuantity: 1,
+        difference: 1,
+      }],
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/commerce/stock-movements/integrity',
+      expect.anything(),
+    )
   })
 
   it('uses server endpoints for every permitted commerce mutation', async () => {

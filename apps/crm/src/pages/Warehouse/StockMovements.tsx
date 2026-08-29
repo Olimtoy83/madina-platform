@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react'
-import { getStockMovementTotals } from '@madina/core'
-import { useStockMovements } from '../../context/useStockMovements'
-import { useProducts } from '../../context/useProducts'
 import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import type { StockMovement } from '@madina/core'
+import {
+  Alert,
   Badge,
+  Button,
   Card,
   Input,
   Select,
@@ -14,6 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from '@madina/ui'
+import { useProducts } from '../../context/useProducts'
+import { useTransactionalState } from '../../context/useTransactionalState'
+import {
+  getStockMovementHistory,
+  type StockMovementHistory,
+} from '../../shared/api/commerceApi'
+import { HttpError } from '../../shared/api/httpClient'
 
 import './StockMovements.css'
 
@@ -37,84 +48,111 @@ const unitLabels: Record<string, string> = {
   box: 'кор.',
 }
 
+function getHistoryErrorMessage(error: unknown): string {
+  if (error instanceof HttpError && error.status === 403) {
+    return 'История движений склада недоступна для вашей роли.'
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось загрузить историю движений. Повторите попытку.'
+}
+
 export function StockMovements() {
-  const { movements } = useStockMovements()
   const { products } = useProducts()
+  const { snapshot } = useTransactionalState()
+  const [typeFilter, setTypeFilter] = useState<MovementFilter>('all')
+  const [productFilter, setProductFilter] = useState('all')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [summary, setSummary] = useState<
+    StockMovementHistory['summary'] | null
+  >(null)
+  const [movements, setMovements] = useState<StockMovement[]>([])
+  const [nextCursor, setNextCursor] = useState<string | undefined>()
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [initialError, setInitialError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const requestGeneration = useRef(0)
 
-  const [typeFilter, setTypeFilter] =
-    useState<MovementFilter>('all')
+  useEffect(() => {
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
+    const query = getHistoryQuery(
+      typeFilter,
+      productFilter,
+      dateFrom,
+      dateTo,
+    )
 
-  const [productFilter, setProductFilter] =
-    useState('all')
+    setMovements([])
+    setSummary(null)
+    setNextCursor(undefined)
+    setIsInitialLoading(true)
+    setInitialError(null)
+    setLoadMoreError(null)
 
-  const [dateFrom, setDateFrom] =
-    useState('')
+    void getStockMovementHistory(query)
+      .then((response) => {
+        if (requestGeneration.current !== generation) return
 
-  const [dateTo, setDateTo] =
-    useState('')
+        setSummary(response.summary)
+        setMovements(response.stockMovements.items)
+        setNextCursor(response.stockMovements.nextCursor)
+      })
+      .catch((error: unknown) => {
+        if (requestGeneration.current !== generation) return
 
-  const filteredMovements = useMemo(() => {
-    return movements.filter((movement) => {
-      const matchesType =
-        typeFilter === 'all' ||
-        movement.type === typeFilter
+        setInitialError(getHistoryErrorMessage(error))
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) {
+          setIsInitialLoading(false)
+        }
+      })
+  }, [snapshot, typeFilter, productFilter, dateFrom, dateTo])
 
-      const matchesProduct =
-        productFilter === 'all' ||
-        movement.productId === productFilter
+  async function loadMore(): Promise<void> {
+    if (!nextCursor || isInitialLoading || isLoadingMore) return
 
-      const movementDate =
-        movement.createdAt.getTime()
+    const generation = requestGeneration.current
+    const cursor = nextCursor
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
 
-      const matchesDateFrom =
-        !dateFrom ||
-        movementDate >=
-        new Date(
-          `${dateFrom}T00:00:00`,
-        ).getTime()
+    try {
+      const response = await getStockMovementHistory({
+        ...getHistoryQuery(
+          typeFilter,
+          productFilter,
+          dateFrom,
+          dateTo,
+        ),
+        cursor,
+      })
 
-      const matchesDateTo =
-        !dateTo ||
-        movementDate <=
-        new Date(
-          `${dateTo}T23:59:59.999`,
-        ).getTime()
+      if (requestGeneration.current !== generation) return
 
-      return (
-        matchesType &&
-        matchesProduct &&
-        matchesDateFrom &&
-        matchesDateTo
-      )
-    })
-  }, [
-    movements,
-    typeFilter,
-    productFilter,
-    dateFrom,
-    dateTo,
-  ])
+      setSummary(response.summary)
+      setMovements((current) => [
+        ...current,
+        ...response.stockMovements.items,
+      ])
+      setNextCursor(response.stockMovements.nextCursor)
+    } catch (error) {
+      if (requestGeneration.current !== generation) return
 
-  const {
-    totalPurchases,
-    totalSales,
-  } = useMemo(
-    () => getStockMovementTotals(movements),
-    [movements],
-  )
-
-  function getMovementType(
-    type: string,
-  ) {
-    if (type === 'purchase') {
-      return 'Приход'
+      setLoadMoreError(getHistoryErrorMessage(error))
+    } finally {
+      if (requestGeneration.current === generation) {
+        setIsLoadingMore(false)
+      }
     }
+  }
 
-    if (type === 'sale') {
-      return 'Продажа'
-    }
-
-    return 'Корректировка'
+  function getMovementType(type: StockMovement['type']) {
+    return movementTypeLabels[type]
   }
 
   function getUnitLabel(unit: string) {
@@ -126,138 +164,54 @@ export function StockMovements() {
       <div className="stock-movements__header">
         <div>
           <h1>Движение склада</h1>
-
-          <p>
-            История поступлений, продаж и
-            корректировок товаров.
-          </p>
+          <p>История поступлений, продаж и корректировок товаров.</p>
         </div>
       </div>
+
+      {initialError && (
+        <Alert variant="danger" title="Не удалось загрузить историю движений">
+          {initialError}
+        </Alert>
+      )}
 
       <div className="stock-movements__summary">
         <Card className="stock-movements__summary-card">
           <span>Всего движений</span>
-
-          <strong>
-            {movements.length}
-          </strong>
+          <strong>{summary?.totalMovements ?? '—'}</strong>
         </Card>
-
         <Card className="stock-movements__summary-card stock-movements__summary-card--income">
           <span>Приход</span>
-
-          <strong>
-            {totalPurchases}
-          </strong>
+          <strong>{summary?.totalPurchases ?? '—'}</strong>
         </Card>
-
         <Card className="stock-movements__summary-card stock-movements__summary-card--expense">
           <span>Расход</span>
-
-          <strong>
-            {totalSales}
-          </strong>
+          <strong>{summary?.totalSales ?? '—'}</strong>
         </Card>
       </div>
 
       <div className="stock-movements__filters">
         <div className="stock-movements__filter">
-          <label htmlFor="movement-type">
-            Тип движения
-          </label>
-
-          <Select
-            fullWidth
-            id="movement-type"
-            value={typeFilter}
-            onChange={(event) =>
-              setTypeFilter(
-                event.target.value as MovementFilter,
-              )
-            }
-          >
-            {(
-              Object.entries(
-                movementTypeLabels,
-              ) as [
-                MovementFilter,
-                string,
-              ][]
-            ).map(([value, label]) => (
-              <option
-                key={value}
-                value={value}
-              >
-                {label}
-              </option>
+          <label htmlFor="movement-type">Тип движения</label>
+          <Select fullWidth id="movement-type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as MovementFilter)}>
+            {(Object.entries(movementTypeLabels) as [MovementFilter, string][]).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
             ))}
           </Select>
         </div>
-
         <div className="stock-movements__filter">
-          <label htmlFor="movement-product">
-            Товар
-          </label>
-
-          <Select
-            fullWidth
-            id="movement-product"
-            value={productFilter}
-            onChange={(event) =>
-              setProductFilter(
-                event.target.value,
-              )
-            }
-          >
-            <option value="all">
-              Все товары
-            </option>
-
-            {products.map((product) => (
-              <option
-                key={product.id}
-                value={product.id}
-              >
-                {product.name}
-              </option>
-            ))}
+          <label htmlFor="movement-product">Товар</label>
+          <Select fullWidth id="movement-product" value={productFilter} onChange={(event) => setProductFilter(event.target.value)}>
+            <option value="all">Все товары</option>
+            {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
           </Select>
         </div>
-
         <div className="stock-movements__filter">
-          <label htmlFor="movement-date-from">
-            Дата от
-          </label>
-
-          <Input
-            fullWidth
-            id="movement-date-from"
-            type="date"
-            value={dateFrom}
-            onChange={(event) =>
-              setDateFrom(
-                event.target.value,
-              )
-            }
-          />
+          <label htmlFor="movement-date-from">Дата от</label>
+          <Input fullWidth id="movement-date-from" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         </div>
-
         <div className="stock-movements__filter">
-          <label htmlFor="movement-date-to">
-            Дата до
-          </label>
-
-          <Input
-            fullWidth
-            id="movement-date-to"
-            type="date"
-            value={dateTo}
-            onChange={(event) =>
-              setDateTo(
-                event.target.value,
-              )
-            }
-          />
+          <label htmlFor="movement-date-to">Дата до</label>
+          <Input fullWidth id="movement-date-to" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
         </div>
       </div>
 
@@ -265,110 +219,52 @@ export function StockMovements() {
         <div className="stock-movements__table-header">
           <div>
             <h2>История движений</h2>
-
-            <p>
-              Найдено:{' '}
-              {filteredMovements.length}
-            </p>
+            <p>Загружено: {movements.length}</p>
           </div>
         </div>
 
-        {filteredMovements.length === 0 ? (
-          <div className="stock-movements__empty">
-            Движений по выбранному фильтру
-            нет.
-          </div>
+        {isInitialLoading ? (
+          <div className="stock-movements__empty">Загрузка движений…</div>
+        ) : movements.length === 0 ? (
+          <div className="stock-movements__empty">Движений по выбранному фильтру нет.</div>
         ) : (
           <div className="stock-movements__table-wrapper">
             <Table className="stock-movements__table">
-              <TableHead>
-                <TableRow>
-                  <TableHeader>Дата</TableHeader>
-                  <TableHeader>Тип</TableHeader>
-                  <TableHeader>Товар</TableHeader>
-                  <TableHeader>Количество</TableHeader>
-                  <TableHeader>Единица</TableHeader>
-                  <TableHeader>Основание</TableHeader>
-                </TableRow>
-              </TableHead>
-
+              <TableHead><TableRow><TableHeader>Дата</TableHeader><TableHeader>Тип</TableHeader><TableHeader>Товар</TableHeader><TableHeader>Количество</TableHeader><TableHeader>Единица</TableHeader><TableHeader>Основание</TableHeader></TableRow></TableHead>
               <TableBody>
-                {filteredMovements.map(
-                  (movement) => {
-                    const product =
-                      products.find(
-                        (item) =>
-                          item.id === movement.productId,
-                      )
-
-                    return (
-                      <TableRow key={movement.id}>
-                        <TableCell>
-                          {movement.createdAt.toLocaleDateString(
-                            'ru-RU',
-                          )}
-                        </TableCell>
-
-                        <TableCell>
-                          <Badge
-                            size="sm"
-                            variant={
-                              movement.type === 'purchase'
-                                ? 'success'
-                                : movement.type === 'sale'
-                                  ? 'danger'
-                                  : 'default'
-                            }
-                          >
-                            {getMovementType(
-                              movement.type,
-                            )}
-                          </Badge>
-                        </TableCell>
-
-                        <TableCell>
-                          <span className="stock-movements__product-name">
-                            {product?.name ??
-                              movement.productId}
-                          </span>
-                        </TableCell>
-
-                        <TableCell>
-                          <strong
-                            className={
-                              movement.type === 'sale'
-                                ? 'stock-movements__quantity stock-movements__quantity--expense'
-                                : 'stock-movements__quantity stock-movements__quantity--income'
-                            }
-                          >
-                            {movement.type === 'sale'
-                              ? movement.quantity
-                              : `+${movement.quantity}`}
-                          </strong>
-                        </TableCell>
-
-                        <TableCell>
-                          {getUnitLabel(
-                            movement.unit,
-                          )}
-                        </TableCell>
-
-                        <TableCell>
-                          <span className="stock-movements__reference">
-                            {movement.note ??
-                              movement.referenceId ??
-                              '—'}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  },
-                )}
+                {movements.map((movement) => {
+                  const product = products.find((item) => item.id === movement.productId)
+                  return <TableRow key={movement.id}>
+                    <TableCell>{movement.createdAt.toLocaleDateString('ru-RU')}</TableCell>
+                    <TableCell><Badge size="sm" variant={movement.type === 'purchase' ? 'success' : movement.type === 'sale' ? 'danger' : 'default'}>{getMovementType(movement.type)}</Badge></TableCell>
+                    <TableCell><span className="stock-movements__product-name">{product?.name ?? movement.productId}</span></TableCell>
+                    <TableCell><strong className={movement.type === 'sale' ? 'stock-movements__quantity stock-movements__quantity--expense' : 'stock-movements__quantity stock-movements__quantity--income'}>{movement.type === 'sale' ? movement.quantity : `+${movement.quantity}`}</strong></TableCell>
+                    <TableCell>{getUnitLabel(movement.unit)}</TableCell>
+                    <TableCell><span className="stock-movements__reference">{movement.note ?? movement.referenceId ?? '—'}</span></TableCell>
+                  </TableRow>
+                })}
               </TableBody>
             </Table>
           </div>
         )}
+
+        {loadMoreError && <div className="stock-movements__load-more-error"><Alert variant="danger" title="Не удалось загрузить следующие движения">{loadMoreError}</Alert></div>}
+        {nextCursor && !isInitialLoading && <div className="stock-movements__load-more"><Button type="button" variant="secondary" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? 'Загрузка…' : 'Показать ещё'}</Button></div>}
       </Card>
     </section>
   )
+}
+
+function getHistoryQuery(
+  type: MovementFilter,
+  productId: string,
+  dateFrom: string,
+  dateTo: string,
+) {
+  return {
+    ...(type !== 'all' ? { type } : {}),
+    ...(productId !== 'all' ? { productId } : {}),
+    ...(dateFrom ? { dateFrom } : {}),
+    ...(dateTo ? { dateTo } : {}),
+  }
 }

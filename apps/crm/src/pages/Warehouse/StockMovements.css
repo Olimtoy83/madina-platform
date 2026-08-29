@@ -171,6 +171,17 @@
   text-align: center;
 }
 
+.stock-movements__load-more,
+.stock-movements__load-more-error {
+  padding: 16px 24px;
+}
+
+.stock-movements__load-more {
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #e5e7eb;
+}
+
 /* Responsive */
 
 @media (max-width: 1000px) {

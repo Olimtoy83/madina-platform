@@ -16,6 +16,10 @@ import type {
   SaleResponse,
   SalesListResponse,
   StockAdjustmentResponse,
+  StockMovementHistoryQuery,
+  StockMovementHistoryResponse,
+  StockMovementIntegrityResponse,
+  StockMovementResponse,
   StockMovementsListResponse,
   UpdateProductRequest,
   UpdatePurchaseRequest,
@@ -26,6 +30,7 @@ import {
   requestJson,
   requestResponse,
 } from './httpClient'
+import type { StockMovement } from '@madina/core'
 
 const commerceUrl = '/api/v1/commerce'
 const productImportTemplateFilename =
@@ -37,6 +42,14 @@ export interface CommerceAggregateResponse {
   stockMovements: StockMovementsListResponse['stockMovements']
   purchases: PurchaseResponse[]
   sales: SaleResponse[]
+}
+
+export interface StockMovementHistory {
+  summary: StockMovementHistoryResponse['summary']
+  stockMovements: {
+    items: StockMovement[]
+    nextCursor?: string
+  }
 }
 
 export async function getCommerceAggregate(): Promise<CommerceAggregateResponse> {
@@ -58,6 +71,39 @@ export async function getCommerceAggregate(): Promise<CommerceAggregateResponse>
     purchases: purchases.purchases,
     sales: sales.sales,
   }
+}
+
+export async function getStockMovementHistory(
+  query: StockMovementHistoryQuery = {},
+): Promise<StockMovementHistory> {
+  const search = new URLSearchParams()
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) {
+      search.set(key, value)
+    }
+  }
+
+  const suffix = search.size > 0
+    ? `?${search.toString()}`
+    : ''
+  const response = await requestJson<StockMovementHistoryResponse>(
+    `${commerceUrl}/stock-movements/history${suffix}`,
+  )
+
+  return {
+    summary: response.summary,
+    stockMovements: {
+      items: response.stockMovements.items.map(toStockMovement),
+      nextCursor: response.stockMovements.nextCursor,
+    },
+  }
+}
+
+export async function getStockMovementIntegrity(): Promise<StockMovementIntegrityResponse> {
+  return requestJson<StockMovementIntegrityResponse>(
+    `${commerceUrl}/stock-movements/integrity`,
+  )
 }
 
 export function createProduct(input: CreateProductRequest): Promise<ProductResponse> {
@@ -268,6 +314,16 @@ function isProductWorkbookValidationErrorResponse(
     typeof record.message === 'string' &&
     Array.isArray(record.errors) &&
     record.errors.every(isProductWorkbookRowError)
+}
+
+function toStockMovement(
+  movement: StockMovementResponse,
+): StockMovement {
+  return {
+    ...movement,
+    createdAt: new Date(movement.createdAt),
+    updatedAt: new Date(movement.updatedAt),
+  }
 }
 
 function isProductWorkbookRowError(
