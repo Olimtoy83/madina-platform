@@ -10,7 +10,7 @@ import {
 import './Sales.css'
 import { useProducts } from '../../context/useProducts'
 import { useClients } from '../../context/useClients'
-import { useSales } from '../../context/useSales'
+import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import {
@@ -53,7 +53,7 @@ export function Sales() {
     addSale,
     completeSale,
     cancelSale,
-  } = useSales()
+  } = useSalesMutations()
   const { snapshot } = useTransactionalState()
 
   const { products } = useProducts()

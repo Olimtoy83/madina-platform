@@ -64,7 +64,6 @@ describe('ProductsProvider', () => {
     mocks.snapshot = {
       products: [confirmedProduct],
       purchases: [],
-      sales: [],
     }
     mocks.reload.mockReset()
     mocks.adjustProductStock.mockReset()

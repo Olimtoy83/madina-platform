@@ -20,7 +20,6 @@ import type {
   ClientSalesHistoryResponse,
   ClientSalesMetricsResponse,
   NextSaleNumberResponse,
-  SalesListResponse,
   StockAdjustmentResponse,
   StockMovementHistoryQuery,
   StockMovementHistoryResponse,
@@ -45,7 +44,6 @@ const productExportFilename = 'madina-products.xlsx'
 export interface CommerceAggregateResponse {
   products: ProductResponse[]
   purchases: PurchaseResponse[]
-  sales: SaleResponse[]
 }
 
 export interface StockMovementHistory {
@@ -72,17 +70,14 @@ export async function getCommerceAggregate(): Promise<CommerceAggregateResponse>
   const [
     products,
     purchases,
-    sales,
   ] = await Promise.all([
     requestJson<ProductsListResponse>(`${commerceUrl}/products`),
     requestJson<PurchasesListResponse>(`${commerceUrl}/purchases`),
-    requestJson<SalesListResponse>(`${commerceUrl}/sales`),
   ])
 
   return {
     products: products.products,
     purchases: purchases.purchases,
-    sales: sales.sales,
   }
 }
 

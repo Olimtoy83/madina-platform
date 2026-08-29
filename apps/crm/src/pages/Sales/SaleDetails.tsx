@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
-import { useSales } from '../../context/useSales'
+import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import { getSaleById } from '../../shared/api/commerceApi'
@@ -25,7 +25,7 @@ export function SaleDetails() {
   const {
     completeSale,
     cancelSale,
-  } = useSales()
+  } = useSalesMutations()
   const { snapshot } = useTransactionalState()
 
   const { products } = useProducts()
