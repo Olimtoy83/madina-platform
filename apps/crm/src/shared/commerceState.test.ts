@@ -20,16 +20,11 @@ describe('toCommerceAggregateState', () => {
         id: 'sale-1', createdAt: '2026-08-27T00:00:00.000Z', updatedAt: '2026-08-27T01:00:00.000Z', saleDate: '2026-08-27T00:00:00.000Z',
         saleNumber: 'SAL-1', clientName: 'Client', items: [], totalAmount: 0, paymentMethod: 'cash', status: 'draft',
       }],
-      transactions: [{
-        id: 'transaction-1', createdAt: '2026-08-27T00:00:00.000Z', updatedAt: '2026-08-27T01:00:00.000Z', transactionDate: '2026-08-27T00:00:00.000Z',
-        type: 'income', category: 'sale', amount: 15, paymentMethod: 'cash', status: 'completed',
-      }],
     })
 
     expect(state.products[0]?.createdAt).toBeInstanceOf(Date)
     expect(state.stockMovements[0]?.updatedAt).toBeInstanceOf(Date)
     expect(state.purchases[0]?.purchaseDate).toBeInstanceOf(Date)
     expect(state.sales[0]?.saleDate).toBeInstanceOf(Date)
-    expect(state.transactions[0]?.transactionDate).toBeInstanceOf(Date)
   })
 })

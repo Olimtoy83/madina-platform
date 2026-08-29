@@ -66,7 +66,6 @@ describe('ProductsProvider', () => {
       stockMovements: [],
       purchases: [],
       sales: [],
-      transactions: [],
     }
     mocks.reload.mockReset()
     mocks.adjustProductStock.mockReset()

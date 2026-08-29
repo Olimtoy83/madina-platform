@@ -8,7 +8,6 @@ import { SalesProvider } from '../context/SalesProvider'
 import { StockMovementsProvider } from '../context/StockMovementsProvider'
 import { TasksProvider } from '../context/TasksProvider'
 import { TransactionalStateProvider } from '../context/TransactionalStateProvider'
-import { TransactionsProvider } from '../context/TransactionsProvider'
 import { ToastProvider } from '../context/ToastProvider'
 
 export function AppLayout() {
@@ -17,27 +16,25 @@ export function AppLayout() {
       <ClientsProvider>
         <TasksProvider>
           <TransactionalStateProvider>
-            <TransactionsProvider>
-              <ProductsProvider>
-                <StockMovementsProvider>
-                  <PurchasesProvider>
-                    <SalesProvider>
-                      <div className="app-layout">
-                        <Sidebar />
+            <ProductsProvider>
+              <StockMovementsProvider>
+                <PurchasesProvider>
+                  <SalesProvider>
+                    <div className="app-layout">
+                      <Sidebar />
 
-                        <div className="app-layout__main">
-                          <Header />
+                      <div className="app-layout__main">
+                        <Header />
 
-                          <main className="app-layout__content">
-                            <Outlet />
-                          </main>
-                        </div>
+                        <main className="app-layout__content">
+                          <Outlet />
+                        </main>
                       </div>
-                    </SalesProvider>
-                  </PurchasesProvider>
-                </StockMovementsProvider>
-              </ProductsProvider>
-            </TransactionsProvider>
+                    </div>
+                  </SalesProvider>
+                </PurchasesProvider>
+              </StockMovementsProvider>
+            </ProductsProvider>
           </TransactionalStateProvider>
         </TasksProvider>
       </ClientsProvider>

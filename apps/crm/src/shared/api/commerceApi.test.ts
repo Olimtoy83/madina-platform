@@ -40,24 +40,22 @@ afterEach(() => {
 })
 
 describe('commerceApi', () => {
-  it('loads the full commerce aggregate from five server resources', async () => {
+  it('loads the operational commerce aggregate from four server resources', async () => {
     const fetchMock = installFetch([
       { products: [] },
       { stockMovements: [] },
       { purchases: [] },
       { sales: [] },
-      { transactions: [] },
     ])
 
     await expect(getCommerceAggregate()).resolves.toEqual({
-      products: [], stockMovements: [], purchases: [], sales: [], transactions: [],
+      products: [], stockMovements: [], purchases: [], sales: [],
     })
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/v1/commerce/products',
       '/api/v1/commerce/stock-movements',
       '/api/v1/commerce/purchases',
       '/api/v1/commerce/sales',
-      '/api/v1/commerce/transactions',
     ])
   })
 
@@ -68,7 +66,7 @@ describe('commerceApi', () => {
         : response(url.endsWith('/products') ? { products: [] }
           : url.endsWith('/stock-movements') ? { stockMovements: [] }
             : url.endsWith('/purchases') ? { purchases: [] }
-              : { transactions: [] })),
+              : { sales: [] })),
     )
     vi.stubGlobal('fetch', fetchMock)
 

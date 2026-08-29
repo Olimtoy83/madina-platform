@@ -3,7 +3,6 @@ import type {
   Purchase,
   Sale,
   StockMovement,
-  Transaction,
 } from '@madina/core'
 import type { CommerceAggregateResponse } from './api/commerceApi'
 
@@ -12,7 +11,6 @@ export interface CommerceAggregateState {
   stockMovements: StockMovement[]
   purchases: Purchase[]
   sales: Sale[]
-  transactions: Transaction[]
 }
 
 export interface CommerceMutationResult<T> {
@@ -57,12 +55,6 @@ export function toCommerceAggregateState(
       createdAt: new Date(sale.createdAt),
       updatedAt: new Date(sale.updatedAt),
       saleDate: new Date(sale.saleDate),
-    })),
-    transactions: response.transactions.map((transaction) => ({
-      ...transaction,
-      createdAt: new Date(transaction.createdAt),
-      updatedAt: new Date(transaction.updatedAt),
-      transactionDate: new Date(transaction.transactionDate),
     })),
   }
 }

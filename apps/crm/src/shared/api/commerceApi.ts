@@ -17,8 +17,6 @@ import type {
   SalesListResponse,
   StockAdjustmentResponse,
   StockMovementsListResponse,
-  TransactionResponse,
-  TransactionsListResponse,
   UpdateProductRequest,
   UpdatePurchaseRequest,
   UpdateSaleRequest,
@@ -39,7 +37,6 @@ export interface CommerceAggregateResponse {
   stockMovements: StockMovementsListResponse['stockMovements']
   purchases: PurchaseResponse[]
   sales: SaleResponse[]
-  transactions: TransactionResponse[]
 }
 
 export async function getCommerceAggregate(): Promise<CommerceAggregateResponse> {
@@ -48,13 +45,11 @@ export async function getCommerceAggregate(): Promise<CommerceAggregateResponse>
     stockMovements,
     purchases,
     sales,
-    transactions,
   ] = await Promise.all([
     requestJson<ProductsListResponse>(`${commerceUrl}/products`),
     requestJson<StockMovementsListResponse>(`${commerceUrl}/stock-movements`),
     requestJson<PurchasesListResponse>(`${commerceUrl}/purchases`),
     requestJson<SalesListResponse>(`${commerceUrl}/sales`),
-    requestJson<TransactionsListResponse>(`${commerceUrl}/transactions`),
   ])
 
   return {
@@ -62,7 +57,6 @@ export async function getCommerceAggregate(): Promise<CommerceAggregateResponse>
     stockMovements: stockMovements.stockMovements,
     purchases: purchases.purchases,
     sales: sales.sales,
-    transactions: transactions.transactions,
   }
 }
 
