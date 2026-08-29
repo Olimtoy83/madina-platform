@@ -1,13 +1,10 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  getRecentTransactions,
-  getReportingEligibleTransactions,
-} from '@madina/core'
 
 import {
   Alert,
@@ -15,9 +12,15 @@ import {
   Card,
   Skeleton,
 } from '@madina/ui'
-import type { ReportingSummaryResponse } from '@madina/api'
+import type {
+  FinancialTransactionRowResponse,
+  ReportingSummaryResponse,
+} from '@madina/api'
 import { useTransactionalState } from '../../context/useTransactionalState'
-import { getReportingSummary } from '../../shared/api/reportingApi'
+import {
+  getIncomeReport,
+  getReportingSummary,
+} from '../../shared/api/reportingApi'
 import { toDashboardKpis } from './dashboardSummary'
 import './Dashboard.css'
 
@@ -28,8 +31,14 @@ export function Dashboard() {
     useState<ReportingSummaryResponse | null>(null)
   const [isSummaryLoading, setIsSummaryLoading] = useState(true)
   const [summaryError, setSummaryError] = useState<Error | null>(null)
-
-  const { transactions } = snapshot
+  const [recentTransactions, setRecentTransactions] = useState<
+    FinancialTransactionRowResponse[]
+  >([])
+  const [isRecentTransactionsLoading, setIsRecentTransactionsLoading] =
+    useState(true)
+  const [recentTransactionsError, setRecentTransactionsError] =
+    useState<Error | null>(null)
+  const recentTransactionsRequestGeneration = useRef(0)
 
   useEffect(() => {
     let isCurrent = true
@@ -59,31 +68,45 @@ export function Dashboard() {
     }
   }, [snapshot])
 
+  useEffect(() => {
+    const generation = recentTransactionsRequestGeneration.current + 1
+    recentTransactionsRequestGeneration.current = generation
+
+    setRecentTransactions([])
+    setIsRecentTransactionsLoading(true)
+    setRecentTransactionsError(null)
+
+    void getIncomeReport({ limit: 5 })
+      .then((response) => {
+        if (recentTransactionsRequestGeneration.current !== generation) return
+
+        setRecentTransactions(response.transactions.items)
+      })
+      .catch((error: unknown) => {
+        if (recentTransactionsRequestGeneration.current !== generation) return
+
+        setRecentTransactionsError(error instanceof Error
+          ? error
+          : new Error('Не удалось загрузить последние операции.'))
+      })
+      .finally(() => {
+        if (recentTransactionsRequestGeneration.current === generation) {
+          setIsRecentTransactionsLoading(false)
+        }
+      })
+  }, [snapshot])
+
   const kpis = useMemo(
     () => summary && toDashboardKpis(summary),
     [summary],
-  )
-
-  const eligibleTransactions = useMemo(
-    () => getReportingEligibleTransactions(transactions, 'all'),
-    [transactions],
-  )
-
-  const recentTransactions = useMemo(
-    () =>
-      getRecentTransactions(
-        eligibleTransactions,
-        5,
-      ),
-    [eligibleTransactions],
   )
 
   function formatMoney(value: number) {
     return `${value.toLocaleString('ru-RU')} SAR`
   }
 
-  function formatDate(date: Date) {
-    return date.toLocaleDateString('ru-RU')
+  function formatDate(date: string) {
+    return new Intl.DateTimeFormat('ru-RU').format(new Date(date))
   }
 
   function formatStockByUnit() {
@@ -229,7 +252,20 @@ export function Dashboard() {
             <h3>Последние операции</h3>
           </div>
 
-          {recentTransactions.length === 0 ? (
+          {recentTransactionsError && (
+            <Alert
+              variant="danger"
+              title="Не удалось загрузить последние операции"
+            >
+              {recentTransactionsError.message}
+            </Alert>
+          )}
+
+          {isRecentTransactionsLoading ? (
+            <p>Загрузка операций…</p>
+          ) : recentTransactionsError ? (
+            <p>Данные операций недоступны.</p>
+          ) : recentTransactions.length === 0 ? (
             <p>
               Финансовых операций пока нет.
             </p>

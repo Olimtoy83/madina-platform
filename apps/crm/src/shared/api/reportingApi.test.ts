@@ -118,6 +118,7 @@ describe('reportingApi', () => {
       cursor: 'cursor+/=',
     })
     await getIncomeReport({ type: 'expense' })
+    await getIncomeReport({ limit: 5 })
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -127,6 +128,11 @@ describe('reportingApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       '/api/v1/reports/income?type=expense',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/reports/income?limit=5',
       expect.anything(),
     )
   })
