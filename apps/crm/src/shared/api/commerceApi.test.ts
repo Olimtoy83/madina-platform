@@ -12,6 +12,9 @@ import {
   downloadProductImportTemplate,
   exportProducts,
   getCommerceAggregate,
+  getNextPurchaseNumber,
+  getPurchaseById,
+  getPurchasesHistory,
   getClientSalesMetrics,
   getNextSaleNumber,
   getProductWorkbookValidationError,
@@ -152,6 +155,56 @@ describe('commerceApi', () => {
       '/api/v1/commerce/sales/sale%2F1',
       '/api/v1/commerce/sales/client-metrics?clientIds=client-1%2Cclient%2F2',
       '/api/v1/commerce/sales/next-number',
+    ])
+  })
+
+  it('loads bounded purchase reads, full details, and the server purchase number', async () => {
+    const fetchMock = installFetch([
+      {
+        purchases: {
+          items: [{
+            id: 'purchase-1',
+            purchaseNumber: 'PUR-0001',
+            purchaseDate: '2026-08-28T21:00:00.000Z',
+            supplierName: 'Supplier',
+            itemCount: 2,
+            totalAmount: 300,
+            status: 'draft',
+          }],
+          nextCursor: 'next cursor',
+        },
+      },
+      {
+        id: 'purchase-1',
+        createdAt: '2026-08-28T21:00:00.000Z',
+        updatedAt: '2026-08-28T21:00:00.000Z',
+        purchaseNumber: 'PUR-0001',
+        purchaseDate: '2026-08-28T21:00:00.000Z',
+        supplierName: 'Supplier',
+        items: [],
+        totalAmount: 300,
+        paymentMethod: 'cash',
+        status: 'draft',
+      },
+      { purchaseNumber: 'PUR-0002' },
+    ])
+
+    const history = await getPurchasesHistory({ limit: '25', cursor: 'next cursor' })
+    const purchase = await getPurchaseById('purchase/1')
+    const nextNumber = await getNextPurchaseNumber()
+
+    expect(history.purchases.items[0]).toMatchObject({
+      id: 'purchase-1', itemCount: 2,
+    })
+    expect(history.purchases.items[0]?.purchaseDate).toEqual(
+      new Date('2026-08-28T21:00:00.000Z'),
+    )
+    expect(purchase.purchaseDate).toEqual(new Date('2026-08-28T21:00:00.000Z'))
+    expect(nextNumber.purchaseNumber).toBe('PUR-0002')
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/commerce/purchases/history?limit=25&cursor=next+cursor',
+      '/api/v1/commerce/purchases/purchase%2F1',
+      '/api/v1/commerce/purchases/next-number',
     ])
   })
 

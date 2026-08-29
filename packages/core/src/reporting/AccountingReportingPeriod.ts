@@ -102,6 +102,11 @@ export function resolveBusinessDateRange(
   return { from, toExclusive }
 }
 
+/** Resolves one business calendar date to the authoritative start instant. */
+export function resolveBusinessDateStart(value: string): Date {
+  return calendarDateStart(parseBusinessDate(value))
+}
+
 function parseBusinessDate(value: string): CalendarDate {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!match) throw new BusinessDateRangeError('Business date is invalid.')

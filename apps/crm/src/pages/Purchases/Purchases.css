@@ -357,3 +357,10 @@
     justify-content: space-between;
   }
 }
+
+.purchases__load-more,
+.purchases__load-more-error {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}

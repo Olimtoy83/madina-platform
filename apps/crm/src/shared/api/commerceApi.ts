@@ -12,6 +12,10 @@ import type {
   ProductResponse,
   ProductsListResponse,
   PurchaseResponse,
+  PurchaseListItemResponse,
+  PurchasesHistoryQuery,
+  PurchasesHistoryResponse,
+  NextPurchaseNumberResponse,
   PurchasesListResponse,
   SaleResponse,
   SaleListItemResponse,
@@ -62,6 +66,17 @@ export interface SalesHistory {
   summary: SalesHistoryResponse['summary'] | ClientSalesHistoryResponse['summary']
   sales: {
     items: SalesListItem[]
+    nextCursor?: string
+  }
+}
+
+export type PurchaseListItem = Omit<PurchaseListItemResponse, 'purchaseDate'> & {
+  purchaseDate: Date
+}
+
+export interface PurchasesHistory {
+  purchases: {
+    items: PurchaseListItem[]
     nextCursor?: string
   }
 }
@@ -129,6 +144,53 @@ export async function getSalesHistory(
       nextCursor: response.sales.nextCursor,
     },
   }
+}
+
+export async function getPurchasesHistory(
+  query: PurchasesHistoryQuery = {},
+): Promise<PurchasesHistory> {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) search.set(key, value)
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : ''
+  const response = await requestJson<PurchasesHistoryResponse>(
+    `${commerceUrl}/purchases/history${suffix}`,
+  )
+  return {
+    purchases: {
+      items: response.purchases.items.map((purchase) => ({
+        ...purchase,
+        purchaseDate: new Date(purchase.purchaseDate),
+      })),
+      nextCursor: response.purchases.nextCursor,
+    },
+  }
+}
+
+export async function getPurchaseById(purchaseId: string): Promise<Omit<
+  PurchaseResponse,
+  'createdAt' | 'updatedAt' | 'purchaseDate'
+> & {
+  createdAt: Date
+  updatedAt: Date
+  purchaseDate: Date
+}> {
+  const purchase = await requestJson<PurchaseResponse>(
+    `${commerceUrl}/purchases/${encodeURIComponent(purchaseId)}`,
+  )
+  return {
+    ...purchase,
+    createdAt: new Date(purchase.createdAt),
+    updatedAt: new Date(purchase.updatedAt),
+    purchaseDate: new Date(purchase.purchaseDate),
+  }
+}
+
+export function getNextPurchaseNumber(): Promise<NextPurchaseNumberResponse> {
+  return requestJson<NextPurchaseNumberResponse>(
+    `${commerceUrl}/purchases/next-number`,
+  )
 }
 
 export async function getSaleById(saleId: string): Promise<Omit<

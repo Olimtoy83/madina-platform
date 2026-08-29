@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   resolveAccountingReportWindow,
+  resolveBusinessDateStart,
   resolveBusinessDateRange,
 } from './AccountingReportingPeriod.js'
 
@@ -28,5 +29,11 @@ describe('resolveAccountingReportWindow', () => {
       from: new Date('2025-08-27T21:00:00.000Z'),
       toExclusive: new Date('2025-08-28T21:00:00.000Z'),
     })
+  })
+
+  it('resolves a purchase calendar date at Asia/Riyadh midnight independently of browser time', () => {
+    expect(resolveBusinessDateStart('2026-08-29')).toEqual(
+      new Date('2026-08-28T21:00:00.000Z'),
+    )
   })
 })

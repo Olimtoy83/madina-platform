@@ -1,11 +1,14 @@
 import {
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 
 import {
-  getNextPurchaseNumber,
   getPurchaseItemTotal,
+  resolveBusinessDateStart,
+  type Purchase,
   type PurchaseItem,
   type PurchasePaymentMethod,
   type PurchaseStatus,
@@ -30,7 +33,15 @@ import {
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { usePurchases } from '../../context/usePurchases'
+import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
+import {
+  getNextPurchaseNumber,
+  getPurchaseById,
+  getPurchasesHistory,
+  type PurchasesHistory,
+} from '../../shared/api/commerceApi'
+import { HttpError } from '../../shared/api/httpClient'
 
 import './Purchases.css'
 
@@ -54,6 +65,12 @@ interface FormItem {
   unitCost: number
 }
 
+function getPurchasesErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось загрузить поступления. Повторите попытку.'
+}
+
 export function Purchases() {
   const { showToast } = useToast()
 
@@ -64,21 +81,26 @@ export function Purchases() {
   )
 
   const {
-    purchases,
     addPurchase,
     completePurchase,
     cancelPurchase,
   } = usePurchases()
+  const { snapshot } = useTransactionalState()
 
   const [selectedPurchaseId, setSelectedPurchaseId] =
     useState<string | null>(null)
+  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null)
+  const [isDetailsLoading, setIsDetailsLoading] = useState(false)
+  const [detailsError, setDetailsError] = useState<string | null>(null)
+  const [isDetailsNotFound, setIsDetailsNotFound] = useState(false)
 
-  const selectedPurchase = selectedPurchaseId
-    ? purchases.find(
-      (purchase) =>
-        purchase.id === selectedPurchaseId,
-    ) ?? null
-    : null
+  const [history, setHistory] = useState<PurchasesHistory | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const historyRequestGeneration = useRef(0)
+  const detailsRequestGeneration = useRef(0)
 
   const [isCreateOpen, setIsCreateOpen] =
     useState(false)
@@ -92,6 +114,8 @@ export function Purchases() {
 
   const [purchaseDate, setPurchaseDate] =
     useState('')
+  const [nextPurchaseNumber, setNextPurchaseNumber] = useState<string | null>(null)
+  const [isPurchaseNumberLoading, setIsPurchaseNumberLoading] = useState(false)
 
   const [supplierName, setSupplierName] =
     useState('')
@@ -131,6 +155,109 @@ export function Purchases() {
         (product) => product.id === productId,
       )?.name ?? 'Неизвестный товар'
     )
+  }
+
+  function refreshHistory() {
+    const generation = historyRequestGeneration.current + 1
+    historyRequestGeneration.current = generation
+    setHistory(null)
+    setIsHistoryLoading(true)
+    setHistoryError(null)
+    setLoadMoreError(null)
+
+    void getPurchasesHistory()
+      .then((response) => {
+        if (historyRequestGeneration.current !== generation) return
+        setHistory(response)
+      })
+      .catch((currentError: unknown) => {
+        if (historyRequestGeneration.current !== generation) return
+        setHistoryError(getPurchasesErrorMessage(currentError))
+      })
+      .finally(() => {
+        if (historyRequestGeneration.current === generation) {
+          setIsHistoryLoading(false)
+        }
+      })
+  }
+
+  function requestPurchaseDetails(purchaseId: string) {
+    const generation = detailsRequestGeneration.current + 1
+    detailsRequestGeneration.current = generation
+    setIsDetailsLoading(true)
+    setDetailsError(null)
+    setIsDetailsNotFound(false)
+    setSelectedPurchase(null)
+
+    void getPurchaseById(purchaseId)
+      .then((purchase) => {
+        if (detailsRequestGeneration.current !== generation) return
+        setSelectedPurchase(purchase)
+      })
+      .catch((currentError: unknown) => {
+        if (detailsRequestGeneration.current !== generation) return
+        setSelectedPurchase(null)
+        if (currentError instanceof HttpError && currentError.status === 404) {
+          setIsDetailsNotFound(true)
+          return
+        }
+        setDetailsError(getPurchasesErrorMessage(currentError))
+      })
+      .finally(() => {
+        if (detailsRequestGeneration.current === generation) {
+          setIsDetailsLoading(false)
+        }
+      })
+  }
+
+  function openPurchaseDetails(purchaseId: string) {
+    setSelectedPurchaseId(purchaseId)
+    requestPurchaseDetails(purchaseId)
+  }
+
+  function closePurchaseDetails() {
+    detailsRequestGeneration.current += 1
+    setSelectedPurchaseId(null)
+    setSelectedPurchase(null)
+    setDetailsError(null)
+    setIsDetailsNotFound(false)
+    setIsDetailsLoading(false)
+  }
+
+  useEffect(() => {
+    refreshHistory()
+  }, [snapshot])
+
+  useEffect(() => {
+    if (selectedPurchaseId) requestPurchaseDetails(selectedPurchaseId)
+  }, [snapshot])
+
+  async function loadMore(): Promise<void> {
+    const cursor = history?.purchases.nextCursor
+    if (!cursor || isHistoryLoading || isLoadingMore) return
+
+    const generation = historyRequestGeneration.current
+    setIsLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const response = await getPurchasesHistory({ cursor })
+      if (historyRequestGeneration.current !== generation) return
+      setHistory((current) => current
+        ? {
+          purchases: {
+            items: [...current.purchases.items, ...response.purchases.items],
+            nextCursor: response.purchases.nextCursor,
+          },
+        }
+        : current)
+    } catch (currentError) {
+      if (historyRequestGeneration.current !== generation) return
+      setLoadMoreError(getPurchasesErrorMessage(currentError))
+    } finally {
+      if (historyRequestGeneration.current === generation) {
+        setIsLoadingMore(false)
+      }
+    }
   }
 
   function addFormItem() {
@@ -274,8 +401,10 @@ export function Purchases() {
       return
     }
 
-    const purchaseNumber =
-      getNextPurchaseNumber(purchases)
+    if (!nextPurchaseNumber) {
+      setError('Не удалось получить номер поступления с сервера.')
+      return
+    }
 
     const now = new Date()
 
@@ -309,10 +438,8 @@ export function Purchases() {
       id: `purchase-${crypto.randomUUID()}`,
       createdAt: now,
       updatedAt: now,
-      purchaseNumber,
-      purchaseDate: new Date(
-        `${purchaseDate}T00:00:00`,
-      ),
+      purchaseNumber: nextPurchaseNumber,
+      purchaseDate: resolveBusinessDateStart(purchaseDate),
       supplierName: supplierName.trim(),
       items: purchaseItems,
       totalAmount,
@@ -342,7 +469,7 @@ export function Purchases() {
     })
 
     setError(null)
-    setSelectedPurchaseId(result.value?.id ?? null)
+    if (result.value?.id) openPurchaseDetails(result.value.id)
 
     setIsCreateOpen(false)
 
@@ -368,6 +495,8 @@ export function Purchases() {
     setSupplierName('')
     setPaymentMethod('cash')
     setNote('')
+    setNextPurchaseNumber(null)
+    setIsPurchaseNumberLoading(true)
 
     setFormItems([
       {
@@ -379,7 +508,14 @@ export function Purchases() {
     ])
 
     setIsCreateOpen(true)
+
+    void getNextPurchaseNumber()
+      .then((response) => setNextPurchaseNumber(response.purchaseNumber))
+      .catch((currentError: unknown) => setError(getPurchasesErrorMessage(currentError)))
+      .finally(() => setIsPurchaseNumberLoading(false))
   }
+
+  const purchases = history?.purchases.items ?? []
 
   return (
     <section className="purchases">
@@ -427,7 +563,24 @@ export function Purchases() {
           </TableHead>
 
           <TableBody>
-            {purchases.length === 0 ? (
+            {isHistoryLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="purchases__empty">
+                  Загрузка поступлений…
+                </TableCell>
+              </TableRow>
+            ) : historyError ? (
+              <TableRow>
+                <TableCell colSpan={7} className="purchases__empty">
+                  <Alert variant="danger" title="Не удалось загрузить поступления">
+                    {historyError}
+                  </Alert>
+                  <Button type="button" variant="secondary" onClick={refreshHistory}>
+                    Повторить
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ) : purchases.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7}>
                   <EmptyState
@@ -454,7 +607,7 @@ export function Purchases() {
                   </TableCell>
 
                   <TableCell>
-                    {purchase.items.length}
+                    {purchase.itemCount}
                   </TableCell>
 
                   <TableCell>
@@ -472,9 +625,7 @@ export function Purchases() {
                       size="sm"
                       onClick={() => {
                         setError(null)
-                        setSelectedPurchaseId(
-                          purchase.id,
-                        )
+                        openPurchaseDetails(purchase.id)
                       }}
                     >
                       Открыть
@@ -487,19 +638,38 @@ export function Purchases() {
         </Table>
       </Card>
 
-      {selectedPurchase && (
+      {loadMoreError && (
+        <div className="purchases__load-more-error">
+          <Alert variant="danger" title="Не удалось загрузить следующие поступления">
+            {loadMoreError}
+          </Alert>
+        </div>
+      )}
+
+      {history?.purchases.nextCursor && !isHistoryLoading && (
+        <div className="purchases__load-more">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void loadMore()}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? 'Загрузка…' : 'Показать ещё'}
+          </Button>
+        </div>
+      )}
+
+      {selectedPurchaseId && (
         <Card
           className="purchases__purchase-card"
           padding="lg"
         >
           <div className="purchases__purchase-card-header">
             <div>
-              <h2>
-                {selectedPurchase.purchaseNumber}
-              </h2>
+              <h2>{selectedPurchase?.purchaseNumber ?? 'Поступление'}</h2>
 
               <p>
-                {selectedPurchase.supplierName}
+                {selectedPurchase?.supplierName ?? ''}
               </p>
             </div>
 
@@ -509,7 +679,7 @@ export function Purchases() {
               size="sm"
               onClick={() => {
                 setError(null)
-                setSelectedPurchaseId(null)
+                closePurchaseDetails()
               }}
               aria-label="Закрыть карточку"
             >
@@ -517,6 +687,28 @@ export function Purchases() {
             </Button>
           </div>
 
+          {isDetailsLoading ? (
+            <div className="purchases__empty">Загрузка поступления…</div>
+          ) : detailsError ? (
+            <>
+              <Alert variant="danger" title="Не удалось загрузить поступление">
+                {detailsError}
+              </Alert>
+              <div className="purchases__purchase-card-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => requestPurchaseDetails(selectedPurchaseId)}
+                >
+                  Повторить
+                </Button>
+              </div>
+            </>
+          ) : isDetailsNotFound ? (
+            <Alert variant="danger" title="Поступление не найдено">
+              Возможно, оно было удалено или недоступно.
+            </Alert>
+          ) : selectedPurchase && <>
           <div className="purchases__purchase-details">
             <div className="purchases__detail">
               <span>Дата</span>
@@ -671,12 +863,13 @@ export function Purchases() {
               variant="secondary"
               onClick={() => {
                 setError(null)
-                setSelectedPurchaseId(null)
+                closePurchaseDetails()
               }}
             >
               Закрыть
             </Button>
           </div>
+          </>}
         </Card>
       )}
 
@@ -699,6 +892,11 @@ export function Purchases() {
                 {error}
               </Alert>
             )}
+
+            <label>
+              <span>Номер поступления</span>
+              <Input fullWidth value={nextPurchaseNumber ?? ''} readOnly placeholder={isPurchaseNumberLoading ? 'Загрузка…' : 'Номер недоступен'} />
+            </label>
 
             <label>
               <span>Дата поступления</span>
@@ -909,6 +1107,7 @@ export function Purchases() {
               type="button"
               variant="primary"
               onClick={savePurchase}
+              disabled={!nextPurchaseNumber || isPurchaseNumberLoading}
             >
               Создать поступление
             </Button>
