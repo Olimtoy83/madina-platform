@@ -130,6 +130,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '012_domain_commerce_v1',
       '013_stock_movement_history_index_v1',
       '014_sales_bounded_read_indexes_v1',
+      '015_purchases_bounded_read_index_v1',
       '020_audit_events_v1',
     ].join(','))
   })

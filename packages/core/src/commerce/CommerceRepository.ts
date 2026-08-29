@@ -13,6 +13,7 @@ export interface CommerceReadRepository {
   findAllProducts(): Promise<Product[]>
   findAllStockMovements(): Promise<StockMovement[]>
   findAllPurchases(): Promise<Purchase[]>
+  findPurchaseById(purchaseId: string): Promise<Purchase | undefined>
   findAllSales(): Promise<Sale[]>
   findSaleById(saleId: string): Promise<Sale | undefined>
   findAllTransactions(): Promise<Transaction[]>
@@ -22,6 +23,8 @@ export interface CommerceReadRepository {
   getStockIntegrityDiscrepancies(): Promise<
     StockIntegrityDiscrepancy[]
   >
+  getPurchasesHistory(query: PurchasesHistoryQuery): Promise<PurchasesHistory>
+  getNextPurchaseNumber(): Promise<string>
   getSalesHistory(query: SalesHistoryQuery): Promise<SalesHistory>
   getClientSalesHistory(
     clientId: string,
@@ -31,6 +34,26 @@ export interface CommerceReadRepository {
     clientIds: string[],
   ): Promise<ClientSalesReadMetric[]>
   getNextSaleNumber(): Promise<string>
+}
+
+export interface PurchaseListItem {
+  id: string
+  purchaseNumber: string
+  purchaseDate: Date
+  supplierName: string
+  itemCount: number
+  totalAmount: number
+  status: Purchase['status']
+}
+
+export interface PurchasesHistoryQuery {
+  throughCreatedAt: Date
+  limit: number
+  cursor?: { purchaseDate: Date; id: string }
+}
+
+export interface PurchasesHistory {
+  purchases: PurchaseListItem[]
 }
 
 export interface SaleListItem {
@@ -111,9 +134,6 @@ export interface CommerceUnitOfWork
   findProductsByIds(
     productIds: string[],
   ): Promise<Product[]>
-  findPurchaseById(
-    purchaseId: string,
-  ): Promise<Purchase | undefined>
   findTransactionByReference(
     category: Transaction['category'],
     referenceId: string,

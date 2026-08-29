@@ -308,3 +308,50 @@ test('SqliteCommerceRepository reconciles all products with the movement journal
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test('SqliteCommerceRepository returns bounded purchases by business date and preserves a frozen traversal', async () => {
+  const { directory, repository } = createRepository()
+  const timestamp = (value: string) => new Date(value)
+  const purchase = (
+    id: string,
+    purchaseNumber: string,
+    purchaseDate: string,
+    createdAt: string,
+  ): Purchase => ({
+    ...createPurchase(),
+    id,
+    purchaseNumber,
+    purchaseDate: timestamp(purchaseDate),
+    createdAt: timestamp(createdAt),
+    updatedAt: timestamp(createdAt),
+    supplierName: `Supplier ${id}`,
+  })
+
+  try {
+    await repository.saveProduct(createProduct())
+    await repository.savePurchase(purchase('purchase-a', 'PUR-0002', '2026-08-28T00:00:00.000Z', '2026-08-28T12:00:00.000Z'))
+    await repository.savePurchase(purchase('purchase-b', 'PUR-0010', '2026-08-29T00:00:00.000Z', '2026-08-28T13:00:00.000Z'))
+    await repository.savePurchase(purchase('purchase-c', 'PUR-0007', '2026-08-29T00:00:00.000Z', '2026-08-28T14:00:00.000Z'))
+
+    const throughCreatedAt = timestamp('2026-08-29T00:00:00.000Z')
+    const first = await repository.getPurchasesHistory({ throughCreatedAt, limit: 2 })
+    deepEqual(first.purchases.map((item) => item.id), ['purchase-c', 'purchase-b'])
+    strictEqual(first.purchases[0]?.itemCount, 1)
+
+    await repository.savePurchase(purchase('purchase-later', 'PUR-0099', '2030-01-01T00:00:00.000Z', '2026-08-30T00:00:00.000Z'))
+    const second = await repository.getPurchasesHistory({
+      throughCreatedAt,
+      limit: 2,
+      cursor: {
+        purchaseDate: first.purchases.at(-1)!.purchaseDate,
+        id: first.purchases.at(-1)!.id,
+      },
+    })
+    deepEqual(second.purchases.map((item) => item.id), ['purchase-a'])
+    strictEqual((await repository.findPurchaseById('purchase-b'))?.items.length, 1)
+    strictEqual(await repository.getNextPurchaseNumber(), 'PUR-0100')
+  } finally {
+    repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

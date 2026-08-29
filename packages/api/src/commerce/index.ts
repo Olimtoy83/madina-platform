@@ -181,6 +181,23 @@ export interface StockMovementIntegrityResponse {
   discrepancies: StockIntegrityDiscrepancyResponse[]
 }
 export interface PurchasesListResponse { purchases: PurchaseResponse[] }
+export interface PurchaseListItemResponse {
+  id: string
+  purchaseNumber: string
+  purchaseDate: string
+  supplierName: string
+  itemCount: number
+  totalAmount: number
+  status: PurchaseResponse['status']
+}
+export interface PurchasesHistoryQuery {
+  limit?: string
+  cursor?: string
+}
+export interface PurchasesHistoryResponse {
+  purchases: { items: PurchaseListItemResponse[]; nextCursor?: string }
+}
+export interface NextPurchaseNumberResponse { purchaseNumber: string }
 export interface SalesListResponse { sales: SaleResponse[] }
 export interface SaleListItemResponse {
   id: string

@@ -14,6 +14,10 @@ import type {
   ProductsListResponse,
   PurchaseResponse,
   PurchasesListResponse,
+  PurchaseListItemResponse,
+  PurchasesHistoryQuery,
+  PurchasesHistoryResponse,
+  NextPurchaseNumberResponse,
   SaleResponse,
   SalesListResponse,
   SaleListItemResponse,
@@ -46,6 +50,7 @@ import type {
   StockMovement,
   Transaction,
   SaleListItem,
+  PurchaseListItem,
 } from '@madina/core'
 import {
   CommerceCommandError,
@@ -97,6 +102,8 @@ const DEFAULT_STOCK_MOVEMENT_HISTORY_LIMIT = 50
 const MAX_STOCK_MOVEMENT_HISTORY_LIMIT = 100
 const DEFAULT_SALES_HISTORY_LIMIT = 50
 const MAX_SALES_HISTORY_LIMIT = 100
+const DEFAULT_PURCHASES_HISTORY_LIMIT = 50
+const MAX_PURCHASES_HISTORY_LIMIT = 100
 
 interface StockMovementHistoryCursor {
   version: 1
@@ -151,6 +158,101 @@ interface NormalizedSalesHistoryQuery {
   limit: number
   throughCreatedAt: Date
   cursor?: { saleDate: Date; id: string }
+}
+
+class PurchasesHistoryValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
+
+interface PurchasesHistoryCursor {
+  version: 1
+  purchaseDate: string
+  id: string
+  throughCreatedAt: string
+}
+
+interface NormalizedPurchasesHistoryQuery {
+  limit: number
+  throughCreatedAt: Date
+  cursor?: { purchaseDate: Date; id: string }
+}
+
+function parsePurchasesHistoryInstant(value: unknown): Date {
+  if (typeof value !== 'string') {
+    throw new PurchasesHistoryValidationError('Purchases history cursor is invalid.')
+  }
+  const instant = new Date(value)
+  if (Number.isNaN(instant.getTime()) || instant.toISOString() !== value) {
+    throw new PurchasesHistoryValidationError('Purchases history cursor is invalid.')
+  }
+  return instant
+}
+
+function parsePurchasesHistoryLimit(value: unknown): number {
+  if (value === undefined) return DEFAULT_PURCHASES_HISTORY_LIMIT
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new PurchasesHistoryValidationError('Purchases history limit is invalid.')
+  }
+  const limit = Number(value)
+  if (!Number.isSafeInteger(limit) || limit > MAX_PURCHASES_HISTORY_LIMIT) {
+    throw new PurchasesHistoryValidationError(
+      `Purchases history limit must be between 1 and ${MAX_PURCHASES_HISTORY_LIMIT}.`,
+    )
+  }
+  return limit
+}
+
+function decodePurchasesHistoryCursor(value: unknown): PurchasesHistoryCursor | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new PurchasesHistoryValidationError('Purchases history cursor is invalid.')
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    const allowedKeys = ['version', 'purchaseDate', 'id', 'throughCreatedAt']
+    if (!isRecord(decoded) || Object.keys(decoded).some((key) => !allowedKeys.includes(key)) ||
+      decoded.version !== 1 || typeof decoded.id !== 'string' || !decoded.id.trim()) {
+      throw new Error()
+    }
+    return {
+      version: 1,
+      purchaseDate: parsePurchasesHistoryInstant(decoded.purchaseDate).toISOString(),
+      id: decoded.id,
+      throughCreatedAt: parsePurchasesHistoryInstant(decoded.throughCreatedAt).toISOString(),
+    }
+  } catch (error) {
+    if (error instanceof PurchasesHistoryValidationError) throw error
+    throw new PurchasesHistoryValidationError('Purchases history cursor is invalid.')
+  }
+}
+
+function normalizePurchasesHistoryQuery(
+  input: PurchasesHistoryQuery | unknown,
+  now: Date,
+): NormalizedPurchasesHistoryQuery {
+  if (!isRecord(input) || Object.keys(input).some((key) => !['limit', 'cursor'].includes(key))) {
+    throw new PurchasesHistoryValidationError('Purchases history query is invalid.')
+  }
+  const cursor = decodePurchasesHistoryCursor(input.cursor)
+  return {
+    limit: parsePurchasesHistoryLimit(input.limit),
+    throughCreatedAt: cursor ? new Date(cursor.throughCreatedAt) : now,
+    cursor: cursor ? { purchaseDate: new Date(cursor.purchaseDate), id: cursor.id } : undefined,
+  }
+}
+
+function encodePurchasesHistoryCursor(
+  purchase: PurchaseListItemResponse,
+  query: NormalizedPurchasesHistoryQuery,
+): string {
+  return Buffer.from(JSON.stringify({
+    version: 1,
+    purchaseDate: purchase.purchaseDate,
+    id: purchase.id,
+    throughCreatedAt: query.throughCreatedAt.toISOString(),
+  } satisfies PurchasesHistoryCursor)).toString('base64url')
 }
 
 function parseSalesHistoryLimit(value: unknown): number {
@@ -478,6 +580,20 @@ function toPurchaseResponse(purchase: Purchase): PurchaseResponse {
       unitCost: item.unitCost,
       totalCost: item.totalCost,
     })),
+  }
+}
+
+function toPurchaseListItemResponse(
+  purchase: PurchaseListItem,
+): PurchaseListItemResponse {
+  return {
+    id: purchase.id,
+    purchaseNumber: purchase.purchaseNumber,
+    purchaseDate: purchase.purchaseDate.toISOString(),
+    supplierName: purchase.supplierName,
+    itemCount: purchase.itemCount,
+    totalAmount: purchase.totalAmount,
+    status: purchase.status,
   }
 }
 
@@ -1046,6 +1162,70 @@ export async function commerceRoutes(
       purchases: (await options.commerceRepository.findAllPurchases())
         .map(toPurchaseResponse),
     }),
+  )
+
+  app.get<{
+    Querystring: PurchasesHistoryQuery
+  }>(
+    '/purchases/history',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (request, reply): Promise<PurchasesHistoryResponse | ApiErrorResponse> => {
+      try {
+        const query = normalizePurchasesHistoryQuery(request.query, new Date())
+        const result = await options.commerceRepository.getPurchasesHistory({
+          throughCreatedAt: query.throughCreatedAt,
+          limit: query.limit + 1,
+          cursor: query.cursor,
+        })
+        const items = result.purchases.slice(0, query.limit).map(toPurchaseListItemResponse)
+        const last = items.at(-1)
+        return {
+          purchases: {
+            items,
+            nextCursor: result.purchases.length > query.limit && last
+              ? encodePurchasesHistoryCursor(last, query)
+              : undefined,
+          },
+        }
+      } catch (error) {
+        if (error instanceof PurchasesHistoryValidationError) {
+          reply.code(400)
+          return { statusCode: 400, error: 'Bad Request', message: error.message }
+        }
+        throw error
+      }
+    },
+  )
+
+  app.get(
+    '/purchases/next-number',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (): Promise<NextPurchaseNumberResponse> => ({
+      purchaseNumber: await options.commerceRepository.getNextPurchaseNumber(),
+    }),
+  )
+
+  app.get<{
+    Params: PurchaseParams
+  }>(
+    '/purchases/:purchaseId',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (request, reply): Promise<PurchaseResponse | ApiErrorResponse> => {
+      const purchase = await options.commerceRepository.findPurchaseById(
+        request.params.purchaseId,
+      )
+      if (!purchase) {
+        reply.code(404)
+        return { statusCode: 404, error: 'Not Found', message: 'Purchase not found.' }
+      }
+      return toPurchaseResponse(purchase)
+    },
   )
 
   app.get(

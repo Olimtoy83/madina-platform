@@ -7,6 +7,9 @@ import type {
   ClientSalesReadMetric,
   SalesHistory,
   SalesHistoryQuery,
+  PurchasesHistory,
+  PurchasesHistoryQuery,
+  PurchaseListItem,
   StockMovementHistory,
   StockMovementHistoryQuery,
   CommerceUnitOfWork,
@@ -18,6 +21,7 @@ import type {
 } from '@madina/core'
 import {
   STOCK_INTEGRITY_EPSILON,
+  getNextPurchaseNumber,
   normalizeClientName,
   type StockIntegrityDiscrepancy,
 } from '@madina/core'
@@ -165,6 +169,54 @@ function toSaleListItem(row: SaleRow) {
     paymentMethod: row.payment_method,
     status: row.status,
   }
+}
+
+function toPurchaseListItem(
+  row: PurchaseRow & { item_count: number },
+): PurchaseListItem {
+  return {
+    id: row.id,
+    purchaseNumber: row.purchase_number,
+    purchaseDate: new Date(row.purchase_date),
+    supplierName: row.supplier_name,
+    itemCount: row.item_count,
+    totalAmount: row.total_amount,
+    status: row.status,
+  }
+}
+
+function readPurchasesHistory(
+  database: DatabaseSync,
+  query: PurchasesHistoryQuery,
+): PurchasesHistory {
+  const predicates = ['p.created_at <= ?']
+  const parameters: Array<string | number> = [
+    query.throughCreatedAt.toISOString(),
+  ]
+
+  if (query.cursor) {
+    predicates.push(`(
+      p.purchase_date < ? OR (p.purchase_date = ? AND p.id < ?)
+    )`)
+    const purchaseDate = query.cursor.purchaseDate.toISOString()
+    parameters.push(purchaseDate, purchaseDate, query.cursor.id)
+  }
+
+  const rows = database.prepare(`
+    SELECT p.id, p.created_at, p.updated_at, p.purchase_number,
+      p.purchase_date, p.supplier_name, p.total_amount, p.payment_method,
+      p.status, p.note, COUNT(pi.product_id) AS item_count
+    FROM purchases p
+    LEFT JOIN purchase_items pi ON pi.purchase_id = p.id
+    WHERE ${predicates.join(' AND ')}
+    GROUP BY p.id
+    ORDER BY p.purchase_date DESC, p.id DESC
+    LIMIT ?
+  `).all(...parameters, query.limit) as unknown as Array<
+    PurchaseRow & { item_count: number }
+  >
+
+  return { purchases: rows.map(toPurchaseListItem) }
 }
 
 interface ClientOwnershipLookup {
@@ -622,6 +674,21 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
     return rows.map(toTransaction)
   }
 
+  async getPurchasesHistory(
+    query: PurchasesHistoryQuery,
+  ): Promise<PurchasesHistory> {
+    return readPurchasesHistory(this.database, query)
+  }
+
+  async getNextPurchaseNumber(): Promise<string> {
+    const rows = this.database.prepare(
+      'SELECT purchase_number FROM purchases',
+    ).all() as Array<{ purchase_number: string }>
+    return getNextPurchaseNumber(rows.map((row) => ({
+      purchaseNumber: row.purchase_number,
+    })))
+  }
+
   async getStockMovementHistory(
     query: StockMovementHistoryQuery,
   ): Promise<StockMovementHistory> {
@@ -1002,6 +1069,10 @@ export class SqliteCommerceRepository implements CommerceRepository {
     )
   }
 
+  async findPurchaseById(purchaseId: string): Promise<Purchase | undefined> {
+    return new SqliteCommerceUnitOfWork(this.database).findPurchaseById(purchaseId)
+  }
+
   async findAllSales(): Promise<Sale[]> {
     const rows = this.database.prepare(`
       SELECT id FROM sales ORDER BY sale_date DESC, id DESC
@@ -1026,6 +1097,29 @@ export class SqliteCommerceRepository implements CommerceRepository {
     `).all() as unknown as TransactionRow[]
 
     return rows.map(toTransaction)
+  }
+
+  async getPurchasesHistory(
+    query: PurchasesHistoryQuery,
+  ): Promise<PurchasesHistory> {
+    this.database.exec('BEGIN DEFERRED')
+    try {
+      const result = readPurchasesHistory(this.database, query)
+      this.database.exec('COMMIT')
+      return result
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getNextPurchaseNumber(): Promise<string> {
+    const rows = this.database.prepare(
+      'SELECT purchase_number FROM purchases',
+    ).all() as Array<{ purchase_number: string }>
+    return getNextPurchaseNumber(rows.map((row) => ({
+      purchaseNumber: row.purchase_number,
+    })))
   }
 
   async getStockMovementHistory(

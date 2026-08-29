@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { hashSessionSecret, type User } from '@madina/auth'
-import type { Client, Product, Sale, StockMovement } from '@madina/core'
+import type { Client, Product, Purchase, Sale, StockMovement } from '@madina/core'
 import {
   initializeDatabase,
   SqliteAuthRepository,
@@ -46,6 +46,31 @@ function sale(
     id, saleNumber: `SAL-${id}`, saleDate: movementTime(saleDate),
     clientId, clientName, status, createdAt, updatedAt: createdAt,
     items: [], totalAmount: 100, paymentMethod: 'cash',
+  }
+}
+
+function purchase(
+  id: string,
+  purchaseNumber: string,
+  purchaseDate: string,
+  createdAt = '2025-08-27T00:00:00.000Z',
+): Purchase {
+  const timestamp = movementTime(createdAt)
+  return {
+    id,
+    purchaseNumber,
+    purchaseDate: movementTime(purchaseDate),
+    supplierName: `Supplier ${id}`,
+    status: 'draft',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    items: [{
+      productId: 'purchase-product', quantity: 1, unit: 'kg',
+      unitCost: 10, totalCost: 10,
+    }],
+    totalAmount: 10,
+    paymentMethod: 'cash',
+    note: `Note ${id}`,
   }
 }
 
@@ -351,4 +376,108 @@ test('bounded sales reads preserve legacy ownership reconciliation without doubl
     else process.env.DATABASE_FILE = previousDatabaseFile
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+test('bounded purchase reads are protected, ordered, frozen, and retain full reads by id', async () => {
+  await withApp(async (repository) => {
+    await repository.saveProduct(product('purchase-product', 'Закупочный товар', 0))
+    await repository.savePurchase(purchase('purchase-a', 'PUR-0002', '2025-08-28T00:00:00.000Z'))
+    await repository.savePurchase(purchase('purchase-b', 'PUR-0010', '2025-08-29T00:00:00.000Z'))
+    await repository.savePurchase(purchase('purchase-c', 'PUR-0007', '2025-08-29T00:00:00.000Z'))
+    await repository.savePurchase(purchase('purchase-invalid', 'PUR-legacy', '2025-08-27T00:00:00.000Z'))
+  }, async (app) => {
+    equal((await app.inject({
+      method: 'GET', url: '/api/v1/commerce/purchases/history', headers: { cookie: '' },
+    })).statusCode, 401)
+
+    const databaseFile = process.env.DATABASE_FILE!
+    const viewerRepository = new SqliteAuthRepository(databaseFile)
+    const viewerSecret = 'purchase-history-viewer-session'
+    const viewerNow = new Date()
+    try {
+      await viewerRepository.createUser({
+        id: 'purchase-history-viewer', username: 'purchase.history.viewer',
+        normalizedUsername: 'purchase.history.viewer', role: 'viewer', status: 'active',
+        sessionVersion: 1, createdAt: viewerNow, updatedAt: viewerNow,
+      })
+      await viewerRepository.createSession({
+        id: 'purchase-history-viewer-session', userId: 'purchase-history-viewer',
+        tokenHash: hashSessionSecret(viewerSecret), createdAt: viewerNow,
+        lastSeenAt: viewerNow, expiresAt: new Date(viewerNow.getTime() + 86_400_000),
+        sessionVersion: 1,
+      })
+    } finally {
+      viewerRepository.close()
+    }
+    equal((await app.inject({
+      method: 'GET', url: '/api/v1/commerce/purchases/history',
+      headers: { cookie: `madina-session=${viewerSecret}` },
+    })).statusCode, 200)
+    equal((await app.inject({
+      method: 'GET', url: '/api/v1/commerce/purchases/history?limit=100',
+    })).statusCode, 200)
+
+    const first = await app.inject({
+      method: 'GET', url: '/api/v1/commerce/purchases/history?limit=2',
+    })
+    equal(first.statusCode, 200)
+    const firstPayload = first.json() as {
+      purchases: { items: Array<Record<string, unknown>>; nextCursor?: string }
+    }
+    deepEqual(firstPayload.purchases.items.map((item) => item.id), ['purchase-c', 'purchase-b'])
+    equal(firstPayload.purchases.items[0]?.itemCount, 1)
+    equal(Object.hasOwn(firstPayload.purchases.items[0]!, 'items'), false)
+    equal(typeof firstPayload.purchases.nextCursor, 'string')
+
+    const laterRepository = new SqliteCommerceRepository(databaseFile)
+    try {
+      await laterRepository.savePurchase(purchase(
+        'purchase-later', 'PUR-0099', '2030-01-01T00:00:00.000Z', new Date().toISOString(),
+      ))
+    } finally {
+      laterRepository.close()
+    }
+
+    const second = await app.inject({
+      method: 'GET',
+      url: `/api/v1/commerce/purchases/history?limit=2&cursor=${encodeURIComponent(firstPayload.purchases.nextCursor!)}`,
+    })
+    equal(second.statusCode, 200)
+    deepEqual((second.json() as {
+      purchases: { items: Array<{ id: string }> }
+    }).purchases.items.map((item) => item.id), ['purchase-a', 'purchase-invalid'])
+
+    for (const url of [
+      '/api/v1/commerce/purchases/history?limit=0',
+      '/api/v1/commerce/purchases/history?limit=101',
+      '/api/v1/commerce/purchases/history?limit=1.5',
+      '/api/v1/commerce/purchases/history?cursor=bad+cursor',
+      '/api/v1/commerce/purchases/history?status=draft',
+    ]) equal((await app.inject({ method: 'GET', url })).statusCode, 400)
+
+    const byId = await app.inject({ method: 'GET', url: '/api/v1/commerce/purchases/purchase-b' })
+    equal(byId.statusCode, 200)
+    const byIdPayload = byId.json() as { note?: string; items: unknown[] }
+    equal(byIdPayload.note, 'Note purchase-b')
+    equal(byIdPayload.items.length, 1)
+    equal((await app.inject({ method: 'GET', url: '/api/v1/commerce/purchases/missing' })).statusCode, 404)
+    deepEqual((await app.inject({ method: 'GET', url: '/api/v1/commerce/purchases/next-number' })).json(), {
+      purchaseNumber: 'PUR-0100',
+    })
+  })
+})
+
+test('bounded purchase history returns an empty first page', async () => {
+  await withApp(async () => {}, async (app) => {
+    const response = await app.inject({
+      method: 'GET', url: '/api/v1/commerce/purchases/history',
+    })
+    equal(response.statusCode, 200)
+    deepEqual((response.json() as {
+      purchases: { items: unknown[]; nextCursor?: string }
+    }).purchases, { items: [] })
+    deepEqual((await app.inject({
+      method: 'GET', url: '/api/v1/commerce/purchases/next-number',
+    })).json(), { purchaseNumber: 'PUR-0001' })
+  })
 })

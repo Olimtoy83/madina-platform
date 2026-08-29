@@ -21,7 +21,7 @@ export function getPurchaseTotal(
 }
 
 export function getNextPurchaseNumber(
-  purchases: Purchase[],
+  purchases: readonly Pick<Purchase, 'purchaseNumber'>[],
 ): string {
   const lastPurchaseNumber = purchases.reduce(
     (max, purchase) => {
