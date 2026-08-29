@@ -5,7 +5,6 @@ import { ClientsProvider } from '../context/ClientsProvider'
 import { ProductsProvider } from '../context/ProductsProvider'
 import { PurchasesProvider } from '../context/PurchasesProvider'
 import { SalesProvider } from '../context/SalesProvider'
-import { StockMovementsProvider } from '../context/StockMovementsProvider'
 import { TasksProvider } from '../context/TasksProvider'
 import { TransactionalStateProvider } from '../context/TransactionalStateProvider'
 import { ToastProvider } from '../context/ToastProvider'
@@ -17,23 +16,21 @@ export function AppLayout() {
         <TasksProvider>
           <TransactionalStateProvider>
             <ProductsProvider>
-              <StockMovementsProvider>
-                <PurchasesProvider>
-                  <SalesProvider>
-                    <div className="app-layout">
-                      <Sidebar />
+              <PurchasesProvider>
+                <SalesProvider>
+                  <div className="app-layout">
+                    <Sidebar />
 
-                      <div className="app-layout__main">
-                        <Header />
+                    <div className="app-layout__main">
+                      <Header />
 
-                        <main className="app-layout__content">
-                          <Outlet />
-                        </main>
-                      </div>
+                      <main className="app-layout__content">
+                        <Outlet />
+                      </main>
                     </div>
-                  </SalesProvider>
-                </PurchasesProvider>
-              </StockMovementsProvider>
+                  </div>
+                </SalesProvider>
+              </PurchasesProvider>
             </ProductsProvider>
           </TransactionalStateProvider>
         </TasksProvider>

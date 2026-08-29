@@ -42,20 +42,18 @@ afterEach(() => {
 })
 
 describe('commerceApi', () => {
-  it('loads the operational commerce aggregate from four server resources', async () => {
+  it('loads the operational commerce aggregate from three server resources', async () => {
     const fetchMock = installFetch([
       { products: [] },
-      { stockMovements: [] },
       { purchases: [] },
       { sales: [] },
     ])
 
     await expect(getCommerceAggregate()).resolves.toEqual({
-      products: [], stockMovements: [], purchases: [], sales: [],
+      products: [], purchases: [], sales: [],
     })
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/v1/commerce/products',
-      '/api/v1/commerce/stock-movements',
       '/api/v1/commerce/purchases',
       '/api/v1/commerce/sales',
     ])
@@ -66,9 +64,8 @@ describe('commerceApi', () => {
       Promise.resolve(url.endsWith('/sales')
         ? response({ message: 'Unavailable' }, 503)
         : response(url.endsWith('/products') ? { products: [] }
-          : url.endsWith('/stock-movements') ? { stockMovements: [] }
-            : url.endsWith('/purchases') ? { purchases: [] }
-              : { sales: [] })),
+          : url.endsWith('/purchases') ? { purchases: [] }
+            : { sales: [] })),
     )
     vi.stubGlobal('fetch', fetchMock)
 

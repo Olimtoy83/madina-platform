@@ -63,7 +63,6 @@ describe('ProductsProvider', () => {
   beforeEach(() => {
     mocks.snapshot = {
       products: [confirmedProduct],
-      stockMovements: [],
       purchases: [],
       sales: [],
     }

@@ -21,7 +21,6 @@ const emptySnapshot: CommerceAggregateState = {
   products: [],
   sales: [],
   purchases: [],
-  stockMovements: [],
 }
 
 export function TransactionalStateProvider({
