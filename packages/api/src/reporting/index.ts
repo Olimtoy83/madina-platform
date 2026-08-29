@@ -100,3 +100,46 @@ export interface SalesReportResponse {
   }
   completedAmount: number
 }
+
+export type StatisticsReportPeriod = AccountingReportPeriod
+
+export interface StatisticsReportQuery {
+  period?: StatisticsReportPeriod
+  limit?: string
+  cursor?: string
+}
+
+export interface StatisticsReportResponse {
+  period: StatisticsReportPeriod
+  financial: {
+    totalIncome: number
+    totalExpense: number
+    financialBalance: number
+    transactionCount: number
+    categories: {
+      sale: number
+      purchase: number
+      other: number
+    }
+  }
+  sales: {
+    completedCount: number
+  }
+  purchases: {
+    completedCount: number
+  }
+  inventory: {
+    productCount: number
+    stockByUnit: ReportingStockByUnitResponse[]
+  }
+  tasks: {
+    total: number
+    todo: number
+    inProgress: number
+    completed: number
+  }
+  operations: {
+    items: FinancialTransactionRowResponse[]
+    nextCursor?: string
+  }
+}

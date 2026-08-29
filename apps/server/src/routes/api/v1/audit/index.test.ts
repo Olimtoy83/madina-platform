@@ -77,7 +77,7 @@ async function seedSession(
   role: TestRole,
 ): Promise<string> {
   const repository = new SqliteAuthRepository(databaseFile)
-  const now = new Date('2026-08-28T12:00:00.000Z')
+  const now = new Date()
   const secret = `audit-session-secret-${id}`
 
   try {

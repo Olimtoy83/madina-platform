@@ -149,6 +149,54 @@ function insertTransaction(
   )
 }
 
+function insertPurchase(
+  database: DatabaseSync,
+  input: {
+    id: string
+    status: 'draft' | 'completed' | 'cancelled'
+    purchaseDate: string
+  },
+): void {
+  database.prepare(`
+    INSERT INTO purchases (
+      id, created_at, updated_at, purchase_number, purchase_date,
+      supplier_name, total_amount, payment_method, status, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    input.id,
+    timestamp.toISOString(),
+    timestamp.toISOString(),
+    input.id,
+    input.purchaseDate,
+    'Supplier',
+    999,
+    'cash',
+    input.status,
+    null,
+  )
+}
+
+function insertTask(
+  database: DatabaseSync,
+  id: string,
+  status: 'todo' | 'in-progress' | 'completed' | 'cancelled',
+): void {
+  database.prepare(`
+    INSERT INTO tasks (
+      id, created_at, updated_at, title, description, status, priority, due_date
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    timestamp.toISOString(),
+    timestamp.toISOString(),
+    id,
+    null,
+    status,
+    'medium',
+    null,
+  )
+}
+
 async function withRepository(
   seed: (database: DatabaseSync) => void,
   run: (repository: SqliteReportingQueryRepository) => Promise<void>,
@@ -518,5 +566,107 @@ test('SqliteReportingQueryRepository reads a timezone-bounded operational sales 
       statusCounts: { draft: 2, completed: 4, cancelled: 1 },
       completedAmount: 2108,
     })
+  })
+})
+
+test('SqliteReportingQueryRepository reads a coherent timezone-bounded statistics report', async () => {
+  const now = new Date('2026-03-01T01:30:00.000Z')
+  const todayWindow = resolveReportingPeriodWindow('today', now)
+  const sevenDaysWindow = resolveReportingPeriodWindow('7days', now)
+  const monthWindow = resolveReportingPeriodWindow('month', now)
+
+  await withRepository((database) => {
+    for (const transaction of [
+      { ...createTransaction('before-today', 'income', 'sale', 100, 'completed'), transactionDate: new Date('2026-02-28T20:59:59.999Z') },
+      { ...createTransaction('today-income-b', 'income', 'sale', 30, 'completed'), transactionDate: new Date('2026-02-28T21:00:00.000Z') },
+      { ...createTransaction('today-income-a', 'income', 'other', 20, 'completed'), transactionDate: new Date('2026-02-28T21:00:00.000Z') },
+      { ...createTransaction('today-expense', 'expense', 'purchase', 10, 'completed'), transactionDate: new Date('2026-03-01T00:00:00.000Z') },
+      { ...createTransaction('seven-days-start', 'expense', 'other', 5, 'completed'), transactionDate: new Date('2026-02-22T21:00:00.000Z') },
+      { ...createTransaction('before-seven-days', 'expense', 'other', 999, 'completed'), transactionDate: new Date('2026-02-22T20:59:59.999Z') },
+      { ...createTransaction('future', 'income', 'sale', 999, 'completed'), transactionDate: new Date('2026-03-01T01:30:00.001Z') },
+      { ...createTransaction('pending', 'income', 'sale', 999, 'pending'), transactionDate: new Date('2026-03-01T00:00:00.000Z') },
+      { ...createTransaction('cancelled', 'expense', 'purchase', 999, 'cancelled'), transactionDate: new Date('2026-03-01T00:00:00.000Z') },
+    ]) insertTransaction(database, transaction)
+
+    for (const sale of [
+      { id: 'sale-before-today', status: 'completed' as const, totalAmount: 999, saleDate: new Date('2026-02-28T20:59:59.999Z') },
+      { id: 'sale-today', status: 'completed' as const, totalAmount: 999, saleDate: new Date('2026-02-28T21:00:00.000Z') },
+      { id: 'sale-draft', status: 'draft' as const, totalAmount: 999, saleDate: new Date('2026-02-28T21:00:00.000Z') },
+      { id: 'sale-cancelled', status: 'cancelled' as const, totalAmount: 999, saleDate: new Date('2026-02-28T21:00:00.000Z') },
+      { id: 'sale-seven-days-start', status: 'completed' as const, totalAmount: 999, saleDate: new Date('2026-02-22T21:00:00.000Z') },
+      { id: 'sale-before-seven-days', status: 'completed' as const, totalAmount: 999, saleDate: new Date('2026-02-22T20:59:59.999Z') },
+      { id: 'sale-future', status: 'completed' as const, totalAmount: 999, saleDate: new Date('2026-03-01T01:30:00.001Z') },
+    ]) insertSale(database, {
+      ...createSale(sale.id, sale.status),
+      totalAmount: sale.totalAmount,
+      saleDate: sale.saleDate,
+    })
+
+    for (const purchase of [
+      { id: 'purchase-before-today', status: 'completed' as const, purchaseDate: '2026-02-28T20:59:59.999Z' },
+      { id: 'purchase-today', status: 'completed' as const, purchaseDate: '2026-02-28T21:00:00.000Z' },
+      { id: 'purchase-draft', status: 'draft' as const, purchaseDate: '2026-02-28T21:00:00.000Z' },
+      { id: 'purchase-cancelled', status: 'cancelled' as const, purchaseDate: '2026-02-28T21:00:00.000Z' },
+      { id: 'purchase-seven-days-start', status: 'completed' as const, purchaseDate: '2026-02-22T21:00:00.000Z' },
+      { id: 'purchase-before-seven-days', status: 'completed' as const, purchaseDate: '2026-02-22T20:59:59.999Z' },
+      { id: 'purchase-future', status: 'completed' as const, purchaseDate: '2026-03-01T01:30:00.001Z' },
+    ]) insertPurchase(database, purchase)
+
+    insertProduct(database, createProduct('active-kg', 'kg', 3, 'active'))
+    insertProduct(database, createProduct('inactive-kg', 'kg', 0, 'inactive'))
+    insertProduct(database, createProduct('active-liter', 'liter', 1, 'active'))
+    insertTask(database, 'task-todo', 'todo')
+    insertTask(database, 'task-in-progress', 'in-progress')
+    insertTask(database, 'task-completed', 'completed')
+    insertTask(database, 'task-cancelled', 'cancelled')
+  }, async (repository) => {
+    const today = await repository.getStatisticsReport({
+      period: 'today',
+      limit: 2,
+      window: todayWindow,
+    })
+    equal(today.period, 'today')
+    deepEqual(today.financial, {
+      totalIncome: 50,
+      totalExpense: 10,
+      financialBalance: 40,
+      transactionCount: 3,
+      categories: { sale: 30, purchase: 10, other: 20 },
+    })
+    deepEqual(today.sales, { completedCount: 1 })
+    deepEqual(today.purchases, { completedCount: 1 })
+    deepEqual(today.inventory, {
+      productCount: 3,
+      stockByUnit: [{ unit: 'kg', quantity: 3 }, { unit: 'liter', quantity: 1 }],
+    })
+    deepEqual(today.tasks, { total: 4, todo: 1, inProgress: 1, completed: 1 })
+    deepEqual(today.operations.map((transaction) => transaction.id), [
+      'today-expense',
+      'today-income-b',
+    ])
+
+    const secondPage = await repository.getStatisticsReport({
+      period: 'today',
+      limit: 2,
+      window: todayWindow,
+      cursor: {
+        transactionDate: today.operations.at(-1)!.transactionDate,
+        id: today.operations.at(-1)!.id,
+      },
+    })
+    deepEqual(secondPage.operations.map((transaction) => transaction.id), ['today-income-a'])
+
+    equal((await repository.getStatisticsReport({ period: '7days', limit: 50, window: sevenDaysWindow })).sales.completedCount, 3)
+    equal((await repository.getStatisticsReport({ period: '7days', limit: 50, window: sevenDaysWindow })).purchases.completedCount, 3)
+    equal((await repository.getStatisticsReport({ period: 'month', limit: 50, window: monthWindow })).sales.completedCount, 1)
+    equal((await repository.getStatisticsReport({ period: 'month', limit: 50, window: monthWindow })).purchases.completedCount, 1)
+    const all = await repository.getStatisticsReport({
+      period: 'all',
+      limit: 50,
+      window: resolveReportingPeriodWindow('all', now),
+    })
+    equal(all.operations.some((transaction) => transaction.id === 'future'), false)
+    equal(all.sales.completedCount, 4)
+    equal(all.purchases.completedCount, 4)
   })
 })

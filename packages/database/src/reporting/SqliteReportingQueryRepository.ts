@@ -9,6 +9,8 @@ import type {
   ReportingStockByUnit,
   SalesReport,
   SalesReportQuery,
+  StatisticsReport,
+  StatisticsReportQuery,
   Transaction,
 } from '@madina/core'
 import { openDatabaseConnection } from '../connectionPolicy.js'
@@ -62,6 +64,13 @@ interface SalesReportAggregateRow {
   completed_count: number
   cancelled_count: number
   completed_amount: number
+}
+
+interface StatisticsTaskAggregateRow {
+  total_count: number
+  todo_count: number
+  in_progress_count: number
+  completed_count: number
 }
 
 function toTransaction(row: TransactionRow): Transaction {
@@ -341,6 +350,138 @@ export class SqliteReportingQueryRepository
         cancelled: aggregate.cancelled_count,
       },
       completedAmount: aggregate.completed_amount,
+    }
+  }
+
+  async getStatisticsReport(
+    query: StatisticsReportQuery,
+  ): Promise<StatisticsReport> {
+    const parameters: Array<string | number> = [
+      query.window.to.toISOString(),
+    ]
+    let filters = "status = 'completed' AND transaction_date <= ?"
+
+    if (query.window.from) {
+      filters += ' AND transaction_date >= ?'
+      parameters.push(query.window.from.toISOString())
+    }
+
+    this.database.exec('BEGIN')
+
+    try {
+      const financial = this.database.prepare(`
+        SELECT
+          COALESCE(SUM(CASE
+            WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
+          COALESCE(SUM(CASE
+            WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense,
+          COUNT(*) AS transaction_count,
+          COALESCE(SUM(CASE
+            WHEN category = 'sale' THEN amount ELSE 0 END), 0) AS sale_total,
+          COALESCE(SUM(CASE
+            WHEN category = 'purchase' THEN amount ELSE 0 END), 0) AS purchase_total,
+          COALESCE(SUM(CASE
+            WHEN category = 'other' THEN amount ELSE 0 END), 0) AS other_total
+        FROM transactions
+        WHERE ${filters}
+      `).get(...parameters) as unknown as AccountingAggregateRow
+
+      const dateParameters = [
+        query.window.to.toISOString(),
+        ...(query.window.from ? [query.window.from.toISOString()] : []),
+      ]
+      const dateRange = query.window.from
+        ? 'AND sale_date >= ?'
+        : ''
+      const sales = this.database.prepare(`
+        SELECT COUNT(*) AS completed_count
+        FROM sales
+        WHERE status = 'completed' AND sale_date <= ? ${dateRange}
+      `).get(...dateParameters) as unknown as SalesRow
+      const purchaseDateRange = query.window.from
+        ? 'AND purchase_date >= ?'
+        : ''
+      const purchases = this.database.prepare(`
+        SELECT COUNT(*) AS completed_count
+        FROM purchases
+        WHERE status = 'completed' AND purchase_date <= ? ${purchaseDateRange}
+      `).get(...dateParameters) as unknown as SalesRow
+
+      const inventory = this.database.prepare(`
+        SELECT COUNT(*) AS product_count
+        FROM products
+      `).get() as unknown as Pick<InventoryRow, 'product_count'>
+      const stockByUnit = this.database.prepare(`
+        SELECT unit, COALESCE(SUM(quantity), 0) AS quantity
+        FROM products
+        GROUP BY unit
+        ORDER BY unit ASC
+      `).all() as unknown as StockByUnitRow[]
+      const tasks = this.database.prepare(`
+        SELECT
+          COUNT(*) AS total_count,
+          COALESCE(SUM(CASE WHEN status = 'todo' THEN 1 ELSE 0 END), 0) AS todo_count,
+          COALESCE(SUM(CASE WHEN status = 'in-progress' THEN 1 ELSE 0 END), 0) AS in_progress_count,
+          COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_count
+        FROM tasks
+      `).get() as unknown as StatisticsTaskAggregateRow
+
+      const rowParameters = [...parameters]
+      let rowFilters = filters
+      if (query.cursor) {
+        rowFilters += ` AND (
+          transaction_date < ? OR (
+            transaction_date = ? AND id < ?
+          )
+        )`
+        const cursorDate = query.cursor.transactionDate.toISOString()
+        rowParameters.push(cursorDate, cursorDate, query.cursor.id)
+      }
+      rowParameters.push(query.limit)
+      const rows = this.database.prepare(`
+        SELECT id, created_at, updated_at, type, category, amount,
+          payment_method, transaction_date, reference_id, description, status
+        FROM transactions
+        WHERE ${rowFilters}
+        ORDER BY transaction_date DESC, id DESC
+        LIMIT ?
+      `).all(...rowParameters) as unknown as TransactionRow[]
+
+      this.database.exec('COMMIT')
+
+      return {
+        period: query.period,
+        financial: {
+          totalIncome: financial.total_income,
+          totalExpense: financial.total_expense,
+          financialBalance: financial.total_income - financial.total_expense,
+          transactionCount: financial.transaction_count,
+          categories: {
+            sale: financial.sale_total,
+            purchase: financial.purchase_total,
+            other: financial.other_total,
+          },
+        },
+        sales: { completedCount: sales.completed_count },
+        purchases: { completedCount: purchases.completed_count },
+        inventory: {
+          productCount: inventory.product_count,
+          stockByUnit: stockByUnit.map((row) => ({
+            unit: row.unit,
+            quantity: row.quantity,
+          })),
+        },
+        tasks: {
+          total: tasks.total_count,
+          todo: tasks.todo_count,
+          inProgress: tasks.in_progress_count,
+          completed: tasks.completed_count,
+        },
+        operations: rows.map(toTransaction),
+      }
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
     }
   }
 

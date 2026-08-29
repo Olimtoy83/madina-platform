@@ -5,6 +5,7 @@ import {
   type IncomeReport,
   type AccountingReport,
   type ReportingQueryRepository,
+  type StatisticsReport,
 } from './index.js'
 
 const summary: ReportingAllTimeSummary = {
@@ -43,12 +44,29 @@ const accountingReport: AccountingReport = {
   transactions: [],
 }
 
+const statisticsReport: StatisticsReport = {
+  period: 'today',
+  financial: {
+    totalIncome: 120,
+    totalExpense: 50,
+    financialBalance: 70,
+    transactionCount: 2,
+    categories: { sale: 100, purchase: 40, other: 30 },
+  },
+  sales: { completedCount: 2 },
+  purchases: { completedCount: 1 },
+  inventory: { productCount: 3, stockByUnit: [{ unit: 'kg', quantity: 10 }] },
+  tasks: { total: 2, todo: 1, inProgress: 0, completed: 1 },
+  operations: [],
+}
+
 describe('ReportingReadService', () => {
   it('returns the repository all-time summary without materializing domain collections', async () => {
     const repository: ReportingQueryRepository = {
       getAllTimeSummary: vi.fn().mockResolvedValue(summary),
       getIncomeReport: vi.fn().mockResolvedValue(incomeReport),
       getAccountingReport: vi.fn().mockResolvedValue(accountingReport),
+      getStatisticsReport: vi.fn().mockResolvedValue(statisticsReport),
     }
     const service = new ReportingReadService(repository)
 
@@ -61,6 +79,7 @@ describe('ReportingReadService', () => {
       getAllTimeSummary: vi.fn().mockResolvedValue(summary),
       getIncomeReport: vi.fn().mockResolvedValue(incomeReport),
       getAccountingReport: vi.fn().mockResolvedValue(accountingReport),
+      getStatisticsReport: vi.fn().mockResolvedValue(statisticsReport),
     }
     const service = new ReportingReadService(repository)
     const query = { limit: 51, type: 'income' as const }
@@ -74,6 +93,7 @@ describe('ReportingReadService', () => {
       getAllTimeSummary: vi.fn().mockResolvedValue(summary),
       getIncomeReport: vi.fn().mockResolvedValue(incomeReport),
       getAccountingReport: vi.fn().mockResolvedValue(accountingReport),
+      getStatisticsReport: vi.fn().mockResolvedValue(statisticsReport),
     }
     const service = new ReportingReadService(repository)
     const query = {
@@ -88,5 +108,27 @@ describe('ReportingReadService', () => {
 
     await expect(service.getAccountingReport(query)).resolves.toBe(accountingReport)
     expect(repository.getAccountingReport).toHaveBeenCalledWith(query)
+  })
+
+  it('passes the frozen statistics window through to the repository', async () => {
+    const repository: ReportingQueryRepository = {
+      getAllTimeSummary: vi.fn().mockResolvedValue(summary),
+      getIncomeReport: vi.fn().mockResolvedValue(incomeReport),
+      getAccountingReport: vi.fn().mockResolvedValue(accountingReport),
+      getSalesReport: vi.fn(),
+      getStatisticsReport: vi.fn().mockResolvedValue(statisticsReport),
+    }
+    const service = new ReportingReadService(repository)
+    const query = {
+      period: 'today' as const,
+      limit: 51,
+      window: {
+        from: new Date('2026-08-27T21:00:00.000Z'),
+        to: new Date('2026-08-28T12:00:00.000Z'),
+      },
+    }
+
+    await expect(service.getStatisticsReport(query)).resolves.toBe(statisticsReport)
+    expect(repository.getStatisticsReport).toHaveBeenCalledWith(query)
   })
 })

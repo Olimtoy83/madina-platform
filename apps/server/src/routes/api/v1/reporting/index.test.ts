@@ -129,6 +129,33 @@ function insertSale(
   )
 }
 
+function insertPurchase(
+  database: DatabaseSync,
+  input: {
+    id: string
+    status: 'draft' | 'completed' | 'cancelled'
+    purchaseDate: string
+  },
+): void {
+  database.prepare(`
+    INSERT INTO purchases (
+      id, created_at, updated_at, purchase_number, purchase_date,
+      supplier_name, total_amount, payment_method, status, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    input.id,
+    '2020-01-01T00:00:00.000Z',
+    '2020-01-01T00:00:00.000Z',
+    input.id,
+    input.purchaseDate,
+    'Reporting test supplier',
+    999,
+    'cash',
+    input.status,
+    null,
+  )
+}
+
 async function withApp(
   seed: (databaseFile: string) => void,
   run: (
@@ -675,6 +702,159 @@ test('sales report is viewer-readable, period-aware, and aggregate-only', async 
     equal((await app.inject({
       method: 'GET',
       url: '/api/v1/reports/sales?period=year',
+      headers: { cookie: cookies.viewer },
+    })).statusCode, 400)
+  })
+})
+
+test('statistics report is viewer-readable, bounded, and keyset-paginated', async () => {
+  await withApp((databaseFile) => {
+    const database = new DatabaseSync(databaseFile)
+
+    try {
+      insertTransaction(database, {
+        id: 'statistics-b',
+        type: 'income',
+        category: 'sale',
+        amount: 100,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+      })
+      insertTransaction(database, {
+        id: 'statistics-a',
+        type: 'expense',
+        category: 'purchase',
+        amount: 40,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+      })
+      insertTransaction(database, {
+        id: 'statistics-pending',
+        type: 'income',
+        amount: 999,
+        transactionDate: '2020-01-02T00:00:00.000Z',
+        status: 'pending',
+      })
+      insertSale(database, {
+        id: 'statistics-sale-completed',
+        status: 'completed',
+        totalAmount: 999,
+        saleDate: '2020-01-02T00:00:00.000Z',
+      })
+      insertPurchase(database, {
+        id: 'statistics-purchase-completed',
+        status: 'completed',
+        purchaseDate: '2020-01-02T00:00:00.000Z',
+      })
+      database.exec(`
+        INSERT INTO products VALUES
+          ('statistics-product-active', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z', 'Product', 'dates', 3, 'kg', 10, 15, 'active'),
+          ('statistics-product-inactive', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z', 'Product inactive', 'dates', 0, 'kg', 10, 15, 'inactive');
+        INSERT INTO tasks VALUES
+          ('statistics-task-todo', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z', 'Todo', NULL, 'todo', 'medium', NULL),
+          ('statistics-task-cancelled', '2020-01-01T00:00:00.000Z', '2020-01-01T00:00:00.000Z', 'Cancelled', NULL, 'cancelled', 'medium', NULL);
+      `)
+    } finally {
+      database.close()
+    }
+  }, async (app, cookies) => {
+    equal((await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/statistics',
+    })).statusCode, 401)
+
+    const first = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/statistics?limit=1',
+      headers: { cookie: cookies.viewer },
+    })
+    equal(first.statusCode, 200)
+    const firstPayload = first.json() as {
+      period: string
+      financial: Record<string, unknown>
+      sales: Record<string, unknown>
+      purchases: Record<string, unknown>
+      inventory: Record<string, unknown>
+      tasks: Record<string, unknown>
+      operations: { items: Array<{ id: string }>; nextCursor?: string }
+    }
+    deepEqual(firstPayload, {
+      period: 'all',
+      financial: {
+        totalIncome: 100,
+        totalExpense: 40,
+        financialBalance: 60,
+        transactionCount: 2,
+        categories: { sale: 100, purchase: 40, other: 0 },
+      },
+      sales: { completedCount: 1 },
+      purchases: { completedCount: 1 },
+      inventory: {
+        productCount: 2,
+        stockByUnit: [{ unit: 'kg', quantity: 3 }],
+      },
+      tasks: { total: 2, todo: 1, inProgress: 0, completed: 0 },
+      operations: {
+        items: [{
+          id: 'statistics-b',
+          type: 'income',
+          category: 'sale',
+          amount: 100,
+          paymentMethod: 'cash',
+          transactionDate: '2020-01-02T00:00:00.000Z',
+          description: 'Reporting test transaction',
+          status: 'completed',
+        }],
+        nextCursor: firstPayload.operations.nextCursor,
+      },
+    })
+    equal(typeof firstPayload.operations.nextCursor, 'string')
+
+    const second = await app.inject({
+      method: 'GET',
+      url: `/api/v1/reports/statistics?limit=1&cursor=${encodeURIComponent(firstPayload.operations.nextCursor!)}`,
+      headers: { cookie: cookies.viewer },
+    })
+    equal(second.statusCode, 200)
+    deepEqual((second.json() as {
+      operations: { items: Array<{ id: string }>; nextCursor?: string }
+    }).operations, {
+      items: [{
+        id: 'statistics-a',
+        type: 'expense',
+        category: 'purchase',
+        amount: 40,
+        paymentMethod: 'cash',
+        transactionDate: '2020-01-02T00:00:00.000Z',
+        description: 'Reporting test transaction',
+        status: 'completed',
+      }],
+    })
+
+    for (const period of ['today', '7days', 'month']) {
+      equal((await app.inject({
+        method: 'GET',
+        url: `/api/v1/reports/statistics?period=${period}`,
+        headers: { cookie: cookies.viewer },
+      })).statusCode, 200)
+    }
+
+    for (const query of [
+      '?period=year',
+      '?limit=0',
+      '?limit=101',
+      '?limit=1.5',
+      '?cursor=not+a+cursor',
+      '?type=income',
+    ]) {
+      equal((await app.inject({
+        method: 'GET',
+        url: `/api/v1/reports/statistics${query}`,
+        headers: { cookie: cookies.viewer },
+      })).statusCode, 400)
+    }
+
+    equal((await app.inject({
+      method: 'GET',
+      url: `/api/v1/reports/statistics?period=month&cursor=${encodeURIComponent(firstPayload.operations.nextCursor!)}`,
       headers: { cookie: cookies.viewer },
     })).statusCode, 400)
   })

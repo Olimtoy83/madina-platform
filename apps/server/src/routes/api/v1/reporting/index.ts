@@ -8,6 +8,8 @@ import type {
   ReportingSummaryResponse,
   SalesReportQuery as ApiSalesReportQuery,
   SalesReportResponse,
+  StatisticsReportQuery as ApiStatisticsReportQuery,
+  StatisticsReportResponse,
 } from '@madina/api'
 import type {
   AccountingReportPeriod,
@@ -15,6 +17,8 @@ import type {
   ReportingReadService,
   SalesReportPeriod,
   SalesReportQuery,
+  StatisticsReportPeriod,
+  StatisticsReportQuery,
   Transaction,
   TransactionType,
 } from '@madina/core'
@@ -33,6 +37,8 @@ const DEFAULT_INCOME_LIMIT = 50
 const MAX_INCOME_LIMIT = 100
 const DEFAULT_ACCOUNTING_LIMIT = 50
 const MAX_ACCOUNTING_LIMIT = 100
+const DEFAULT_STATISTICS_LIMIT = 50
+const MAX_STATISTICS_LIMIT = 100
 
 interface IncomeCursor {
   version: 1
@@ -70,6 +76,21 @@ interface NormalizedAccountingQuery extends AccountingReportQuery {}
 
 interface NormalizedSalesReportQuery extends SalesReportQuery {}
 
+interface StatisticsCursor {
+  version: 1
+  transactionDate: string
+  id: string
+  filters: {
+    period: StatisticsReportPeriod
+  }
+  window: {
+    from?: string
+    to: string
+  }
+}
+
+interface NormalizedStatisticsReportQuery extends StatisticsReportQuery {}
+
 class IncomeReportValidationError extends Error {
   constructor(message: string) {
     super(message)
@@ -88,6 +109,13 @@ class SalesReportValidationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'SalesReportValidationError'
+  }
+}
+
+class StatisticsReportValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StatisticsReportValidationError'
   }
 }
 
@@ -450,6 +478,182 @@ function normalizeSalesReportQuery(
   }
 }
 
+function normalizeStatisticsReportPeriod(
+  value: unknown,
+): StatisticsReportPeriod {
+  if (value === undefined) return 'all'
+
+  if (
+    value === 'all' ||
+    value === 'today' ||
+    value === '7days' ||
+    value === 'month'
+  ) {
+    return value
+  }
+
+  throw new StatisticsReportValidationError(
+    'Statistics report query period is invalid.',
+  )
+}
+
+function parseStatisticsLimit(value: unknown): number {
+  if (value === undefined) return DEFAULT_STATISTICS_LIMIT
+
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new StatisticsReportValidationError(
+      'Statistics report query limit is invalid.',
+    )
+  }
+
+  const limit = Number(value)
+  if (!Number.isSafeInteger(limit) || limit > MAX_STATISTICS_LIMIT) {
+    throw new StatisticsReportValidationError(
+      `Statistics report query limit must be between 1 and ${MAX_STATISTICS_LIMIT}.`,
+    )
+  }
+
+  return limit
+}
+
+function parseStatisticsIsoInstant(value: unknown): Date {
+  if (typeof value !== 'string') {
+    throw new StatisticsReportValidationError(
+      'Statistics report query cursor is invalid.',
+    )
+  }
+
+  const instant = new Date(value)
+  if (
+    Number.isNaN(instant.getTime()) ||
+    instant.toISOString() !== value
+  ) {
+    throw new StatisticsReportValidationError(
+      'Statistics report query cursor is invalid.',
+    )
+  }
+
+  return instant
+}
+
+function decodeStatisticsCursor(
+  value: unknown,
+): StatisticsCursor | undefined {
+  if (value === undefined) return undefined
+
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new StatisticsReportValidationError(
+      'Statistics report query cursor is invalid.',
+    )
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!isRecord(decoded) || !isRecord(decoded.filters) || !isRecord(decoded.window)) {
+      throw new StatisticsReportValidationError(
+        'Statistics report query cursor is invalid.',
+      )
+    }
+
+    const allowedKeys = ['version', 'transactionDate', 'id', 'filters', 'window']
+    if (
+      Object.keys(decoded).some((key) => !allowedKeys.includes(key)) ||
+      Object.keys(decoded.filters).some((key) => key !== 'period') ||
+      Object.keys(decoded.window).some((key) => !['from', 'to'].includes(key)) ||
+      decoded.version !== 1 ||
+      typeof decoded.id !== 'string' || !decoded.id.trim()
+    ) {
+      throw new StatisticsReportValidationError(
+        'Statistics report query cursor is invalid.',
+      )
+    }
+
+    const from = decoded.window.from === undefined
+      ? undefined
+      : parseStatisticsIsoInstant(decoded.window.from)
+    const to = parseStatisticsIsoInstant(decoded.window.to)
+    if (from && from > to) {
+      throw new StatisticsReportValidationError(
+        'Statistics report query cursor is invalid.',
+      )
+    }
+
+    return {
+      version: 1,
+      transactionDate: parseStatisticsIsoInstant(decoded.transactionDate).toISOString(),
+      id: decoded.id,
+      filters: { period: normalizeStatisticsReportPeriod(decoded.filters.period) },
+      window: {
+        from: from?.toISOString(),
+        to: to.toISOString(),
+      },
+    }
+  } catch (error) {
+    if (error instanceof StatisticsReportValidationError) throw error
+    throw new StatisticsReportValidationError(
+      'Statistics report query cursor is invalid.',
+    )
+  }
+}
+
+function normalizeStatisticsReportQuery(
+  input: ApiStatisticsReportQuery | unknown,
+  effectiveNow: Date,
+): NormalizedStatisticsReportQuery {
+  if (!isRecord(input)) {
+    throw new StatisticsReportValidationError(
+      'Statistics report query is invalid.',
+    )
+  }
+
+  if (Object.keys(input).some((key) => !['period', 'limit', 'cursor'].includes(key))) {
+    throw new StatisticsReportValidationError(
+      'Statistics report query contains an unsupported parameter.',
+    )
+  }
+
+  const period = normalizeStatisticsReportPeriod(input.period)
+  const cursor = decodeStatisticsCursor(input.cursor)
+  if (cursor && cursor.filters.period !== period) {
+    throw new StatisticsReportValidationError(
+      'Statistics report query cursor does not match the current period.',
+    )
+  }
+
+  return {
+    period,
+    limit: parseStatisticsLimit(input.limit),
+    window: cursor
+      ? {
+        from: cursor.window.from ? new Date(cursor.window.from) : undefined,
+        to: new Date(cursor.window.to),
+      }
+      : resolveReportingPeriodWindow(period, effectiveNow),
+    cursor: cursor
+      ? {
+        transactionDate: new Date(cursor.transactionDate),
+        id: cursor.id,
+      }
+      : undefined,
+  }
+}
+
+function encodeStatisticsCursor(
+  transaction: Transaction,
+  query: StatisticsReportQuery,
+): string {
+  return Buffer.from(JSON.stringify({
+    version: 1,
+    transactionDate: transaction.transactionDate.toISOString(),
+    id: transaction.id,
+    filters: { period: query.period },
+    window: {
+      from: query.window.from?.toISOString(),
+      to: query.window.to.toISOString(),
+    },
+  } satisfies StatisticsCursor)).toString('base64url')
+}
+
 function encodeAccountingCursor(
   transaction: Transaction,
   query: AccountingReportQuery,
@@ -517,6 +721,54 @@ export async function reportingRoutes(
         }
       } catch (error) {
         if (error instanceof IncomeReportValidationError) {
+          reply.code(400)
+          return badRequestResponse(error.message)
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.get<{
+    Querystring: ApiStatisticsReportQuery
+  }>(
+    '/statistics',
+    {
+      preHandler: requirePermission(app, 'reports:read'),
+    },
+    async (request, reply): Promise<
+      StatisticsReportResponse | ApiErrorResponse
+    > => {
+      try {
+        const effectiveNow = new Date()
+        const query = normalizeStatisticsReportQuery(
+          request.query,
+          effectiveNow,
+        )
+        const report = await options.reportingReadService.getStatisticsReport({
+          ...query,
+          limit: query.limit + 1,
+        })
+        const items = report.operations.slice(0, query.limit)
+        const last = items.at(-1)
+
+        return {
+          period: report.period,
+          financial: report.financial,
+          sales: report.sales,
+          purchases: report.purchases,
+          inventory: report.inventory,
+          tasks: report.tasks,
+          operations: {
+            items: items.map(toIncomeTransactionResponse),
+            nextCursor: report.operations.length > query.limit && last
+              ? encodeStatisticsCursor(last, query)
+              : undefined,
+          },
+        }
+      } catch (error) {
+        if (error instanceof StatisticsReportValidationError) {
           reply.code(400)
           return badRequestResponse(error.message)
         }
