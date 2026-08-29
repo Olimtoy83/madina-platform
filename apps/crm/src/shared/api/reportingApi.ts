@@ -5,6 +5,8 @@ import type {
   IncomeReportQuery,
   IncomeReportResponse,
   ReportingSummaryResponse,
+  SalesReportPeriod,
+  SalesReportResponse,
 } from '@madina/api'
 import { requestJson } from './httpClient'
 
@@ -81,4 +83,25 @@ export function getAccountingReport(
     : `${reportingUrl}/accounting`
 
   return requestJson<AccountingReportResponse>(url)
+}
+
+export interface SalesReportRequest {
+  period?: SalesReportPeriod
+}
+
+export function getSalesReport(
+  input: SalesReportRequest = {},
+): Promise<SalesReportResponse> {
+  const searchParams = new URLSearchParams()
+
+  if (input.period) {
+    searchParams.set('period', input.period)
+  }
+
+  const query = searchParams.toString()
+  const url = query
+    ? `${reportingUrl}/sales?${query}`
+    : `${reportingUrl}/sales`
+
+  return requestJson<SalesReportResponse>(url)
 }

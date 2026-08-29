@@ -1,18 +1,25 @@
-import { useMemo, useState } from 'react'
 import {
-  getSalesReportingSummary,
-  type PresetReportingPeriod,
-} from '@madina/core'
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import type {
+  SalesReportPeriod,
+  SalesReportResponse,
+} from '@madina/api'
 import {
+  Alert,
   Card,
   EmptyState,
   Select,
+  Skeleton,
 } from '@madina/ui'
-import { useSales } from '../../context/useSales'
+import { HttpError } from '../../shared/api/httpClient'
+import { getSalesReport } from '../../shared/api/reportingApi'
 import './SalesReport.css'
 
 const periodOptions: Array<{
-  value: PresetReportingPeriod
+  value: SalesReportPeriod
   label: string
 }> = [
   { value: 'all', label: 'Всё время' },
@@ -28,17 +35,79 @@ function formatAmount(amount: number) {
   }).format(amount)
 }
 
+function getSalesReportErrorMessage(error: unknown): string {
+  if (error instanceof HttpError) {
+    if (error.status === 403) {
+      return 'Отчёт по продажам недоступен для вашей роли.'
+    }
+
+    return error.message
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось загрузить отчёт. Повторите попытку.'
+}
+
 export function SalesReport() {
-  const { sales } = useSales()
   const [period, setPeriod] =
-    useState<PresetReportingPeriod>('all')
+    useState<SalesReportPeriod>('all')
+  const [summary, setSummary] = useState<SalesReportResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const requestGeneration = useRef(0)
 
-  const summary = useMemo(
-    () => getSalesReportingSummary(sales, period),
-    [sales, period],
-  )
+  useEffect(() => {
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
 
-  const { statusBreakdown } = summary
+    setSummary(null)
+    setIsLoading(true)
+    setError(null)
+
+    void getSalesReport({ period })
+      .then((response) => {
+        if (requestGeneration.current !== generation) return
+
+        setSummary(response)
+      })
+      .catch((requestError: unknown) => {
+        if (requestGeneration.current !== generation) return
+
+        setError(getSalesReportErrorMessage(requestError))
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) {
+          setIsLoading(false)
+        }
+      })
+  }, [period])
+
+  function renderCount(value: number | undefined) {
+    if (value !== undefined) return value
+
+    if (isLoading) {
+      return <Skeleton variant="text" width="40%" />
+    }
+
+    return '—'
+  }
+
+  function renderAmount(value: number | undefined) {
+    if (value !== undefined) return `${formatAmount(value)} SAR`
+
+    if (isLoading) {
+      return <Skeleton variant="text" width="70%" />
+    }
+
+    return '—'
+  }
+
+  const hasSales = summary
+    ? summary.statusCounts.draft +
+      summary.statusCounts.completed +
+      summary.statusCounts.cancelled > 0
+    : false
 
   return (
     <section className="sales-report-page">
@@ -56,9 +125,10 @@ export function SalesReport() {
           value={period}
           onChange={(event) =>
             setPeriod(
-              event.target.value as PresetReportingPeriod,
+              event.target.value as SalesReportPeriod,
             )
           }
+          disabled={isLoading}
         >
           {periodOptions.map((option) => (
             <option
@@ -71,16 +141,22 @@ export function SalesReport() {
         </Select>
       </header>
 
+      {error && (
+        <Alert variant="danger" title="Не удалось загрузить отчёт">
+          {error}
+        </Alert>
+      )}
+
       <div className="sales-report-page__summary">
         <Card className="sales-report-card">
           <span>Завершённые продажи</span>
-          <strong>{summary.completedCount}</strong>
+          <strong>{renderCount(summary?.statusCounts.completed)}</strong>
         </Card>
 
         <Card className="sales-report-card">
           <span>Сумма завершённых продаж</span>
           <strong>
-            {formatAmount(summary.completedAmount)} SAR
+            {renderAmount(summary?.completedAmount)}
           </strong>
         </Card>
       </div>
@@ -93,7 +169,13 @@ export function SalesReport() {
           <h2>Статусы продаж</h2>
         </div>
 
-        {sales.length === 0 ? (
+        {isLoading ? (
+          <div className="sales-report-page__empty">Загрузка продаж…</div>
+        ) : !summary ? (
+          <div className="sales-report-page__empty">
+            Данные отчёта недоступны.
+          </div>
+        ) : !hasSales ? (
           <EmptyState
             className="sales-report-page__empty"
             title="Продаж пока нет"
@@ -103,17 +185,17 @@ export function SalesReport() {
           <div className="sales-report-page__status-list">
             <div>
               <span>Черновики</span>
-              <strong>{statusBreakdown.draft}</strong>
+              <strong>{renderCount(summary?.statusCounts.draft)}</strong>
             </div>
 
             <div>
               <span>Завершённые</span>
-              <strong>{statusBreakdown.completed}</strong>
+              <strong>{renderCount(summary?.statusCounts.completed)}</strong>
             </div>
 
             <div>
               <span>Отменённые</span>
-              <strong>{statusBreakdown.cancelled}</strong>
+              <strong>{renderCount(summary?.statusCounts.cancelled)}</strong>
             </div>
           </div>
         )}

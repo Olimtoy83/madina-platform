@@ -9,6 +9,7 @@ import {
   getAccountingReport,
   getIncomeReport,
   getReportingSummary,
+  getSalesReport,
 } from './reportingApi'
 
 afterEach(() => {
@@ -209,5 +210,46 @@ describe('reportingApi', () => {
       status: 403,
       message: 'Reporting is unavailable',
     })
+  })
+
+  it('loads sales reporting periods without browser-side aggregation', async () => {
+    const salesReport = {
+      period: 'all' as const,
+      statusCounts: { draft: 1, completed: 2, cancelled: 3 },
+      completedAmount: 120,
+    }
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify(salesReport), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getSalesReport()).resolves.toEqual(salesReport)
+    await getSalesReport({ period: 'today' })
+    await getSalesReport({ period: '7days' })
+    await getSalesReport({ period: 'month' })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/v1/reports/sales',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/reports/sales?period=today',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      '/api/v1/reports/sales?period=7days',
+      expect.anything(),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      '/api/v1/reports/sales?period=month',
+      expect.anything(),
+    )
   })
 })
