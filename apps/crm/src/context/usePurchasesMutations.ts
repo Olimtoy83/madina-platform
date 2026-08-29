@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type ReactNode } from 'react'
+import { useCallback, useRef } from 'react'
 import type { Purchase } from '@madina/core'
 import {
   cancelPurchase as cancelPurchaseApi,
@@ -10,14 +10,10 @@ import {
   toCommerceMutationFailure,
   type CommerceMutationResult,
 } from '../shared/commerceState'
-import { PurchasesContext } from './PurchasesContext'
 import { useTransactionalState } from './useTransactionalState'
 
-interface PurchasesProviderProps { children: ReactNode }
-
-export function PurchasesProvider({ children }: PurchasesProviderProps) {
-  const { snapshot, reload } = useTransactionalState()
-  const { purchases } = snapshot
+export function usePurchasesMutations() {
+  const { reload } = useTransactionalState()
   const completionGuard = useRef(createCompletionGuard())
 
   const addPurchase = useCallback(async (
@@ -88,15 +84,7 @@ export function PurchasesProvider({ children }: PurchasesProviderProps) {
     }
   }, [reload])
 
-  const value = useMemo(() => ({
-    purchases,
-    addPurchase,
-    updatePurchase,
-    completePurchase,
-    cancelPurchase,
-  }), [purchases, addPurchase, updatePurchase, completePurchase, cancelPurchase])
-
-  return <PurchasesContext.Provider value={value}>{children}</PurchasesContext.Provider>
+  return { addPurchase, updatePurchase, completePurchase, cancelPurchase }
 }
 
 function createCompletionGuard() {

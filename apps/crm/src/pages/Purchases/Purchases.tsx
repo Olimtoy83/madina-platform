@@ -32,7 +32,7 @@ import {
   Textarea,
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
-import { usePurchases } from '../../context/usePurchases'
+import { usePurchasesMutations } from '../../context/usePurchasesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import {
@@ -84,7 +84,7 @@ export function Purchases() {
     addPurchase,
     completePurchase,
     cancelPurchase,
-  } = usePurchases()
+  } = usePurchasesMutations()
   const { snapshot } = useTransactionalState()
 
   const [selectedPurchaseId, setSelectedPurchaseId] =

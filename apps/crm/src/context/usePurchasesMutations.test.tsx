@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Purchase } from '@madina/core'
-import type { CommerceAggregateState } from '../shared/commerceState'
-import type { PurchasesContextValue } from './PurchasesContext'
 
 const mocks = vi.hoisted(() => ({
   cancelPurchase: vi.fn(),
   completePurchase: vi.fn(),
   createPurchase: vi.fn(),
   reload: vi.fn(),
-  snapshot: {} as CommerceAggregateState,
   updatePurchase: vi.fn(),
 }))
 
@@ -30,10 +27,10 @@ vi.mock('../shared/api/commerceApi', () => ({
 }))
 
 vi.mock('./useTransactionalState', () => ({
-  useTransactionalState: () => ({ snapshot: mocks.snapshot, reload: mocks.reload }),
+  useTransactionalState: () => ({ reload: mocks.reload }),
 }))
 
-import { PurchasesProvider } from './PurchasesProvider'
+import { usePurchasesMutations } from './usePurchasesMutations'
 
 const purchase: Purchase = {
   id: 'purchase-1',
@@ -48,16 +45,12 @@ const purchase: Purchase = {
   status: 'draft',
 }
 
-function getContextValue(): PurchasesContextValue {
-  const element = PurchasesProvider({ children: null }) as unknown as {
-    props: { value: PurchasesContextValue }
-  }
-  return element.props.value
+function getMutations() {
+  return usePurchasesMutations()
 }
 
-describe('PurchasesProvider', () => {
+describe('usePurchasesMutations', () => {
   beforeEach(() => {
-    mocks.snapshot = { products: [], purchases: [purchase] }
     mocks.reload.mockReset()
     mocks.createPurchase.mockReset()
     mocks.completePurchase.mockReset()
@@ -74,20 +67,20 @@ describe('PurchasesProvider', () => {
     mocks.createPurchase.mockResolvedValue(response)
     mocks.completePurchase.mockResolvedValue({ success: true })
     mocks.cancelPurchase.mockResolvedValue(response)
-    const context = getContextValue()
+    const mutations = getMutations()
 
-    await expect(context.addPurchase(purchase)).resolves.toMatchObject({ success: true })
-    await expect(context.completePurchase(purchase.id)).resolves.toEqual({ success: true })
-    await expect(context.cancelPurchase(purchase.id)).resolves.toMatchObject({ success: true })
+    await expect(mutations.addPurchase(purchase)).resolves.toMatchObject({ success: true })
+    await expect(mutations.completePurchase(purchase.id)).resolves.toEqual({ success: true })
+    await expect(mutations.cancelPurchase(purchase.id)).resolves.toMatchObject({ success: true })
 
     expect(mocks.reload).toHaveBeenCalledTimes(3)
   })
 
   it('does not revalidate confirmed state when the server rejects a purchase completion', async () => {
     mocks.completePurchase.mockRejectedValue(new Error('Недостаточно товара'))
-    const context = getContextValue()
+    const mutations = getMutations()
 
-    await expect(context.completePurchase(purchase.id)).resolves.toEqual({
+    await expect(mutations.completePurchase(purchase.id)).resolves.toEqual({
       success: false,
       message: 'Недостаточно товара',
     })

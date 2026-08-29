@@ -61,10 +61,7 @@ function getContextValue(): ProductsContextValue {
 
 describe('ProductsProvider', () => {
   beforeEach(() => {
-    mocks.snapshot = {
-      products: [confirmedProduct],
-      purchases: [],
-    }
+    mocks.snapshot = { products: [confirmedProduct] }
     mocks.reload.mockReset()
     mocks.adjustProductStock.mockReset()
   })

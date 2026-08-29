@@ -1,12 +1,10 @@
 import type {
   Product,
-  Purchase,
 } from '@madina/core'
 import type { CommerceAggregateResponse } from './api/commerceApi'
 
 export interface CommerceAggregateState {
   products: Product[]
-  purchases: Purchase[]
 }
 
 export interface CommerceMutationResult<T> {
@@ -34,12 +32,6 @@ export function toCommerceAggregateState(
       ...product,
       createdAt: new Date(product.createdAt),
       updatedAt: new Date(product.updatedAt),
-    })),
-    purchases: response.purchases.map((purchase) => ({
-      ...purchase,
-      createdAt: new Date(purchase.createdAt),
-      updatedAt: new Date(purchase.updatedAt),
-      purchaseDate: new Date(purchase.purchaseDate),
     })),
   }
 }

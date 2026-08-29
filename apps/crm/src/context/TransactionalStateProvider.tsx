@@ -19,7 +19,6 @@ interface TransactionalStateProviderProps {
 
 const emptySnapshot: CommerceAggregateState = {
   products: [],
-  purchases: [],
 }
 
 export function TransactionalStateProvider({
