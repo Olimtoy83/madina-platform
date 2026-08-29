@@ -12,7 +12,11 @@ import {
   downloadProductImportTemplate,
   exportProducts,
   getCommerceAggregate,
+  getClientSalesMetrics,
+  getNextSaleNumber,
   getProductWorkbookValidationError,
+  getSaleById,
+  getSalesHistory,
   getStockMovementHistory,
   getStockMovementIntegrity,
   importProductsExcel,
@@ -128,6 +132,31 @@ describe('commerceApi', () => {
       '/api/v1/commerce/stock-movements/history',
       expect.anything(),
     )
+  })
+
+  it('loads bounded sales reads with typed query serialization and date mapping', async () => {
+    const fetchMock = installFetch([
+      {
+        summary: { totalCount: 2, draftCount: 1, completedCount: 1, totalAmount: 300 },
+        sales: { items: [{ id: 'sale-1', saleNumber: 'SAL-0001', saleDate: '2026-08-29T12:00:00.000Z', clientId: 'client-1', clientName: 'Client', totalAmount: 300, paymentMethod: 'cash', status: 'draft' }], nextCursor: 'next' },
+      },
+      { id: 'sale-1', createdAt: '2026-08-29T12:00:00.000Z', updatedAt: '2026-08-29T12:00:00.000Z', saleNumber: 'SAL-0001', saleDate: '2026-08-29T12:00:00.000Z', clientName: 'Client', items: [], totalAmount: 300, paymentMethod: 'cash', status: 'draft' },
+      { metrics: [{ clientId: 'client-1', completedCount: 1, completedTotalAmount: 300, lastSaleDate: '2026-08-29T12:00:00.000Z' }] },
+      { saleNumber: 'SAL-0002' },
+    ])
+
+    const history = await getSalesHistory({ status: 'completed', clientId: 'client/1', cursor: 'opaque cursor' })
+    await getSaleById('sale/1')
+    await getClientSalesMetrics(['client-1', 'client/2'])
+    await getNextSaleNumber()
+
+    expect(history.sales.items[0]?.saleDate).toEqual(new Date('2026-08-29T12:00:00.000Z'))
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/commerce/sales/history?status=completed&clientId=client%2F1&cursor=opaque+cursor',
+      '/api/v1/commerce/sales/sale%2F1',
+      '/api/v1/commerce/sales/client-metrics?clientIds=client-1%2Cclient%2F2',
+      '/api/v1/commerce/sales/next-number',
+    ])
   })
 
   it('serializes each supported history filter without local defaults', async () => {

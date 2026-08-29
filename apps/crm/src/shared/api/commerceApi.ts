@@ -14,6 +14,12 @@ import type {
   PurchaseResponse,
   PurchasesListResponse,
   SaleResponse,
+  SaleListItemResponse,
+  SalesHistoryQuery,
+  SalesHistoryResponse,
+  ClientSalesHistoryResponse,
+  ClientSalesMetricsResponse,
+  NextSaleNumberResponse,
   SalesListResponse,
   StockAdjustmentResponse,
   StockMovementHistoryQuery,
@@ -46,6 +52,18 @@ export interface StockMovementHistory {
   summary: StockMovementHistoryResponse['summary']
   stockMovements: {
     items: StockMovement[]
+    nextCursor?: string
+  }
+}
+
+export type SalesListItem = Omit<SaleListItemResponse, 'saleDate'> & {
+  saleDate: Date
+}
+
+export interface SalesHistory {
+  summary: SalesHistoryResponse['summary'] | ClientSalesHistoryResponse['summary']
+  sales: {
+    items: SalesListItem[]
     nextCursor?: string
   }
 }
@@ -93,6 +111,61 @@ export async function getStockMovementHistory(
       nextCursor: response.stockMovements.nextCursor,
     },
   }
+}
+
+export async function getSalesHistory(
+  query: SalesHistoryQuery = {},
+): Promise<SalesHistory> {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) search.set(key, value)
+  }
+  const suffix = search.size > 0 ? `?${search.toString()}` : ''
+  const response = await requestJson<
+    SalesHistoryResponse | ClientSalesHistoryResponse
+  >(`${commerceUrl}/sales/history${suffix}`)
+  return {
+    summary: response.summary,
+    sales: {
+      items: response.sales.items.map((sale) => ({
+        ...sale,
+        saleDate: new Date(sale.saleDate),
+      })),
+      nextCursor: response.sales.nextCursor,
+    },
+  }
+}
+
+export async function getSaleById(saleId: string): Promise<Omit<
+  SaleResponse,
+  'createdAt' | 'updatedAt' | 'saleDate'
+> & {
+  createdAt: Date
+  updatedAt: Date
+  saleDate: Date
+}> {
+  const sale = await requestJson<SaleResponse>(
+    `${commerceUrl}/sales/${encodeURIComponent(saleId)}`,
+  )
+  return {
+    ...sale,
+    createdAt: new Date(sale.createdAt),
+    updatedAt: new Date(sale.updatedAt),
+    saleDate: new Date(sale.saleDate),
+  }
+}
+
+export function getClientSalesMetrics(
+  clientIds: string[],
+): Promise<ClientSalesMetricsResponse> {
+  const search = new URLSearchParams({ clientIds: clientIds.join(',') })
+  return requestJson<ClientSalesMetricsResponse>(
+    `${commerceUrl}/sales/client-metrics?${search.toString()}`,
+  )
+}
+
+export function getNextSaleNumber(): Promise<NextSaleNumberResponse> {
+  return requestJson<NextSaleNumberResponse>(`${commerceUrl}/sales/next-number`)
 }
 
 export async function getStockMovementIntegrity(): Promise<StockMovementIntegrityResponse> {

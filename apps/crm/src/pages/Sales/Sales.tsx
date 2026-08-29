@@ -1,6 +1,6 @@
 import {
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from 'react'
 import {
@@ -11,14 +11,19 @@ import './Sales.css'
 import { useProducts } from '../../context/useProducts'
 import { useClients } from '../../context/useClients'
 import { useSales } from '../../context/useSales'
+import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import {
-  getSaleStats,
   getSaleItemTotal,
   getSaleItemsTotal,
   type PaymentMethod,
   type SaleItem,
 } from '@madina/core'
+import {
+  getNextSaleNumber,
+  getSalesHistory,
+  type SalesHistory,
+} from '../../shared/api/commerceApi'
 import {
   Alert,
   Badge,
@@ -45,11 +50,11 @@ export function Sales() {
   const [searchParams] = useSearchParams()
 
   const {
-    sales,
     addSale,
     completeSale,
     cancelSale,
   } = useSales()
+  const { snapshot } = useTransactionalState()
 
   const { products } = useProducts()
 
@@ -65,6 +70,13 @@ export function Sales() {
   )
 
   const [saleItems, setSaleItems] = useState<SaleItem[]>([])
+  const [history, setHistory] = useState<SalesHistory | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [nextSaleNumber, setNextSaleNumber] = useState<string | null>(null)
+  const [isSaleNumberLoading, setIsSaleNumberLoading] = useState(false)
+  const requestGeneration = useRef(0)
 
   const [productId, setProductId] = useState('')
   const [quantity, setQuantity] = useState('')
@@ -73,6 +85,53 @@ export function Sales() {
   const selectedProduct = products.find(
     (product) => product.id === productId,
   )
+
+  function refreshHistory() {
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
+    setIsHistoryLoading(true)
+    setHistoryError(null)
+    void getSalesHistory()
+      .then((response) => {
+        if (requestGeneration.current !== generation) return
+        setHistory(response)
+      })
+      .catch((currentError: unknown) => {
+        if (requestGeneration.current !== generation) return
+        setHistoryError(currentError instanceof Error ? currentError.message : 'Не удалось загрузить продажи.')
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) setIsHistoryLoading(false)
+      })
+  }
+
+  useEffect(() => {
+    refreshHistory()
+  }, [snapshot])
+
+  async function loadMore() {
+    const cursor = history?.sales.nextCursor
+    if (!cursor || isHistoryLoading || isLoadingMore) return
+    const generation = requestGeneration.current
+    setIsLoadingMore(true)
+    try {
+      const response = await getSalesHistory({ cursor })
+      if (requestGeneration.current !== generation) return
+      setHistory((current) => current ? {
+        ...current,
+        sales: {
+          items: [...current.sales.items, ...response.sales.items],
+          nextCursor: response.sales.nextCursor,
+        },
+      } : current)
+    } catch (currentError) {
+      if (requestGeneration.current === generation) {
+        setHistoryError(currentError instanceof Error ? currentError.message : 'Не удалось загрузить следующие продажи.')
+      }
+    } finally {
+      if (requestGeneration.current === generation) setIsLoadingMore(false)
+    }
+  }
 
   function openModal(
     initialClientId = '',
@@ -84,7 +143,15 @@ export function Sales() {
     setProductId('')
     setQuantity('')
     setUnitPrice('')
+    setNextSaleNumber(null)
+    setIsSaleNumberLoading(true)
     setIsModalOpen(true)
+    void getNextSaleNumber()
+      .then((response) => setNextSaleNumber(response.saleNumber))
+      .catch((currentError: unknown) => setError(
+        currentError instanceof Error ? currentError.message : 'Не удалось получить номер продажи.',
+      ))
+      .finally(() => setIsSaleNumberLoading(false))
   }
   useEffect(() => {
     const initialClientId =
@@ -264,9 +331,7 @@ export function Sales() {
       id: `sale-${Date.now()}`,
       createdAt: now,
       updatedAt: now,
-      saleNumber: `SAL-${String(
-        sales.length + 1,
-      ).padStart(4, '0')}`,
+      saleNumber: nextSaleNumber ?? '',
       saleDate: now,
       clientId: selectedClient.id,
       clientName: selectedClient.name,
@@ -299,19 +364,10 @@ export function Sales() {
     closeModal()
   }
 
-  const {
-    draftCount,
-    completedCount,
-    totalAmount,
-  } = useMemo(
-    () => getSaleStats(sales),
-    [sales],
-  )
-
-  const calculatedTotal = useMemo(
-    () => getSaleItemsTotal(saleItems),
-    [saleItems],
-  )
+  const calculatedTotal = getSaleItemsTotal(saleItems)
+  const summary = history?.summary
+  const salesSummary = summary && 'totalCount' in summary ? summary : undefined
+  const sales = history?.sales.items ?? []
 
   return (
     <section className="sales-page">
@@ -344,23 +400,23 @@ export function Sales() {
       <div className="sales-page__summary">
         <Card className="sales-page__summary-card">
           <span>Всего продаж</span>
-          <strong>{sales.length}</strong>
+          <strong>{salesSummary?.totalCount ?? '—'}</strong>
         </Card>
 
         <Card className="sales-page__summary-card">
           <span>Завершено</span>
-          <strong>{completedCount}</strong>
+          <strong>{salesSummary?.completedCount ?? '—'}</strong>
         </Card>
 
         <Card className="sales-page__summary-card">
           <span>Черновики</span>
-          <strong>{draftCount}</strong>
+          <strong>{salesSummary?.draftCount ?? '—'}</strong>
         </Card>
 
         <Card className="sales-page__summary-card">
           <span>Общая сумма</span>
           <strong>
-            {totalAmount.toLocaleString('ru-RU')} SAR
+            {salesSummary ? salesSummary.totalAmount.toLocaleString('ru-RU') : '—'} SAR
           </strong>
         </Card>
       </div>
@@ -370,7 +426,11 @@ export function Sales() {
           <h2>Список продаж</h2>
         </div>
 
-        {sales.length === 0 ? (
+        {isHistoryLoading ? (
+          <div className="sales-page__empty">Загрузка продаж…</div>
+        ) : historyError ? (
+          <div className="sales-page__empty"><Alert variant="danger" title="Не удалось загрузить продажи">{historyError}</Alert><Button type="button" variant="secondary" onClick={refreshHistory}>Повторить</Button></div>
+        ) : sales.length === 0 ? (
           <EmptyState
             title="Продаж пока нет"
             description="Создайте первую продажу, чтобы она появилась в списке."
@@ -468,6 +528,9 @@ export function Sales() {
               </TableBody>
             </Table>
           </div>
+        )}
+        {history?.sales.nextCursor && !isHistoryLoading && (
+          <div className="sales-page__load-more"><Button type="button" variant="secondary" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? 'Загрузка…' : 'Показать ещё'}</Button></div>
         )}
       </Card>
 
@@ -735,6 +798,7 @@ export function Sales() {
               disabled={
                 !clientId ||
                 saleItems.length === 0
+                || !nextSaleNumber || isSaleNumberLoading
               }
             >
               Сохранить черновик

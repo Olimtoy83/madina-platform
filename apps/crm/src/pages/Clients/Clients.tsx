@@ -1,14 +1,14 @@
 import './Clients.css'
 import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useClients } from '../../context/useClients'
-import { useSales } from '../../context/useSales'
+import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import {
   createClient,
-  getClientSalesStats,
   type ClientStatus,
 } from '@madina/core'
+import { getClientSalesMetrics } from '../../shared/api/commerceApi'
 import {
   Button,
   Card,
@@ -33,7 +33,7 @@ export function Clients() {
     deactivateClient,
   } = useClients()
 
-  const { sales } = useSales()
+  const { snapshot } = useTransactionalState()
 
   const { showToast } = useToast()
 
@@ -48,6 +48,13 @@ export function Clients() {
   const [email, setEmail] = useState('')
   const [company, setCompany] = useState('')
   const [note, setNote] = useState('')
+  const [clientStats, setClientStats] = useState<Record<string, {
+    salesCount: number
+    totalAmount: number
+    lastSaleDate?: Date
+  }> | null>(null)
+  const [metricsError, setMetricsError] = useState<string | null>(null)
+  const metricsGeneration = useRef(0)
   const [status, setStatus] =
     useState<ClientStatus>('active')
 
@@ -106,23 +113,30 @@ export function Clients() {
     }
   }
 
-  const clientStats = useMemo(() => {
-    return clients.reduce(
-      (stats, client) => {
-        stats[client.id] =
-          getClientSalesStats(
-            client,
-            sales,
-          )
-
-        return stats
-      },
-      {} as Record<
-        string,
-        ReturnType<typeof getClientSalesStats>
-      >,
-    )
-  }, [clients, sales])
+  useEffect(() => {
+    const generation = metricsGeneration.current + 1
+    metricsGeneration.current = generation
+    if (clients.length === 0) {
+      setClientStats({})
+      setMetricsError(null)
+      return
+    }
+    setClientStats(null)
+    setMetricsError(null)
+    void getClientSalesMetrics(clients.map((client) => client.id))
+      .then((response) => {
+        if (metricsGeneration.current !== generation) return
+        setClientStats(Object.fromEntries(response.metrics.map((metric) => [metric.clientId, {
+          salesCount: metric.completedCount,
+          totalAmount: metric.completedTotalAmount,
+          lastSaleDate: metric.lastSaleDate ? new Date(metric.lastSaleDate) : undefined,
+        }])))
+      })
+      .catch((error: unknown) => {
+        if (metricsGeneration.current !== generation) return
+        setMetricsError(error instanceof Error ? error.message : 'Не удалось загрузить показатели продаж.')
+      })
+  }, [clients, snapshot])
 
   return (
     <section className="clients-page">
@@ -285,6 +299,11 @@ export function Clients() {
       </div>
 
       <Card className="clients-page__table-wrapper">
+        {metricsError && (
+          <p className="clients-page__metrics-error">
+            Показатели продаж не загружены: {metricsError}
+          </p>
+        )}
         <Table className="clients-page__table">
           <TableHead>
             <TableRow>
@@ -312,7 +331,7 @@ export function Clients() {
               </TableRow>
             ) : (
               sortedClients.map((client) => {
-                const stats = clientStats[client.id]
+                const stats = clientStats?.[client.id]
 
                 return (
                   <TableRow key={client.id}>
@@ -341,14 +360,13 @@ export function Clients() {
                     </TableCell>
 
                     <TableCell>
-                      {stats?.salesCount ?? 0}
+                      {stats ? stats.salesCount : '—'}
                     </TableCell>
 
                     <TableCell>
-                      {(stats?.totalAmount ?? 0).toLocaleString(
-                        'ru-RU',
-                      )}{' '}
-                      SAR
+                      {stats
+                        ? `${stats.totalAmount.toLocaleString('ru-RU')} SAR`
+                        : '—'}
                     </TableCell>
 
                     <TableCell>

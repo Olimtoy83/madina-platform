@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Button,
@@ -12,17 +12,21 @@ import {
 } from '@madina/ui'
 import { useProducts } from '../../context/useProducts'
 import { useSales } from '../../context/useSales'
+import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
+import { getSaleById } from '../../shared/api/commerceApi'
+import { HttpError } from '../../shared/api/httpClient'
+import type { Sale } from '@madina/core'
 
 export function SaleDetails() {
   const { saleId } = useParams()
   const navigate = useNavigate()
 
   const {
-    sales,
     completeSale,
     cancelSale,
   } = useSales()
+  const { snapshot } = useTransactionalState()
 
   const { products } = useProducts()
 
@@ -31,14 +35,43 @@ export function SaleDetails() {
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] =
     useState(false)
 
-  const sale = sales.find(
-    (item) => item.id === saleId,
-  )
+  const [sale, setSale] = useState<Sale | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [isNotFound, setIsNotFound] = useState(false)
+  const requestGeneration = useRef(0)
 
-  if (!sale) {
+  useEffect(() => {
+    if (!saleId) return
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
+    setIsLoading(true)
+    setLoadError(null)
+    setIsNotFound(false)
+    void getSaleById(saleId)
+      .then((response) => {
+        if (requestGeneration.current !== generation) return
+        setSale(response)
+      })
+      .catch((error: unknown) => {
+        if (requestGeneration.current !== generation) return
+        setSale(null)
+        if (error instanceof HttpError && error.status === 404) setIsNotFound(true)
+        else setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить продажу.')
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) setIsLoading(false)
+      })
+  }, [saleId, snapshot])
+
+  if (isLoading) return <section><h1>Загрузка продажи…</h1></section>
+
+  if (!sale || isNotFound) {
     return (
       <section>
-        <h1>Продажа не найдена</h1>
+        <h1>{loadError ? 'Не удалось загрузить продажу' : 'Продажа не найдена'}</h1>
+
+        {loadError && <p>{loadError}</p>}
 
         <Button
           type="button"

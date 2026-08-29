@@ -1,15 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Link,
   useNavigate,
   useParams,
 } from 'react-router-dom'
-import {
-  getClientSalesStats,
-  getCompletedSalesForClient,
-} from '@madina/core'
 import { useClients } from '../../context/useClients'
-import { useSales } from '../../context/useSales'
+import { useTransactionalState } from '../../context/useTransactionalState'
+import { getSalesHistory, type SalesHistory } from '../../shared/api/commerceApi'
 import './ClientDetails.css'
 import {
   Button,
@@ -20,43 +17,68 @@ export function ClientDetails() {
   const navigate = useNavigate()
 
   const { clients } = useClients()
-  const { sales } = useSales()
+  const { snapshot } = useTransactionalState()
 
   const client = clients.find(
     (item) => item.id === clientId,
   )
 
-  const completedSales = useMemo(
-    () =>
-      client
-        ? getCompletedSalesForClient(
-          client,
-          sales,
-        )
-        : [],
-    [sales, client],
-  )
+  const [history, setHistory] = useState<SalesHistory | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const requestGeneration = useRef(0)
 
-  const clientStats = useMemo(
-    () =>
-      client
-        ? getClientSalesStats(
-          client,
-          sales,
-        )
-        : {
-          salesCount: 0,
-          totalAmount: 0,
-          lastSaleDate: undefined,
-        },
-    [client, sales],
-  )
+  function refreshHistory() {
+    if (!clientId) return
+    const generation = requestGeneration.current + 1
+    requestGeneration.current = generation
+    setIsLoading(true)
+    setLoadError(null)
+    void getSalesHistory({ clientId, status: 'completed' })
+      .then((response) => {
+        if (requestGeneration.current === generation) setHistory(response)
+      })
+      .catch((error: unknown) => {
+        if (requestGeneration.current === generation) setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить историю продаж.')
+      })
+      .finally(() => {
+        if (requestGeneration.current === generation) setIsLoading(false)
+      })
+  }
 
-  const totalAmount =
-    clientStats.totalAmount
+  useEffect(() => { refreshHistory() }, [clientId, snapshot])
 
-  const lastSale =
-    completedSales[0]
+  async function loadMore() {
+    const cursor = history?.sales.nextCursor
+    if (!cursor || isLoading || isLoadingMore || !clientId) return
+    const generation = requestGeneration.current
+    setIsLoadingMore(true)
+    try {
+      const response = await getSalesHistory({ clientId, status: 'completed', cursor })
+      if (requestGeneration.current !== generation) return
+      setHistory((current) => current ? {
+        ...current,
+        sales: { items: [...current.sales.items, ...response.sales.items], nextCursor: response.sales.nextCursor },
+      } : current)
+    } catch (error) {
+      if (requestGeneration.current === generation) setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить следующие продажи.')
+    } finally {
+      if (requestGeneration.current === generation) setIsLoadingMore(false)
+    }
+  }
+
+  const clientSummary = history?.summary
+  const completedSummary = clientSummary && 'completedTotalAmount' in clientSummary
+    ? clientSummary
+    : undefined
+  const completedSales = history?.sales.items ?? []
+  const totalAmount = completedSummary
+    ? completedSummary.completedTotalAmount
+    : 0
+  const lastSaleDate = completedSummary
+    ? completedSummary.lastSaleDate
+    : undefined
 
   if (!client) {
     return (
@@ -119,7 +141,7 @@ export function ClientDetails() {
         <article>
           <span>Продажи</span>
           <strong>
-            {clientStats.salesCount}
+            {completedSummary?.completedCount ?? '—'}
           </strong>
         </article>
 
@@ -136,8 +158,8 @@ export function ClientDetails() {
         <article>
           <span>Последняя покупка</span>
           <strong>
-            {lastSale
-              ? lastSale.saleDate.toLocaleDateString(
+            {lastSaleDate
+              ? new Date(lastSaleDate).toLocaleDateString(
                 'ru-RU',
               )
               : '—'}
@@ -194,14 +216,18 @@ export function ClientDetails() {
           <h2>История продаж</h2>
 
           <span>
-            {completedSales.length}{' '}
+            {completedSummary?.completedCount ?? '—'}{' '}
             {completedSales.length === 1
               ? 'продажа'
               : 'продаж'}
           </span>
         </div>
 
-        {completedSales.length === 0 ? (
+        {isLoading ? (
+          <p>Загрузка истории продаж…</p>
+        ) : loadError ? (
+          <p>{loadError} <Button type="button" variant="secondary" onClick={refreshHistory}>Повторить</Button></p>
+        ) : completedSales.length === 0 ? (
           <p>
             Завершённых продаж пока нет.
           </p>
@@ -237,6 +263,9 @@ export function ClientDetails() {
               ),
             )}
           </div>
+        )}
+        {history?.sales.nextCursor && !isLoading && (
+          <div className="client-details-page__load-more"><Button type="button" variant="secondary" onClick={() => void loadMore()} disabled={isLoadingMore}>{isLoadingMore ? 'Загрузка…' : 'Показать ещё'}</Button></div>
         )}
       </Card>
     </section>
