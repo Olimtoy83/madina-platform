@@ -84,3 +84,19 @@ export interface AccountingReportResponse {
     nextCursor?: string
   }
 }
+
+export type SalesReportPeriod = AccountingReportPeriod
+
+export interface SalesReportQuery {
+  period?: SalesReportPeriod
+}
+
+export interface SalesReportResponse {
+  period: SalesReportPeriod
+  statusCounts: {
+    draft: number
+    completed: number
+    cancelled: number
+  }
+  completedAmount: number
+}

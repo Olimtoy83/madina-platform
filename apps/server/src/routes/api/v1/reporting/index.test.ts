@@ -45,7 +45,7 @@ async function seedSession(
   role: TestRole,
 ): Promise<string> {
   const repository = new SqliteAuthRepository(databaseFile)
-  const now = new Date('2026-08-28T12:00:00.000Z')
+  const now = new Date()
   const secret = `reporting-session-secret-${id}`
 
   try {
@@ -58,7 +58,7 @@ async function seedSession(
       tokenHash: hashSessionSecret(secret),
       createdAt: now,
       lastSeenAt: now,
-      expiresAt: new Date('2026-09-04T12:00:00.000Z'),
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
       sessionVersion: 1,
     }
     await repository.createSession(session)
@@ -97,6 +97,35 @@ function insertTransaction(
     null,
     'Reporting test transaction',
     input.status ?? 'completed',
+  )
+}
+
+function insertSale(
+  database: DatabaseSync,
+  input: {
+    id: string
+    status: 'draft' | 'completed' | 'cancelled'
+    totalAmount: number
+    saleDate: string
+  },
+): void {
+  database.prepare(`
+    INSERT INTO sales (
+      id, created_at, updated_at, sale_number, sale_date, client_id,
+      client_name, total_amount, payment_method, status, note
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    input.id,
+    '2020-01-01T00:00:00.000Z',
+    '2020-01-01T00:00:00.000Z',
+    input.id,
+    input.saleDate,
+    null,
+    'Reporting test client',
+    input.totalAmount,
+    'cash',
+    input.status,
+    null,
   )
 }
 
@@ -537,6 +566,7 @@ test('accounting report validates queries and freezes its cursor reporting windo
         amount: 1,
         transactionDate: '2020-01-02T00:00:00.000Z',
       })
+
     } finally {
       database.close()
     }
@@ -585,6 +615,66 @@ test('accounting report validates queries and freezes its cursor reporting windo
     equal((await app.inject({
       method: 'GET',
       url: `/api/v1/reports/accounting?period=month&cursor=${encodeURIComponent(cursor!)}`,
+      headers: { cookie: cookies.viewer },
+    })).statusCode, 400)
+  })
+})
+
+test('sales report is viewer-readable, period-aware, and aggregate-only', async () => {
+  await withApp((databaseFile) => {
+    const database = new DatabaseSync(databaseFile)
+
+    try {
+      insertSale(database, {
+        id: 'sales-report-draft',
+        status: 'draft',
+        totalAmount: 100,
+        saleDate: '2020-01-01T00:00:00.000Z',
+      })
+      insertSale(database, {
+        id: 'sales-report-completed',
+        status: 'completed',
+        totalAmount: 200,
+        saleDate: '2020-01-02T00:00:00.000Z',
+      })
+      insertSale(database, {
+        id: 'sales-report-cancelled',
+        status: 'cancelled',
+        totalAmount: 300,
+        saleDate: '2020-01-03T00:00:00.000Z',
+      })
+    } finally {
+      database.close()
+    }
+  }, async (app, cookies) => {
+    equal((await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/sales',
+    })).statusCode, 401)
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/sales',
+      headers: { cookie: cookies.viewer },
+    })
+    equal(response.statusCode, 200)
+    deepEqual(response.json(), {
+      period: 'all',
+      statusCounts: { draft: 1, completed: 1, cancelled: 1 },
+      completedAmount: 200,
+    })
+
+    for (const period of ['today', '7days', 'month']) {
+      equal((await app.inject({
+        method: 'GET',
+        url: `/api/v1/reports/sales?period=${period}`,
+        headers: { cookie: cookies.viewer },
+      })).statusCode, 200)
+    }
+
+    equal((await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/sales?period=year',
       headers: { cookie: cookies.viewer },
     })).statusCode, 400)
   })

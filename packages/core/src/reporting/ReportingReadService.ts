@@ -5,6 +5,8 @@ import type {
   IncomeReportQuery,
   ReportingAllTimeSummary,
   ReportingQueryRepository,
+  SalesReport,
+  SalesReportQuery,
 } from './ReportingQueryRepository.js'
 
 export class ReportingReadService {
@@ -33,5 +35,9 @@ export class ReportingReadService {
     query: AccountingReportQuery,
   ): Promise<AccountingReport> {
     return this.repository.getAccountingReport(query)
+  }
+
+  async getSalesReport(query: SalesReportQuery): Promise<SalesReport> {
+    return this.repository.getSalesReport(query)
   }
 }

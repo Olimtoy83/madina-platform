@@ -7,6 +7,8 @@ import type {
   ReportingAllTimeSummary,
   ReportingQueryRepository,
   ReportingStockByUnit,
+  SalesReport,
+  SalesReportQuery,
   Transaction,
 } from '@madina/core'
 import { openDatabaseConnection } from '../connectionPolicy.js'
@@ -53,6 +55,13 @@ interface AccountingAggregateRow {
   sale_total: number
   purchase_total: number
   other_total: number
+}
+
+interface SalesReportAggregateRow {
+  draft_count: number
+  completed_count: number
+  cancelled_count: number
+  completed_amount: number
 }
 
 function toTransaction(row: TransactionRow): Transaction {
@@ -301,6 +310,37 @@ export class SqliteReportingQueryRepository
     } catch (error) {
       this.database.exec('ROLLBACK')
       throw error
+    }
+  }
+
+  async getSalesReport(query: SalesReportQuery): Promise<SalesReport> {
+    const parameters: string[] = [query.window.to.toISOString()]
+    let filters = 'sale_date <= ?'
+
+    if (query.window.from) {
+      filters += ' AND sale_date >= ?'
+      parameters.push(query.window.from.toISOString())
+    }
+
+    const aggregate = this.database.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END), 0) AS draft_count,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_count,
+        COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled_count,
+        COALESCE(SUM(CASE
+          WHEN status = 'completed' THEN total_amount ELSE 0 END), 0) AS completed_amount
+      FROM sales
+      WHERE ${filters}
+    `).get(...parameters) as unknown as SalesReportAggregateRow
+
+    return {
+      period: query.period,
+      statusCounts: {
+        draft: aggregate.draft_count,
+        completed: aggregate.completed_count,
+        cancelled: aggregate.cancelled_count,
+      },
+      completedAmount: aggregate.completed_amount,
     }
   }
 

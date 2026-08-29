@@ -6,15 +6,22 @@ import type {
   IncomeReportQuery,
   IncomeReportResponse,
   ReportingSummaryResponse,
+  SalesReportQuery as ApiSalesReportQuery,
+  SalesReportResponse,
 } from '@madina/api'
 import type {
   AccountingReportPeriod,
   AccountingReportQuery,
   ReportingReadService,
+  SalesReportPeriod,
+  SalesReportQuery,
   Transaction,
   TransactionType,
 } from '@madina/core'
-import { resolveAccountingReportWindow } from '@madina/core'
+import {
+  resolveAccountingReportWindow,
+  resolveReportingPeriodWindow,
+} from '@madina/core'
 import type { FastifyInstance } from 'fastify'
 import { requirePermission } from '../../../../plugins/authentication.js'
 
@@ -61,6 +68,8 @@ interface AccountingCursor {
 
 interface NormalizedAccountingQuery extends AccountingReportQuery {}
 
+interface NormalizedSalesReportQuery extends SalesReportQuery {}
+
 class IncomeReportValidationError extends Error {
   constructor(message: string) {
     super(message)
@@ -72,6 +81,13 @@ class AccountingReportValidationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'AccountingReportValidationError'
+  }
+}
+
+class SalesReportValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SalesReportValidationError'
   }
 }
 
@@ -228,6 +244,23 @@ function normalizeAccountingPeriod(value: unknown): AccountingReportPeriod {
 
   throw new AccountingReportValidationError(
     'Accounting report query period is invalid.',
+  )
+}
+
+function normalizeSalesReportPeriod(value: unknown): SalesReportPeriod {
+  if (value === undefined) return 'all'
+
+  if (
+    value === 'all' ||
+    value === 'today' ||
+    value === '7days' ||
+    value === 'month'
+  ) {
+    return value
+  }
+
+  throw new SalesReportValidationError(
+    'Sales report query period is invalid.',
   )
 }
 
@@ -396,6 +429,27 @@ function normalizeAccountingQuery(
   }
 }
 
+function normalizeSalesReportQuery(
+  input: ApiSalesReportQuery | unknown,
+  effectiveNow: Date,
+): NormalizedSalesReportQuery {
+  if (!isRecord(input)) {
+    throw new SalesReportValidationError('Sales report query is invalid.')
+  }
+
+  if (Object.keys(input).some((key) => key !== 'period')) {
+    throw new SalesReportValidationError(
+      'Sales report query contains an unsupported parameter.',
+    )
+  }
+
+  const period = normalizeSalesReportPeriod(input.period)
+  return {
+    period,
+    window: resolveReportingPeriodWindow(period, effectiveNow),
+  }
+}
+
 function encodeAccountingCursor(
   transaction: Transaction,
   query: AccountingReportQuery,
@@ -507,6 +561,29 @@ export async function reportingRoutes(
         }
       } catch (error) {
         if (error instanceof AccountingReportValidationError) {
+          reply.code(400)
+          return badRequestResponse(error.message)
+        }
+
+        throw error
+      }
+    },
+  )
+
+  app.get<{
+    Querystring: ApiSalesReportQuery
+  }>(
+    '/sales',
+    {
+      preHandler: requirePermission(app, 'reports:read'),
+    },
+    async (request, reply): Promise<SalesReportResponse | ApiErrorResponse> => {
+      try {
+        return await options.reportingReadService.getSalesReport(
+          normalizeSalesReportQuery(request.query, new Date()),
+        )
+      } catch (error) {
+        if (error instanceof SalesReportValidationError) {
           reply.code(400)
           return badRequestResponse(error.message)
         }

@@ -1,4 +1,5 @@
 import type { ProductUnit } from '../inventory/index.js'
+import type { SaleStatus } from '../sales/index.js'
 import type {
   Transaction,
   TransactionType,
@@ -77,6 +78,19 @@ export interface AccountingReport {
   transactions: Transaction[]
 }
 
+export type SalesReportPeriod = AccountingReportPeriod
+
+export interface SalesReportQuery {
+  period: SalesReportPeriod
+  window: AccountingReportWindow
+}
+
+export interface SalesReport {
+  period: SalesReportPeriod
+  statusCounts: Record<SaleStatus, number>
+  completedAmount: number
+}
+
 export interface ReportingQueryRepository {
   getAllTimeSummary(now?: Date): Promise<ReportingAllTimeSummary>
   getIncomeReport(
@@ -86,4 +100,5 @@ export interface ReportingQueryRepository {
   getAccountingReport(
     query: AccountingReportQuery,
   ): Promise<AccountingReport>
+  getSalesReport(query: SalesReportQuery): Promise<SalesReport>
 }

@@ -11,6 +11,9 @@ export type {
   AccountingReportPeriod,
   AccountingReportQuery,
   AccountingReportResponse,
+  SalesReportPeriod,
+  SalesReportQuery,
+  SalesReportResponse,
 } from './reporting/index.js'
 export type {
   AuditEventListItemResponse,

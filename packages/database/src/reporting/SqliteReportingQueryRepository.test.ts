@@ -16,6 +16,7 @@ import {
   getInventoryProductSummary,
   getSalesReportingSummary,
   resolveAccountingReportWindow,
+  resolveReportingPeriodWindow,
   type Product,
   type Sale,
   type Transaction,
@@ -431,5 +432,91 @@ test('SqliteReportingQueryRepository reads a timezone-bounded, filtered, keyset-
     })
     equal(all.transactions.some((transaction) => transaction.id === 'future'), false)
     equal(all.transactions.some((transaction) => transaction.id === 'before-today'), true)
+  })
+})
+
+test('SqliteReportingQueryRepository reads a timezone-bounded operational sales report', async () => {
+  const now = new Date('2026-03-01T01:30:00.000Z')
+  const sales = [
+    {
+      ...createSale('historical-completed', 'completed'),
+      saleDate: new Date('2026-02-01T12:00:00.000Z'),
+      totalAmount: 10,
+    },
+    {
+      ...createSale('before-today', 'completed'),
+      saleDate: new Date('2026-02-28T20:59:59.999Z'),
+      totalAmount: 999,
+    },
+    {
+      ...createSale('today-completed', 'completed'),
+      saleDate: new Date('2026-02-28T21:00:00.000Z'),
+      totalAmount: 100,
+    },
+    {
+      ...createSale('today-draft', 'draft'),
+      saleDate: new Date('2026-02-28T21:00:00.000Z'),
+      totalAmount: 200,
+    },
+    {
+      ...createSale('today-cancelled', 'cancelled'),
+      saleDate: new Date('2026-03-01T00:00:00.000Z'),
+      totalAmount: 300,
+    },
+    {
+      ...createSale('before-seven-days', 'completed'),
+      saleDate: new Date('2026-02-22T20:59:59.999Z'),
+      totalAmount: 999,
+    },
+    {
+      ...createSale('seven-days-start', 'draft'),
+      saleDate: new Date('2026-02-22T21:00:00.000Z'),
+      totalAmount: 400,
+    },
+    {
+      ...createSale('future', 'completed'),
+      saleDate: new Date('2026-03-01T01:30:00.001Z'),
+      totalAmount: 999,
+    },
+  ]
+
+  await withRepository((database) => {
+    for (const sale of sales) insertSale(database, sale)
+  }, async (repository) => {
+    deepEqual(await repository.getSalesReport({
+      period: 'today',
+      window: resolveReportingPeriodWindow('today', now),
+    }), {
+      period: 'today',
+      statusCounts: { draft: 1, completed: 1, cancelled: 1 },
+      completedAmount: 100,
+    })
+
+    deepEqual(await repository.getSalesReport({
+      period: '7days',
+      window: resolveReportingPeriodWindow('7days', now),
+    }), {
+      period: '7days',
+      statusCounts: { draft: 2, completed: 2, cancelled: 1 },
+      completedAmount: 1099,
+    })
+
+    deepEqual(await repository.getSalesReport({
+      period: 'month',
+      window: resolveReportingPeriodWindow('month', now),
+    }), {
+      period: 'month',
+      statusCounts: { draft: 1, completed: 1, cancelled: 1 },
+      completedAmount: 100,
+    })
+
+    deepEqual(await repository.getSalesReport({
+      period: 'all',
+      window: resolveReportingPeriodWindow('all', now),
+    }), {
+      period: 'all',
+      statusCounts: { draft: 2, completed: 4, cancelled: 1 },
+      completedAmount: 2108,
+    })
   })
 })

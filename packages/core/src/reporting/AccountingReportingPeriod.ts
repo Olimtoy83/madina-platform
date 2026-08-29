@@ -28,6 +28,13 @@ export function resolveAccountingReportWindow(
   period: AccountingReportPeriod,
   now: Date,
 ): AccountingReportWindow {
+  return resolveReportingPeriodWindow(period, now)
+}
+
+export function resolveReportingPeriodWindow(
+  period: AccountingReportPeriod,
+  now: Date,
+): AccountingReportWindow {
   const effectiveNow = new Date(now)
 
   if (Number.isNaN(effectiveNow.getTime())) {
