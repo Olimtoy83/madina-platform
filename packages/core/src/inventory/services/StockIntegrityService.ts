@@ -1,7 +1,7 @@
 ﻿import type { Product } from '../types/product'
 import type { StockMovement } from '../types/stockMovement'
 
-const DEFAULT_EPSILON = 1e-9
+export const STOCK_INTEGRITY_EPSILON = 1e-9
 
 export interface StockIntegrityDiscrepancy {
   productId: string
@@ -14,7 +14,7 @@ export interface StockIntegrityDiscrepancy {
 export function getStockIntegrityDiscrepancies(
   products: Product[],
   movements: StockMovement[],
-  epsilon = DEFAULT_EPSILON,
+  epsilon = STOCK_INTEGRITY_EPSILON,
 ): StockIntegrityDiscrepancy[] {
   const calculatedByProduct = new Map<
     string,

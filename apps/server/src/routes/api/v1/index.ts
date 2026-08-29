@@ -7,6 +7,7 @@ import {
   ClientMutationService,
   CommerceService,
   ReportingReadService,
+  StockMovementReadService,
   TaskMutationService,
 } from '@madina/core'
 import {
@@ -76,6 +77,9 @@ export async function apiV1Routes(
   const commerceService = new CommerceService(
     commerceRepository,
   )
+  const stockMovementReadService = new StockMovementReadService(
+    commerceRepository,
+  )
   const reportingReadService = new ReportingReadService(
     reportingQueryRepository,
   )
@@ -130,6 +134,7 @@ export async function apiV1Routes(
     prefix: '/commerce',
     commerceRepository,
     commerceService,
+    stockMovementReadService,
   })
 
   app.register(reportingRoutes, {

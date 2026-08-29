@@ -1,4 +1,5 @@
 import {
+  deepEqual,
   rejects,
   strictEqual,
 } from 'node:assert'
@@ -15,6 +16,7 @@ import {
   type Product,
   type Purchase,
   type Sale,
+  type StockMovement,
 } from '@madina/core'
 import type { CommandContext } from '@madina/shared'
 import { initializeDatabase } from '../migrations/initializeDatabase.js'
@@ -192,6 +194,115 @@ test('audit insert failure rolls back every product and movement in a bulk impor
     } finally {
       auditRepository.close()
     }
+  } finally {
+    repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('SqliteCommerceRepository returns bounded stock movement history with global totals', async () => {
+  const { directory, repository } = createRepository()
+  const throughCreatedAt = new Date('2026-08-30T00:00:00.000Z')
+  const timestamp = (value: string) => new Date(value)
+  const movement = (
+    id: string,
+    productId: string,
+    type: StockMovement['type'],
+    quantity: number,
+    createdAt: string,
+  ): StockMovement => ({
+    id, productId, type, quantity, unit: 'kg',
+    createdAt: timestamp(createdAt), updatedAt: timestamp(createdAt),
+  })
+
+  try {
+    await repository.saveProduct(createProduct(6))
+    await repository.saveProduct({
+      ...createProduct(2), id: 'product-2', name: 'Курага', quantity: 2,
+      status: 'inactive',
+    })
+    await repository.withTransaction(async (unitOfWork) => {
+      await unitOfWork.saveStockMovements([
+        movement('movement-1', 'product-1', 'purchase', 5, '2026-08-28T20:59:59.000Z'),
+        movement('movement-2', 'product-1', 'sale', -2, '2026-08-28T21:00:00.000Z'),
+        movement('movement-3', 'product-1', 'adjustment', 3, '2026-08-29T12:00:00.000Z'),
+        movement('movement-4', 'product-2', 'purchase', 2, '2026-08-29T13:00:00.000Z'),
+      ])
+    })
+
+    const first = await repository.getStockMovementHistory({
+      throughCreatedAt,
+      limit: 3,
+    })
+    deepEqual(first.summary, {
+      totalMovements: 4,
+      totalPurchases: 7,
+      totalSales: 2,
+    })
+    deepEqual(first.movements.map((item) => item.id), [
+      'movement-4', 'movement-3', 'movement-2',
+    ])
+
+    const second = await repository.getStockMovementHistory({
+      throughCreatedAt,
+      limit: 3,
+      cursor: {
+        createdAt: first.movements.at(-1)!.createdAt,
+        id: first.movements.at(-1)!.id,
+      },
+    })
+    deepEqual(second.movements.map((item) => item.id), ['movement-1'])
+
+    const filtered = await repository.getStockMovementHistory({
+      productId: 'product-1', type: 'purchase',
+      fromCreatedAt: timestamp('2026-08-28T18:00:00.000Z'),
+      toCreatedAtExclusive: timestamp('2026-08-28T21:00:00.000Z'),
+      throughCreatedAt,
+      limit: 3,
+    })
+    deepEqual(filtered.movements.map((item) => item.id), ['movement-1'])
+    deepEqual(filtered.summary, first.summary)
+
+    const frozen = await repository.getStockMovementHistory({
+      throughCreatedAt: timestamp('2026-08-29T12:00:00.000Z'),
+      limit: 10,
+    })
+    deepEqual(frozen.movements.map((item) => item.id), [
+      'movement-3', 'movement-2', 'movement-1',
+    ])
+  } finally {
+    repository.close()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('SqliteCommerceRepository reconciles all products with the movement journal', async () => {
+  const { directory, repository } = createRepository()
+  const timestamp = new Date('2026-08-29T12:00:00.000Z')
+
+  try {
+    await repository.saveProduct(createProduct(5))
+    await repository.saveProduct({
+      ...createProduct(1), id: 'product-2', name: 'Курага', quantity: 1,
+      status: 'inactive',
+    })
+    await repository.withTransaction(async (unitOfWork) => {
+      await unitOfWork.saveStockMovements([{
+        id: 'movement-1', createdAt: timestamp, updatedAt: timestamp,
+        productId: 'product-1', type: 'purchase', quantity: 4, unit: 'kg',
+      }, {
+        id: 'movement-2', createdAt: timestamp, updatedAt: timestamp,
+        productId: 'product-1', type: 'adjustment', quantity: 1, unit: 'kg',
+      }, {
+        id: 'movement-3', createdAt: timestamp, updatedAt: timestamp,
+        productId: 'product-2', type: 'sale', quantity: -1, unit: 'kg',
+      }])
+    })
+
+    deepEqual(await repository.getStockIntegrityDiscrepancies(), [{
+      productId: 'product-2', productName: 'Курага', actualQuantity: 1,
+      calculatedQuantity: -1, difference: 2,
+    }])
   } finally {
     repository.close()
     rmSync(directory, { recursive: true, force: true })

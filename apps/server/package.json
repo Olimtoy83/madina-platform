@@ -8,7 +8,7 @@
     "db:backup": "node dist/cli/databaseBackupCommand.js",
     "db:check": "node dist/cli/databaseCheckCommand.js",
     "build": "tsc -p tsconfig.json",
-    "test": "node --test dist/cli/bootstrapAdmin.test.js dist/cli/databaseBackupCommand.test.js dist/cli/databaseCheckCommand.test.js dist/routes/api/v1/audit/index.test.js dist/routes/api/v1/auth/index.test.js dist/routes/api/v1/clients/index.test.js dist/routes/api/v1/commerce/index.test.js dist/routes/api/v1/commerce/mutations.test.js dist/routes/api/v1/commerce/workbook.test.js dist/routes/api/v1/initialization.test.js dist/routes/api/v1/protection.test.js dist/routes/api/v1/reporting/index.test.js dist/routes/api/v1/tasks/index.test.js dist/workbooks/productsWorkbook.test.js",
+    "test": "node --test dist/cli/bootstrapAdmin.test.js dist/cli/databaseBackupCommand.test.js dist/cli/databaseCheckCommand.test.js dist/routes/api/v1/audit/index.test.js dist/routes/api/v1/auth/index.test.js dist/routes/api/v1/clients/index.test.js dist/routes/api/v1/commerce/history.test.js dist/routes/api/v1/commerce/index.test.js dist/routes/api/v1/commerce/mutations.test.js dist/routes/api/v1/commerce/workbook.test.js dist/routes/api/v1/initialization.test.js dist/routes/api/v1/protection.test.js dist/routes/api/v1/reporting/index.test.js dist/routes/api/v1/tasks/index.test.js dist/workbooks/productsWorkbook.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

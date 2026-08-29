@@ -1,4 +1,8 @@
-import type { Product, StockMovement } from '../inventory/index.js'
+import type {
+  Product,
+  StockIntegrityDiscrepancy,
+  StockMovement,
+} from '../inventory/index.js'
 import type { Purchase } from '../purchases/index.js'
 import type { Sale } from '../sales/index.js'
 import type { Transaction } from '../transactions/index.js'
@@ -11,6 +15,34 @@ export interface CommerceReadRepository {
   findAllPurchases(): Promise<Purchase[]>
   findAllSales(): Promise<Sale[]>
   findAllTransactions(): Promise<Transaction[]>
+  getStockMovementHistory(
+    query: StockMovementHistoryQuery,
+  ): Promise<StockMovementHistory>
+  getStockIntegrityDiscrepancies(): Promise<
+    StockIntegrityDiscrepancy[]
+  >
+}
+
+export interface StockMovementHistoryQuery {
+  productId?: string
+  type?: StockMovement['type']
+  fromCreatedAt?: Date
+  toCreatedAtExclusive?: Date
+  throughCreatedAt: Date
+  limit: number
+  cursor?: {
+    createdAt: Date
+    id: string
+  }
+}
+
+export interface StockMovementHistory {
+  summary: {
+    totalMovements: number
+    totalPurchases: number
+    totalSales: number
+  }
+  movements: StockMovement[]
 }
 
 export interface CommerceUnitOfWork

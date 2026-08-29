@@ -10,6 +10,18 @@ interface CalendarDate {
   day: number
 }
 
+export interface BusinessDateRange {
+  from?: Date
+  toExclusive?: Date
+}
+
+export class BusinessDateRangeError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BusinessDateRangeError'
+  }
+}
+
 const calendarFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: BUSINESS_TIMEZONE,
   calendar: 'iso8601',
@@ -69,6 +81,46 @@ export function resolveReportingPeriodWindow(
     }),
     to: effectiveNow,
   }
+}
+
+/** Resolves inclusive business calendar dates to absolute half-open instants. */
+export function resolveBusinessDateRange(
+  dateFrom?: string,
+  dateTo?: string,
+): BusinessDateRange {
+  const from = dateFrom === undefined
+    ? undefined
+    : calendarDateStart(parseBusinessDate(dateFrom))
+  const toExclusive = dateTo === undefined
+    ? undefined
+    : calendarDateStart(addCalendarDays(parseBusinessDate(dateTo), 1))
+
+  if (from && toExclusive && from >= toExclusive) {
+    throw new BusinessDateRangeError('Business date range is invalid.')
+  }
+
+  return { from, toExclusive }
+}
+
+function parseBusinessDate(value: string): CalendarDate {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) throw new BusinessDateRangeError('Business date is invalid.')
+
+  const date = {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  }
+  const candidate = new Date(Date.UTC(date.year, date.month - 1, date.day))
+  if (
+    candidate.getUTCFullYear() !== date.year ||
+    candidate.getUTCMonth() + 1 !== date.month ||
+    candidate.getUTCDate() !== date.day
+  ) {
+    throw new BusinessDateRangeError('Business date is invalid.')
+  }
+
+  return date
 }
 
 function getCalendarDate(instant: Date): CalendarDate {

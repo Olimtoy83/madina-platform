@@ -18,6 +18,10 @@ import type {
   SalesListResponse,
   StockMovementResponse,
   StockAdjustmentResponse,
+  StockIntegrityDiscrepancyResponse,
+  StockMovementHistoryQuery,
+  StockMovementHistoryResponse,
+  StockMovementIntegrityResponse,
   StockMovementsListResponse,
   TransactionResponse,
   TransactionsListResponse,
@@ -29,6 +33,7 @@ import type {
   CommerceRepository,
   CommerceService,
   CommerceSnapshot,
+  StockMovementReadService,
   Product,
   Purchase,
   Sale,
@@ -42,6 +47,10 @@ import {
   ProductValidationError,
   PurchaseValidationError,
   SaleValidationError,
+} from '@madina/core'
+import {
+  BusinessDateRangeError,
+  resolveBusinessDateRange,
 } from '@madina/core'
 import type {
   FastifyInstance,
@@ -62,6 +71,7 @@ import {
 interface CommerceRoutesOptions {
   commerceRepository: CommerceRepository
   commerceService: CommerceService
+  stockMovementReadService: StockMovementReadService
 }
 
 interface PurchaseParams {
@@ -74,6 +84,215 @@ interface SaleParams {
 
 interface ProductParams {
   productId: string
+}
+
+const DEFAULT_STOCK_MOVEMENT_HISTORY_LIMIT = 50
+const MAX_STOCK_MOVEMENT_HISTORY_LIMIT = 100
+
+interface StockMovementHistoryCursor {
+  version: 1
+  createdAt: string
+  id: string
+  filters: {
+    productId?: string
+    type?: StockMovementResponse['type']
+    dateFrom?: string
+    dateTo?: string
+  }
+  throughCreatedAt: string
+}
+
+interface NormalizedStockMovementHistoryQuery {
+  productId?: string
+  type?: StockMovementResponse['type']
+  dateFrom?: string
+  dateTo?: string
+  limit: number
+  throughCreatedAt: Date
+  cursor?: {
+    createdAt: Date
+    id: string
+  }
+}
+
+class StockMovementHistoryValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'StockMovementHistoryValidationError'
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseHistoryLimit(value: unknown): number {
+  if (value === undefined) return DEFAULT_STOCK_MOVEMENT_HISTORY_LIMIT
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history limit is invalid.',
+    )
+  }
+
+  const limit = Number(value)
+  if (!Number.isSafeInteger(limit) || limit > MAX_STOCK_MOVEMENT_HISTORY_LIMIT) {
+    throw new StockMovementHistoryValidationError(
+      `Stock movement history limit must be between 1 and ${MAX_STOCK_MOVEMENT_HISTORY_LIMIT}.`,
+    )
+  }
+
+  return limit
+}
+
+function normalizeHistoryType(
+  value: unknown,
+): StockMovementResponse['type'] | undefined {
+  if (value === undefined) return undefined
+  if (value === 'purchase' || value === 'sale' || value === 'adjustment') {
+    return value
+  }
+  throw new StockMovementHistoryValidationError(
+    'Stock movement history type is invalid.',
+  )
+}
+
+function normalizeOptionalText(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new StockMovementHistoryValidationError(
+      `Stock movement history ${field} is invalid.`,
+    )
+  }
+  return value.trim()
+}
+
+function parseIsoInstant(value: unknown): Date {
+  if (typeof value !== 'string') {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history cursor is invalid.',
+    )
+  }
+  const instant = new Date(value)
+  if (Number.isNaN(instant.getTime()) || instant.toISOString() !== value) {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history cursor is invalid.',
+    )
+  }
+  return instant
+}
+
+function decodeHistoryCursor(
+  value: unknown,
+): StockMovementHistoryCursor | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history cursor is invalid.',
+    )
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'))
+    if (!isRecord(decoded) || !isRecord(decoded.filters)) throw new Error()
+    const allowedKeys = ['version', 'createdAt', 'id', 'filters', 'throughCreatedAt']
+    const allowedFilters = ['productId', 'type', 'dateFrom', 'dateTo']
+    if (
+      Object.keys(decoded).some((key) => !allowedKeys.includes(key)) ||
+      Object.keys(decoded.filters).some((key) => !allowedFilters.includes(key)) ||
+      decoded.version !== 1 ||
+      typeof decoded.id !== 'string' || !decoded.id.trim()
+    ) throw new Error()
+
+    return {
+      version: 1,
+      createdAt: parseIsoInstant(decoded.createdAt).toISOString(),
+      id: decoded.id,
+      filters: {
+        productId: normalizeOptionalText(decoded.filters.productId, 'cursor filter'),
+        type: normalizeHistoryType(decoded.filters.type),
+        dateFrom: normalizeOptionalText(decoded.filters.dateFrom, 'cursor filter'),
+        dateTo: normalizeOptionalText(decoded.filters.dateTo, 'cursor filter'),
+      },
+      throughCreatedAt: parseIsoInstant(decoded.throughCreatedAt).toISOString(),
+    }
+  } catch (error) {
+    if (error instanceof StockMovementHistoryValidationError) throw error
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history cursor is invalid.',
+    )
+  }
+}
+
+function encodeHistoryCursor(
+  movement: StockMovementResponse,
+  query: NormalizedStockMovementHistoryQuery,
+): string {
+  return Buffer.from(JSON.stringify({
+    version: 1,
+    createdAt: movement.createdAt,
+    id: movement.id,
+    filters: {
+      productId: query.productId,
+      type: query.type,
+      dateFrom: query.dateFrom,
+      dateTo: query.dateTo,
+    },
+    throughCreatedAt: query.throughCreatedAt.toISOString(),
+  } satisfies StockMovementHistoryCursor)).toString('base64url')
+}
+
+function normalizeStockMovementHistoryQuery(
+  input: StockMovementHistoryQuery | unknown,
+  now: Date,
+): NormalizedStockMovementHistoryQuery {
+  if (!isRecord(input)) {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history query is invalid.',
+    )
+  }
+  if (Object.keys(input).some((key) => ![
+    'productId', 'type', 'dateFrom', 'dateTo', 'limit', 'cursor',
+  ].includes(key))) {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history query contains an unsupported parameter.',
+    )
+  }
+
+  const productId = normalizeOptionalText(input.productId, 'productId')
+  const type = normalizeHistoryType(input.type)
+  const dateFrom = normalizeOptionalText(input.dateFrom, 'dateFrom')
+  const dateTo = normalizeOptionalText(input.dateTo, 'dateTo')
+  const cursor = decodeHistoryCursor(input.cursor)
+
+  if (
+    cursor && (
+      cursor.filters.productId !== productId ||
+      cursor.filters.type !== type ||
+      cursor.filters.dateFrom !== dateFrom ||
+      cursor.filters.dateTo !== dateTo
+    )
+  ) {
+    throw new StockMovementHistoryValidationError(
+      'Stock movement history cursor does not match the current filters.',
+    )
+  }
+
+  return {
+    productId,
+    type,
+    dateFrom,
+    dateTo,
+    limit: parseHistoryLimit(input.limit),
+    throughCreatedAt: cursor
+      ? new Date(cursor.throughCreatedAt)
+      : now,
+    cursor: cursor
+      ? { createdAt: new Date(cursor.createdAt), id: cursor.id }
+      : undefined,
+  }
 }
 
 function toProductResponse(product: Product): ProductResponse {
@@ -596,6 +815,79 @@ export async function commerceRoutes(
       stockMovements: (
         await options.commerceRepository.findAllStockMovements()
       ).map(toStockMovementResponse),
+    }),
+  )
+
+  app.get<{
+    Querystring: StockMovementHistoryQuery
+  }>(
+    '/stock-movements/history',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (request, reply): Promise<
+      StockMovementHistoryResponse | ApiErrorResponse
+    > => {
+      try {
+        const query = normalizeStockMovementHistoryQuery(
+          request.query,
+          new Date(),
+        )
+        const dates = resolveBusinessDateRange(query.dateFrom, query.dateTo)
+        const history = await options.stockMovementReadService.getHistory({
+          productId: query.productId,
+          type: query.type,
+          fromCreatedAt: dates.from,
+          toCreatedAtExclusive: dates.toExclusive,
+          throughCreatedAt: query.throughCreatedAt,
+          limit: query.limit + 1,
+          cursor: query.cursor,
+        })
+        const items = history.movements.slice(0, query.limit)
+          .map(toStockMovementResponse)
+        const last = items.at(-1)
+
+        return {
+          summary: history.summary,
+          stockMovements: {
+            items,
+            nextCursor: history.movements.length > query.limit && last
+              ? encodeHistoryCursor(last, query)
+              : undefined,
+          },
+        }
+      } catch (error) {
+        if (
+          error instanceof StockMovementHistoryValidationError ||
+          error instanceof BusinessDateRangeError
+        ) {
+          reply.code(400)
+          return {
+            statusCode: 400,
+            error: 'Bad Request',
+            message: error.message,
+          }
+        }
+        throw error
+      }
+    },
+  )
+
+  app.get(
+    '/stock-movements/integrity',
+    {
+      preHandler: requirePermission(app, 'commerce:read'),
+    },
+    async (): Promise<StockMovementIntegrityResponse> => ({
+      discrepancies: (
+        await options.stockMovementReadService.getIntegrityDiscrepancies()
+      ).map((discrepancy): StockIntegrityDiscrepancyResponse => ({
+        productId: discrepancy.productId,
+        productName: discrepancy.productName,
+        actualQuantity: discrepancy.actualQuantity,
+        calculatedQuantity: discrepancy.calculatedQuantity,
+        difference: discrepancy.difference,
+      })),
     }),
   )
 

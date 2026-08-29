@@ -2,12 +2,18 @@ import type { DatabaseSync } from 'node:sqlite'
 import type {
   CommerceRepository,
   CommerceSnapshot,
+  StockMovementHistory,
+  StockMovementHistoryQuery,
   CommerceUnitOfWork,
   Product,
   Purchase,
   Sale,
   StockMovement,
   Transaction,
+} from '@madina/core'
+import {
+  STOCK_INTEGRITY_EPSILON,
+  type StockIntegrityDiscrepancy,
 } from '@madina/core'
 import type { AuditEvent } from '@madina/shared'
 import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
@@ -140,6 +146,110 @@ function toStockMovement(
     referenceId: row.reference_id ?? undefined,
     note: row.note ?? undefined,
   }
+}
+
+function readStockMovementHistory(
+  database: DatabaseSync,
+  query: StockMovementHistoryQuery,
+): StockMovementHistory {
+  const predicates = ['created_at <= ?']
+  const parameters: Array<string | number> = [
+    query.throughCreatedAt.toISOString(),
+  ]
+
+  if (query.productId) {
+    predicates.push('product_id = ?')
+    parameters.push(query.productId)
+  }
+
+  if (query.type) {
+    predicates.push('type = ?')
+    parameters.push(query.type)
+  }
+
+  if (query.fromCreatedAt) {
+    predicates.push('created_at >= ?')
+    parameters.push(query.fromCreatedAt.toISOString())
+  }
+
+  if (query.toCreatedAtExclusive) {
+    predicates.push('created_at < ?')
+    parameters.push(query.toCreatedAtExclusive.toISOString())
+  }
+
+  if (query.cursor) {
+    predicates.push(`(
+      created_at < ? OR (created_at = ? AND id < ?)
+    )`)
+    const cursorCreatedAt = query.cursor.createdAt.toISOString()
+    parameters.push(cursorCreatedAt, cursorCreatedAt, query.cursor.id)
+  }
+
+  const summary = database.prepare(`
+    SELECT
+      COUNT(*) AS total_movements,
+      COALESCE(SUM(CASE WHEN type = 'purchase' THEN quantity ELSE 0 END), 0)
+        AS total_purchases,
+      ABS(COALESCE(SUM(CASE WHEN type = 'sale' THEN quantity ELSE 0 END), 0))
+        AS total_sales
+    FROM stock_movements
+    WHERE created_at <= ?
+  `).get(query.throughCreatedAt.toISOString()) as {
+    total_movements: number
+    total_purchases: number
+    total_sales: number
+  }
+
+  const rows = database.prepare(`
+    SELECT id, created_at, updated_at, product_id, type, quantity, unit,
+      reference_id, note
+    FROM stock_movements
+    WHERE ${predicates.join(' AND ')}
+    ORDER BY created_at DESC, id DESC
+    LIMIT ?
+  `).all(...parameters, query.limit) as unknown as StockMovementRow[]
+
+  return {
+    summary: {
+      totalMovements: summary.total_movements,
+      totalPurchases: summary.total_purchases,
+      totalSales: summary.total_sales,
+    },
+    movements: rows.map(toStockMovement),
+  }
+}
+
+function readStockIntegrityDiscrepancies(
+  database: DatabaseSync,
+): StockIntegrityDiscrepancy[] {
+  const rows = database.prepare(`
+    SELECT
+      products.id AS product_id,
+      products.name AS product_name,
+      products.quantity AS actual_quantity,
+      COALESCE(SUM(stock_movements.quantity), 0) AS calculated_quantity
+    FROM products
+    LEFT JOIN stock_movements
+      ON stock_movements.product_id = products.id
+    GROUP BY products.id
+    HAVING ABS(
+      products.quantity - COALESCE(SUM(stock_movements.quantity), 0)
+    ) > ?
+    ORDER BY products.name COLLATE NOCASE, products.id
+  `).all(STOCK_INTEGRITY_EPSILON) as Array<{
+    product_id: string
+    product_name: string
+    actual_quantity: number
+    calculated_quantity: number
+  }>
+
+  return rows.map((row) => ({
+    productId: row.product_id,
+    productName: row.product_name,
+    actualQuantity: row.actual_quantity,
+    calculatedQuantity: row.calculated_quantity,
+    difference: row.actual_quantity - row.calculated_quantity,
+  }))
 }
 
 class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
@@ -314,6 +424,18 @@ class SqliteCommerceUnitOfWork implements CommerceUnitOfWork {
     `).all() as unknown as TransactionRow[]
 
     return rows.map(toTransaction)
+  }
+
+  async getStockMovementHistory(
+    query: StockMovementHistoryQuery,
+  ): Promise<StockMovementHistory> {
+    return readStockMovementHistory(this.database, query)
+  }
+
+  async getStockIntegrityDiscrepancies(): Promise<
+    StockIntegrityDiscrepancy[]
+  > {
+    return readStockIntegrityDiscrepancies(this.database)
   }
 
   async saveProducts(products: Product[]): Promise<void> {
@@ -680,6 +802,36 @@ export class SqliteCommerceRepository implements CommerceRepository {
     `).all() as unknown as TransactionRow[]
 
     return rows.map(toTransaction)
+  }
+
+  async getStockMovementHistory(
+    query: StockMovementHistoryQuery,
+  ): Promise<StockMovementHistory> {
+    this.database.exec('BEGIN DEFERRED')
+
+    try {
+      const history = readStockMovementHistory(this.database, query)
+      this.database.exec('COMMIT')
+      return history
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getStockIntegrityDiscrepancies(): Promise<
+    StockIntegrityDiscrepancy[]
+  > {
+    this.database.exec('BEGIN DEFERRED')
+
+    try {
+      const discrepancies = readStockIntegrityDiscrepancies(this.database)
+      this.database.exec('COMMIT')
+      return discrepancies
+    } catch (error) {
+      this.database.exec('ROLLBACK')
+      throw error
+    }
   }
 
   async saveProduct(product: Product): Promise<void> {

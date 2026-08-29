@@ -148,6 +148,38 @@ export interface TransactionResponse {
 
 export interface ProductsListResponse { products: ProductResponse[] }
 export interface StockMovementsListResponse { stockMovements: StockMovementResponse[] }
+export interface StockMovementHistoryQuery {
+  productId?: string
+  type?: StockMovementResponse['type']
+  dateFrom?: string
+  dateTo?: string
+  limit?: string
+  cursor?: string
+}
+
+export interface StockMovementHistoryResponse {
+  summary: {
+    totalMovements: number
+    totalPurchases: number
+    totalSales: number
+  }
+  stockMovements: {
+    items: StockMovementResponse[]
+    nextCursor?: string
+  }
+}
+
+export interface StockIntegrityDiscrepancyResponse {
+  productId: string
+  productName: string
+  actualQuantity: number
+  calculatedQuantity: number
+  difference: number
+}
+
+export interface StockMovementIntegrityResponse {
+  discrepancies: StockIntegrityDiscrepancyResponse[]
+}
 export interface PurchasesListResponse { purchases: PurchaseResponse[] }
 export interface SalesListResponse { sales: SaleResponse[] }
 export interface TransactionsListResponse { transactions: TransactionResponse[] }
