@@ -14,6 +14,7 @@ import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import { usePendingCommand } from '../../shared/usePendingCommand'
+import { usePermissions } from '../../context/usePermissions'
 import {
   getSaleItemTotal,
   getSaleItemsTotal,
@@ -46,6 +47,8 @@ import {
 export function Sales() {
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
+  const { can } = usePermissions()
+  const canWriteSales = can('sales:write')
 
   const navigate = useNavigate()
 
@@ -405,6 +408,7 @@ export function Sales() {
           <p>Управление продажами и заказами</p>
         </div>
 
+        {canWriteSales && (
         <Button
           type="button"
           variant="primary"
@@ -412,6 +416,7 @@ export function Sales() {
         >
           Новая продажа
         </Button>
+        )}
       </div>
 
       {error && !isModalOpen && (
@@ -527,7 +532,7 @@ export function Sales() {
                     </TableCell>
 
                     <TableCell>
-                      {sale.status === 'draft' && (
+                        {canWriteSales && sale.status === 'draft' && (
                         <div className="sales-page__actions">
                           <Button
                             type="button"
@@ -566,7 +571,7 @@ export function Sales() {
         )}
       </Card>
 
-      {isModalOpen && (
+      {canWriteSales && isModalOpen && (
         <Modal
           open={isModalOpen}
           onClose={closeModal}
@@ -843,7 +848,7 @@ export function Sales() {
         </Modal>
       )}
 
-      {saleToCancel && (
+      {canWriteSales && saleToCancel && (
         <ConfirmDialog
           open={saleToCancel !== null}
           onClose={() => setSaleToCancel(null)}

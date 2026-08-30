@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useClients } from '../../context/useClients'
 import { useTransactionalState } from '../../context/useTransactionalState'
+import { usePermissions } from '../../context/usePermissions'
 import { useToast } from '../../context/ToastProvider'
 import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
@@ -40,6 +41,8 @@ export function Clients() {
   } = useClients()
 
   const { snapshot } = useTransactionalState()
+  const { can } = usePermissions()
+  const canWriteClients = can('clients:write')
 
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
@@ -163,6 +166,7 @@ export function Clients() {
           </p>
         </div>
 
+        {canWriteClients && (
         <Button
           type="button"
           variant="primary"
@@ -174,8 +178,10 @@ export function Clients() {
             ? 'Закрыть'
             : 'Новый клиент'}
         </Button>
+        )}
       </div>
 
+      {canWriteClients && (
       <Modal
         open={isFormOpen}
         onClose={() => {
@@ -298,6 +304,7 @@ export function Clients() {
           </Button>
         </div>
       </Modal>
+      )}
 
       <div className="clients-page__summary">
         <Card className="clients-page__summary-card">
@@ -431,6 +438,7 @@ export function Clients() {
                     </TableCell>
 
                     <TableCell>
+                      {canWriteClients ? (
                       <Select
                         size="sm"
                         value={client.status}
@@ -477,9 +485,15 @@ export function Clients() {
                           Неактивен
                         </option>
                       </Select>
+                      ) : (
+                        client.status === 'active'
+                          ? 'Активен'
+                          : 'Неактивен'
+                      )}
                     </TableCell>
 
                     <TableCell>
+                      {canWriteClients && (
                       <Button
                         type="button"
                         variant="secondary"
@@ -493,6 +507,7 @@ export function Clients() {
                       >
                         Деактивировать
                       </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 )
@@ -502,7 +517,7 @@ export function Clients() {
         </Table>
       </Card>
 
-      {clientToDeactivate && (
+      {canWriteClients && clientToDeactivate && (
         <Modal
           open={true}
           onClose={() => setClientToDeactivate(null)}

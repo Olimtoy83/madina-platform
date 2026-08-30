@@ -17,6 +17,7 @@ import type {
   ReportingSummaryResponse,
 } from '@madina/api'
 import { useTransactionalState } from '../../context/useTransactionalState'
+import { usePermissions } from '../../context/usePermissions'
 import {
   getIncomeReport,
   getReportingSummary,
@@ -26,6 +27,7 @@ import './Dashboard.css'
 
 export function Dashboard() {
   const navigate = useNavigate()
+  const { can } = usePermissions()
   const { snapshot } = useTransactionalState()
   const [summary, setSummary] =
     useState<ReportingSummaryResponse | null>(null)
@@ -317,6 +319,7 @@ export function Dashboard() {
           </div>
 
           <div className="dashboard__quick-actions">
+            {can('sales:write') && (
             <Button
               type="button"
               variant="secondary"
@@ -326,7 +329,9 @@ export function Dashboard() {
             >
               Новая продажа
             </Button>
+            )}
 
+            {can('purchases:write') && (
             <Button
               type="button"
               variant="secondary"
@@ -336,6 +341,7 @@ export function Dashboard() {
             >
               Добавить поступление
             </Button>
+            )}
 
             <Button
               type="button"

@@ -20,6 +20,9 @@ importers:
       '@madina/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@madina/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@madina/core':
         specifier: workspace:*
         version: link:../../packages/core

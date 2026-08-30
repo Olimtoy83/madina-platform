@@ -15,6 +15,7 @@ import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import { usePendingCommand } from '../../shared/usePendingCommand'
+import { usePermissions } from '../../context/usePermissions'
 import { getSaleById } from '../../shared/api/commerceApi'
 import { HttpError } from '../../shared/api/httpClient'
 import type { Sale } from '@madina/core'
@@ -33,6 +34,7 @@ export function SaleDetails() {
 
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
+  const { can } = usePermissions()
 
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] =
     useState(false)
@@ -188,7 +190,7 @@ export function SaleDetails() {
             : 'Отменено'}
       </p>
 
-      {isDraft && (
+      {isDraft && can('sales:write') && (
         <div>
           <Button
             type="button"

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@madina/api": "workspace:*",
+    "@madina/auth": "workspace:*",
     "@madina/core": "workspace:*",
     "@madina/ui": "workspace:*",
     "react": "^19.2.8",

@@ -2,6 +2,7 @@ import type {
   Product,
 } from '@madina/core'
 import type { CommerceAggregateResponse } from './api/commerceApi'
+import { HttpError } from './api/httpClient'
 
 export interface CommerceAggregateState {
   products: Product[]
@@ -16,6 +17,13 @@ export interface CommerceMutationResult<T> {
 export function toCommerceMutationFailure(
   error: unknown,
 ): CommerceMutationResult<never> {
+  if (error instanceof HttpError && error.status === 403) {
+    return {
+      success: false,
+      message: 'У вас нет прав для этого действия.',
+    }
+  }
+
   return {
     success: false,
     message: error instanceof Error

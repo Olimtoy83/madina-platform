@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { toCommerceAggregateState } from './commerceState'
+import {
+  toCommerceAggregateState,
+  toCommerceMutationFailure,
+} from './commerceState'
+import { HttpError } from './api/httpClient'
 
 describe('toCommerceAggregateState', () => {
   it('maps the global products resource and restores ISO dates', () => {
@@ -12,5 +16,14 @@ describe('toCommerceAggregateState', () => {
 
     expect(state.products[0]?.createdAt).toBeInstanceOf(Date)
     expect(state).not.toHaveProperty('purchases')
+  })
+
+  it('presents a forbidden mutation as a concise CRM message', () => {
+    expect(toCommerceMutationFailure(
+      new HttpError(403, 'Forbidden.'),
+    )).toEqual({
+      success: false,
+      message: 'У вас нет прав для этого действия.',
+    })
   })
 })

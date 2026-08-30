@@ -2,6 +2,7 @@
 import { useTasks } from '../../context/useTasks'
 import { useToast } from '../../context/ToastProvider'
 import { usePendingCommand } from '../../shared/usePendingCommand'
+import { usePermissions } from '../../context/usePermissions'
 import {
   getTaskStats,
   type TaskPriority,
@@ -44,6 +45,8 @@ export function Tasks() {
   } = useTasks()
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
+  const { can } = usePermissions()
+  const canWriteTasks = can('tasks:write')
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
@@ -141,6 +144,7 @@ export function Tasks() {
           </p>
         </div>
 
+        {canWriteTasks && (
         <Button
           type="button"
           onClick={() =>
@@ -151,9 +155,10 @@ export function Tasks() {
             ? 'Закрыть'
             : 'Новая задача'}
         </Button>
+        )}
       </div>
 
-      {isFormOpen && (
+      {canWriteTasks && isFormOpen && (
         <Modal
           open={isFormOpen}
         onClose={() => {
@@ -389,6 +394,7 @@ export function Tasks() {
                   </TableCell>
 
                   <TableCell>
+                    {canWriteTasks ? (
                     <Select
                       size="sm"
                       value={task.status}
@@ -442,6 +448,15 @@ export function Tasks() {
                         Отменено
                       </option>
                     </Select>
+                    ) : (
+                      task.status === 'todo'
+                        ? 'К выполнению'
+                        : task.status === 'in-progress'
+                          ? 'В работе'
+                          : task.status === 'completed'
+                            ? 'Завершено'
+                            : 'Отменено'
+                    )}
                   </TableCell>
 
                   <TableCell>
@@ -453,6 +468,7 @@ export function Tasks() {
                   </TableCell>
 
                   <TableCell>
+                    {canWriteTasks && (
                     <Button
                       type="button"
                       variant="danger"
@@ -464,6 +480,7 @@ export function Tasks() {
                     >
                       Удалить
                     </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
@@ -471,6 +488,7 @@ export function Tasks() {
           </TableBody>
         </Table>
       </Card>
+      {canWriteTasks && (
       <ConfirmDialog
         open={taskToDelete !== null}
         onClose={() => setTaskToDelete(null)}
@@ -513,6 +531,7 @@ export function Tasks() {
           }
         }}
       />
+      )}
     </section>
   )
 }

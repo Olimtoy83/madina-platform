@@ -6,7 +6,7 @@ import {
 import { useProducts } from '../../context/useProducts'
 import { useToast } from '../../context/ToastProvider'
 import { usePendingCommand } from '../../shared/usePendingCommand'
-import { useAuth } from '../../context/useAuth'
+import { usePermissions } from '../../context/usePermissions'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import {
   downloadProductImportTemplate,
@@ -102,7 +102,10 @@ function formatProductWorkbookRowError(
 export function Warehouse() {
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
-  const { user } = useAuth()
+  const { can } = usePermissions()
+  const canWriteProducts = can('products:write')
+  const canAdjustStock = can('stock:adjust')
+  const canImportProducts = can('data:import')
   const { reload, snapshot } = useTransactionalState()
   const {
     products,
@@ -604,7 +607,7 @@ export function Warehouse() {
               : 'Скачать шаблон Excel'}
           </Button>
 
-          {user?.role === 'admin' && (
+          {canImportProducts && (
             <Button
               type="button"
               variant="secondary"
@@ -625,6 +628,7 @@ export function Warehouse() {
               : 'Экспорт Excel'}
           </Button>
 
+          {canWriteProducts && (
           <Button
             type="button"
             className="warehouse__add-button"
@@ -632,6 +636,7 @@ export function Warehouse() {
           >
             Добавить товар
           </Button>
+          )}
         </div>
       </div>
 
@@ -913,7 +918,7 @@ export function Warehouse() {
         </Table>
       </Card>
 
-      {isAdding && (
+      {canWriteProducts && isAdding && (
         <Modal
           open={isAdding}
           onClose={cancelAdding}
@@ -1243,6 +1248,7 @@ export function Warehouse() {
                   Закрыть
                 </Button>
 
+                {canWriteProducts && (
                 <Button
                   type="button"
                   variant="danger"
@@ -1253,7 +1259,9 @@ export function Warehouse() {
                 >
                   Деактивировать
                 </Button>
+                )}
 
+                {canAdjustStock && (
                 <Button
                   type="button"
                   variant="secondary"
@@ -1264,20 +1272,23 @@ export function Warehouse() {
                 >
                   Корректировка
                 </Button>
+                )}
 
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={startEditing}
-                  disabled={
-                    isPending(`product.update:${selectedProduct.id}`)
-                  }
-                >
-                  Редактировать
-                </Button>
+                {canWriteProducts && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={startEditing}
+                    disabled={
+                      isPending(`product.update:${selectedProduct.id}`)
+                    }
+                  >
+                    Редактировать
+                  </Button>
+                )}
               </div>
 
-              {isAdjustmentOpen && (
+              {canAdjustStock && isAdjustmentOpen && (
                 <Modal
                   open={isAdjustmentOpen}
                   onClose={cancelAdjustment}
@@ -1380,6 +1391,7 @@ export function Warehouse() {
                 </Modal>
               )}
 
+              {canWriteProducts && (
               <ConfirmDialog
                 open={isDeactivateConfirmOpen}
                 onClose={cancelDeactivation}
@@ -1397,6 +1409,7 @@ export function Warehouse() {
                 }
                 onConfirm={confirmDeactivation}
               />
+              )}
             </>
           ) : (
             <Modal

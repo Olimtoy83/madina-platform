@@ -15,6 +15,11 @@
       "types": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./rbac": {
+      "types": "./src/rbac.ts",
+      "import": "./dist/rbac.js",
+      "default": "./dist/rbac.js"
     }
   },
   "dependencies": {

@@ -36,6 +36,7 @@ import { usePurchasesMutations } from '../../context/usePurchasesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
 import { usePendingCommand } from '../../shared/usePendingCommand'
+import { usePermissions } from '../../context/usePermissions'
 import {
   getNextPurchaseNumber,
   getPurchaseById,
@@ -75,6 +76,8 @@ function getPurchasesErrorMessage(error: unknown): string {
 export function Purchases() {
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
+  const { can } = usePermissions()
+  const canWritePurchases = can('purchases:write')
 
   const { products } = useProducts()
 
@@ -539,6 +542,7 @@ export function Purchases() {
           </p>
         </div>
 
+        {canWritePurchases && (
         <Button
           type="button"
           variant="primary"
@@ -546,6 +550,7 @@ export function Purchases() {
         >
           Добавить поступление
         </Button>
+        )}
       </div>
 
       {error && !isCreateOpen && (
@@ -828,7 +833,7 @@ export function Purchases() {
           </div>
 
           <div className="purchases__purchase-card-actions">
-            {selectedPurchase.status ===
+            {canWritePurchases && selectedPurchase.status ===
               'draft' && (
                 <Button
                   type="button"
@@ -869,7 +874,7 @@ export function Purchases() {
                 </Button>
               )}
 
-            {selectedPurchase.status === 'draft' && (
+            {canWritePurchases && selectedPurchase.status === 'draft' && (
               <Button
                 type="button"
                 variant="secondary"
@@ -897,7 +902,7 @@ export function Purchases() {
         </Card>
       )}
 
-      {isCreateOpen && (
+      {canWritePurchases && isCreateOpen && (
         <Modal
           open={isCreateOpen}
           onClose={() => {
@@ -1150,6 +1155,7 @@ export function Purchases() {
         </Modal>
       )}
 
+      {canWritePurchases && (
       <ConfirmDialog
         open={Boolean(purchaseToCancel)}
         onClose={() => setPurchaseToCancel(null)}
@@ -1201,6 +1207,7 @@ export function Purchases() {
           setPurchaseToCancel(null)
         }}
       />
+      )}
     </section >
   )
 }

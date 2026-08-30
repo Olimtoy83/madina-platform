@@ -6,6 +6,7 @@ import {
 } from 'react-router-dom'
 import { useClients } from '../../context/useClients'
 import { useTransactionalState } from '../../context/useTransactionalState'
+import { usePermissions } from '../../context/usePermissions'
 import { getSalesHistory, type SalesHistory } from '../../shared/api/commerceApi'
 import './ClientDetails.css'
 import {
@@ -33,6 +34,7 @@ export function ClientDetails() {
 
   const { clients } = useClients()
   const { snapshot } = useTransactionalState()
+  const { can } = usePermissions()
 
   const providerClient = clients.find(
     (item) => item.id === clientId,
@@ -224,6 +226,7 @@ export function ClientDetails() {
             ← Назад к клиентам
           </Button>
 
+          {can('sales:write') && (
           <Button
             type="button"
             variant="primary"
@@ -237,6 +240,7 @@ export function ClientDetails() {
           >
             Новая продажа
           </Button>
+          )}
 
           <h1>{client.name}</h1>
 
