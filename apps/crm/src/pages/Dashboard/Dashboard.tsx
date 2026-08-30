@@ -10,7 +10,6 @@ import {
   Alert,
   Button,
   Card,
-  Skeleton,
 } from '@madina/ui'
 import type {
   FinancialTransactionRowResponse,
@@ -127,7 +126,14 @@ export function Dashboard() {
     if (kpis) return value
 
     if (isSummaryLoading) {
-      return <Skeleton variant="text" width="70%" />
+      return (
+        <span
+          className="mb-skeleton mb-skeleton--text"
+          style={{ width: '70%' }}
+          aria-busy="true"
+          aria-live="polite"
+        />
+      )
     }
 
     return '—'

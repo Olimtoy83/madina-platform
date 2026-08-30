@@ -869,18 +869,20 @@ function validateSnapshot(snapshot: CommerceSnapshot): void {
       )
     }
 
-    const movementKey = [
-      movement.type,
-      movement.productId,
-      movement.referenceId ?? '',
-    ].join(':')
+    if (movement.referenceId !== undefined) {
+      const movementKey = [
+        movement.type,
+        movement.productId,
+        movement.referenceId,
+      ].join(':')
 
-    if (movementKeys.has(movementKey)) {
-      throw new CommerceSnapshotValidationError(
-        `Duplicate stock movement reference: ${movementKey}.`,
-      )
+      if (movementKeys.has(movementKey)) {
+        throw new CommerceSnapshotValidationError(
+          `Duplicate stock movement reference: ${movementKey}.`,
+        )
+      }
+      movementKeys.add(movementKey)
     }
-    movementKeys.add(movementKey)
 
     if (movement.type === 'purchase') {
       const purchase = movement.referenceId

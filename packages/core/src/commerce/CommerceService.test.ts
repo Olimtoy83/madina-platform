@@ -329,6 +329,53 @@ describe('CommerceService', () => {
     })
   })
 
+  it('imports distinct legacy stock adjustments without references and remains idempotent on retry', async () => {
+    const repository = new InMemoryCommerceRepository()
+    repository.products = []
+    repository.purchases = []
+    repository.sales = []
+    repository.movements = []
+    repository.transactions = []
+    const service = new CommerceService(repository)
+    const product = createProduct(5)
+    const snapshot: CommerceSnapshot = {
+      products: [product],
+      purchases: [],
+      sales: [],
+      stockMovements: [
+        {
+          id: 'adjustment-1',
+          createdAt: product.createdAt,
+          updatedAt: product.updatedAt,
+          productId: product.id,
+          type: 'adjustment',
+          quantity: 2,
+          unit: product.unit,
+        },
+        {
+          id: 'adjustment-2',
+          createdAt: product.createdAt,
+          updatedAt: product.updatedAt,
+          productId: product.id,
+          type: 'adjustment',
+          quantity: 3,
+          unit: product.unit,
+        },
+      ],
+      transactions: [],
+    }
+
+    await expect(service.importSnapshot(snapshot, context)).resolves.toEqual({
+      imported: true,
+      idempotent: false,
+    })
+    await expect(service.importSnapshot(snapshot, context)).resolves.toEqual({
+      imported: false,
+      idempotent: true,
+    })
+    expect(repository.movements).toHaveLength(2)
+  })
+
   it('completes bulk product domain validation before opening a transaction', async () => {
     const repository = new InMemoryCommerceRepository()
     const service = new CommerceService(repository)
