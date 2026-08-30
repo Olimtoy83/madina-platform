@@ -1,27 +1,23 @@
 .sales-page {
-  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  width: 100%;
+  gap: var(--space-6);
 }
-
-/* =========================================================
-   Header
-   ========================================================= */
 
 .sales-page__header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-4);
 }
 
 .sales-page__header h1 {
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-1);
   color: var(--color-text-heading);
   font-size: var(--font-size-display);
-  line-height: 1.2;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
 }
 
 .sales-page__header p {
@@ -30,278 +26,281 @@
   font-size: var(--font-size-page-description);
 }
 
-/* =========================================================
-   Summary
-   ========================================================= */
-
 .sales-page__summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-3);
 }
 
 .sales-page__summary-card {
-  min-height: 110px;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 8px;
+  min-height: 86px;
+  padding: var(--space-4);
+  gap: var(--space-2);
 }
 
 .sales-page__summary-card span {
   color: var(--color-text-muted);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
 }
 
 .sales-page__summary-card strong {
   color: var(--color-text-heading);
-  font-size: var(--font-size-metric);
-  font-weight: 600;
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
-/* =========================================================
-   Sales table
-   ========================================================= */
-
 .sales-page__table-card {
-  width: 100%;
   overflow: hidden;
 }
 
 .sales-page__table-header {
-  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--color-border);
 }
 
 .sales-page__table-header h2 {
-  margin: 0;
+  margin: 0 0 2px;
   color: var(--color-text-heading);
   font-size: var(--font-size-section);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
-.sales-page__table-wrapper {
+.sales-page__table-header span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.sales-page__table-wrapper,
+.sales-page__table-wrapper .mb-table__wrapper {
   width: 100%;
+}
+
+.sales-page__table-wrapper .mb-table__wrapper {
+  border: 0;
+  border-radius: 0;
 }
 
 .sales-page__table {
-  width: 100%;
-  min-width: 850px;
-  border-collapse: collapse;
-  text-align: left;
+  min-width: 940px;
 }
 
-.sales-page__table th,
-.sales-page__table td {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--color-border);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.sales-page__table th {
-  background: var(--color-surface-muted);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
-  font-weight: 600;
-}
-
-.sales-page__table td {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-}
-
-.sales-page__table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.sales-page__table tbody tr:hover {
+.sales-page__table .mb-table__header {
   background: var(--color-surface-muted);
 }
 
-/* =========================================================
-   Sale link
-   ========================================================= */
+.sales-page__table .mb-table__cell {
+  color: var(--color-text-secondary);
+}
+
+.sales-page__table .mb-table__row:hover {
+  background: var(--color-primary-soft);
+}
 
 .sales-page__sale-link {
+  min-height: auto;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--color-primary);
-  cursor: pointer;
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-decoration: none;
 }
 
-.sales-page__sale-link:hover {
+.sales-page__sale-link:hover,
+.sales-page__sale-link:focus-visible {
   text-decoration: underline;
 }
 
-/* =========================================================
-   Actions
-   ========================================================= */
+.sales-page__amount-cell {
+  color: var(--color-text-heading) !important;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sales-page__payment-cell {
+  color: var(--color-text-muted) !important;
+  white-space: nowrap;
+}
+
+.sales-page__actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
 
 .sales-page__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
-
-/* =========================================================
-   Empty state
-   ========================================================= */
 
 .sales-page__empty {
-  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-8) var(--space-5);
+  gap: var(--space-3);
   color: var(--color-text-muted);
   text-align: center;
-  font-size: 14px;
 }
 
-/* =========================================================
-   Modal body
-   ========================================================= */
+.sales-page__load-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
 
 .sales-modal__body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 24px;
+  padding: 0;
+  gap: var(--space-5);
 }
 
-.sales-modal__field {
+.sales-modal__section {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-4);
 }
 
-.sales-modal__field span {
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
+.sales-modal__section + .sales-modal__section,
+.sales-modal__items {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
-/* =========================================================
-   Modal fields row
-   ========================================================= */
+.sales-modal__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sales-modal__section-header h3,
+.sales-modal__items > strong {
+  margin: 0;
+  color: var(--color-text-heading);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.sales-modal__section-header span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  text-align: right;
+}
 
 .sales-modal__row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 
-/* =========================================================
-   Stock information
-   ========================================================= */
-
 .sales-modal__stock {
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
-  color: #64748b;
-  font-size: 14px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
 }
 
 .sales-modal__stock strong {
   color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
-/* =========================================================
-   Sale items
-   ========================================================= */
+.sales-modal__add-item {
+  align-self: flex-start;
+}
 
 .sales-modal__items {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.sales-modal__items>strong {
-  color: var(--color-text-heading);
-  font-size: 15px;
+  gap: var(--space-3);
 }
 
 .sales-modal__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
 }
 
-.sales-modal__item>div:first-child {
+.sales-modal__item > div:first-child {
   display: flex;
   flex-direction: column;
-  gap: 5px;
   min-width: 0;
+  gap: 2px;
 }
 
-.sales-modal__item>div:last-child {
+.sales-modal__item > div:last-child {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   white-space: nowrap;
 }
 
 .sales-modal__item strong {
   color: var(--color-text-heading);
-  font-size: 14px;
+  font-size: var(--font-size-small);
 }
 
 .sales-modal__item span {
-  color: #64748b;
-  font-size: var(--color-text-subtle)
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
 }
 
-/* =========================================================
-   Modal total
-   ========================================================= */
+.sales-modal__item > div:last-child > strong,
+.sales-modal__total strong {
+  font-variant-numeric: tabular-nums;
+}
 
 .sales-modal__total {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
+  gap: var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
 }
 
 .sales-modal__total span {
-  color: #64748b;
-  font-size: 14px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
 }
 
 .sales-modal__total strong {
   color: var(--color-text-heading);
   font-size: var(--font-size-h3);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
-
-/* =========================================================
-   Modal footer
-   ========================================================= */
 
 .sales-modal__footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--color-border);
 }
-
-/* =========================================================
-   Responsive
-   ========================================================= */
 
 @media (max-width: 1000px) {
   .sales-page__summary {
@@ -311,8 +310,8 @@
 
 @media (max-width: 700px) {
   .sales-page__header {
-    flex-direction: column;
     align-items: stretch;
+    flex-direction: column;
   }
 
   .sales-page__header .mb-button {
@@ -328,32 +327,37 @@
     flex-direction: column;
   }
 
-  .sales-modal__item>div:last-child {
-    width: 100%;
+  .sales-modal__item > div:last-child {
     justify-content: space-between;
+    width: 100%;
   }
 }
 
-@media (max-width: 600px) {
-  .sales-page__summary {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 480px) {
   .sales-page__header h1 {
     font-size: var(--font-size-h1);
   }
 
+  .sales-page__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-modal__section-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .sales-modal__section-header span {
+    text-align: left;
+  }
+
+  .sales-modal__add-item,
   .sales-modal__footer .mb-button {
     width: 100%;
   }
 
-  .sales-modal__total {
-    justify-content: space-between;
+  .sales-modal__footer {
+    flex-direction: column-reverse;
   }
-}
-
-.sales-page__load-more {
-  display: flex;
-  justify-content: center;
-  padding: 16px 20px;
 }

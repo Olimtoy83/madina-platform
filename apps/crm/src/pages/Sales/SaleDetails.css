@@ -13,7 +13,7 @@
 }
 
 .sale-details__header h1 {
-  margin: var(--space-4) 0 var(--space-1);
+  margin: var(--space-3) 0 var(--space-1);
   color: var(--color-text-heading);
   font-size: var(--font-size-display);
   line-height: 1.2;
@@ -34,13 +34,19 @@
 .sale-details__summary-card {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: 0;
 }
 
 .sale-details__summary-item {
   display: flex;
   flex-direction: column;
+  min-height: 76px;
+  padding: var(--space-4);
   gap: var(--space-2);
+}
+
+.sale-details__summary-item:not(:last-child) {
+  border-right: 1px solid var(--color-border);
 }
 
 .sale-details__summary-item span {
@@ -50,10 +56,29 @@
 
 .sale-details__summary-item strong {
   color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.sale-details__summary-item--status {
+  justify-content: space-between;
+}
+
+.sale-details__summary-item--total {
+  background: var(--color-surface-muted);
+}
+
+.sale-details__summary-item--total strong {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-semibold);
 }
 
 .sale-details__items-card {
   overflow: hidden;
+}
+
+.sale-details__items-card .mb-table__wrapper {
+  border: 0;
+  border-radius: 0;
 }
 
 .sale-details__section-header {
@@ -80,6 +105,22 @@
   min-width: 680px;
 }
 
+.sale-details__table .mb-table__header {
+  background: var(--color-surface-muted);
+}
+
+.sale-details__number-cell,
+.sale-details__amount-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sale-details__amount-cell {
+  color: var(--color-text-heading) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
 .sale-details__loading-card,
 .sale-details__state-card {
   min-height: 160px;
@@ -101,6 +142,14 @@
   .sale-details__summary-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .sale-details__summary-item:nth-child(2) {
+    border-right: 0;
+  }
+
+  .sale-details__summary-item:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--color-border);
+  }
 }
 
 @media (max-width: 480px) {
@@ -110,6 +159,15 @@
 
   .sale-details__summary-card {
     grid-template-columns: 1fr;
+  }
+
+  .sale-details__summary-item,
+  .sale-details__summary-item:nth-child(2) {
+    border-right: 0;
+  }
+
+  .sale-details__summary-item:not(:last-child) {
+    border-bottom: 1px solid var(--color-border);
   }
 
   .sale-details__actions .mb-button {

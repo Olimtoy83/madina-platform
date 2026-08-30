@@ -192,7 +192,7 @@ export function SaleDetails() {
 
   return (
     <section className="sale-details">
-      <div className="sale-details__header">
+      <header className="sale-details__header">
         <div>
           <Button
             type="button"
@@ -232,9 +232,9 @@ export function SaleDetails() {
             </Button>
           </div>
         )}
-      </div>
+      </header>
 
-      <Card className="sale-details__summary-card">
+      <Card className="sale-details__summary-card" padding="none">
         <div className="sale-details__summary-item">
           <span>Дата</span>
           <strong>{sale.saleDate.toLocaleDateString('ru-RU')}</strong>
@@ -245,14 +245,14 @@ export function SaleDetails() {
           <strong>{paymentMethodLabels[sale.paymentMethod]}</strong>
         </div>
 
-        <div className="sale-details__summary-item">
+        <div className="sale-details__summary-item sale-details__summary-item--status">
           <span>Статус</span>
-          <Badge variant={getSaleStatusVariant(sale.status)}>
+          <Badge variant={getSaleStatusVariant(sale.status)} size="sm" dot>
             {getSaleStatusLabel(sale.status)}
           </Badge>
         </div>
 
-        <div className="sale-details__summary-item">
+        <div className="sale-details__summary-item sale-details__summary-item--total">
           <span>Итого</span>
           <strong>{sale.totalAmount.toLocaleString('ru-RU')} SAR</strong>
         </div>
@@ -267,11 +267,11 @@ export function SaleDetails() {
         <Table className="sale-details__table">
           <TableHead>
             <TableRow>
-              <TableHeader>Товар</TableHeader>
-              <TableHeader>Количество</TableHeader>
-              <TableHeader>Единица</TableHeader>
-              <TableHeader>Цена</TableHeader>
-              <TableHeader>Сумма</TableHeader>
+              <TableHeader scope="col">Товар</TableHeader>
+              <TableHeader scope="col" className="sale-details__number-cell">Количество</TableHeader>
+              <TableHeader scope="col">Единица</TableHeader>
+              <TableHeader scope="col" className="sale-details__amount-cell">Цена</TableHeader>
+              <TableHeader scope="col" className="sale-details__amount-cell">Сумма</TableHeader>
             </TableRow>
           </TableHead>
 
@@ -284,10 +284,10 @@ export function SaleDetails() {
               return (
                 <TableRow key={item.productId}>
                   <TableCell>{product?.name ?? item.productId}</TableCell>
-                  <TableCell>{item.quantity}</TableCell>
+                  <TableCell className="sale-details__number-cell">{item.quantity}</TableCell>
                   <TableCell>{item.unit}</TableCell>
-                  <TableCell>{item.unitPrice.toLocaleString('ru-RU')} SAR</TableCell>
-                  <TableCell>{item.totalAmount.toLocaleString('ru-RU')} SAR</TableCell>
+                  <TableCell className="sale-details__amount-cell">{item.unitPrice.toLocaleString('ru-RU')} SAR</TableCell>
+                  <TableCell className="sale-details__amount-cell">{item.totalAmount.toLocaleString('ru-RU')} SAR</TableCell>
                 </TableRow>
               )
             })}

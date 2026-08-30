@@ -33,6 +33,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  FormField,
   Input,
   Modal,
   Select,
@@ -402,10 +403,10 @@ export function Sales() {
 
   return (
     <section className="sales-page">
-      <div className="sales-page__header">
+      <header className="sales-page__header">
         <div>
           <h1>Продажи</h1>
-          <p>Управление продажами и заказами</p>
+          <p>Продажи, черновики и оформление заказов</p>
         </div>
 
         {canWriteSales && (
@@ -417,7 +418,7 @@ export function Sales() {
           Новая продажа
         </Button>
         )}
-      </div>
+      </header>
 
       {error && !isModalOpen && (
         <Alert
@@ -431,22 +432,22 @@ export function Sales() {
       )}
 
       <div className="sales-page__summary">
-        <Card className="sales-page__summary-card">
+        <Card className="sales-page__summary-card" padding="none">
           <span>Всего продаж</span>
           <strong>{salesSummary?.totalCount ?? '—'}</strong>
         </Card>
 
-        <Card className="sales-page__summary-card">
+        <Card className="sales-page__summary-card" padding="none">
           <span>Завершено</span>
           <strong>{salesSummary?.completedCount ?? '—'}</strong>
         </Card>
 
-        <Card className="sales-page__summary-card">
+        <Card className="sales-page__summary-card" padding="none">
           <span>Черновики</span>
           <strong>{salesSummary?.draftCount ?? '—'}</strong>
         </Card>
 
-        <Card className="sales-page__summary-card">
+        <Card className="sales-page__summary-card" padding="none">
           <span>Общая сумма</span>
           <strong>
             {salesSummary ? salesSummary.totalAmount.toLocaleString('ru-RU') : '—'} SAR
@@ -454,9 +455,12 @@ export function Sales() {
         </Card>
       </div>
 
-      <Card className="sales-page__table-card">
+      <Card className="sales-page__table-card" padding="none">
         <div className="sales-page__table-header">
-          <h2>Список продаж</h2>
+          <div>
+            <h2>Список продаж</h2>
+            <span>Последние операции</span>
+          </div>
         </div>
 
         {isHistoryLoading ? (
@@ -473,12 +477,13 @@ export function Sales() {
             <Table className="sales-page__table">
               <TableHead>
                 <TableRow>
-                  <TableHeader>Номер</TableHeader>
-                  <TableHeader>Дата</TableHeader>
-                  <TableHeader>Клиент</TableHeader>
-                  <TableHeader>Сумма</TableHeader>
-                  <TableHeader>Статус</TableHeader>
-                  <TableHeader>Действия</TableHeader>
+                  <TableHeader scope="col">Номер</TableHeader>
+                  <TableHeader scope="col">Дата</TableHeader>
+                  <TableHeader scope="col">Клиент</TableHeader>
+                  <TableHeader scope="col">Оплата</TableHeader>
+                  <TableHeader scope="col" className="sales-page__amount-cell">Сумма</TableHeader>
+                  <TableHeader scope="col">Статус</TableHeader>
+                  <TableHeader scope="col" className="sales-page__actions-cell">Действия</TableHeader>
                 </TableRow>
               </TableHead>
 
@@ -490,6 +495,7 @@ export function Sales() {
                       <Button
                         type="button"
                         className="sales-page__sale-link"
+                        aria-label={`Открыть продажу ${sale.saleNumber}`}
                         onClick={() => navigate(`/sales/${sale.id}`)}
                       >
                         {sale.saleNumber}
@@ -506,7 +512,17 @@ export function Sales() {
                       {sale.clientName}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="sales-page__payment-cell">
+                      {sale.paymentMethod === 'cash'
+                        ? 'Наличные'
+                        : sale.paymentMethod === 'card'
+                          ? 'Карта'
+                          : sale.paymentMethod === 'bank-transfer'
+                            ? 'Перевод'
+                            : 'Другое'}
+                    </TableCell>
+
+                    <TableCell className="sales-page__amount-cell">
                       {sale.totalAmount.toLocaleString(
                         'ru-RU',
                       )}{' '}
@@ -522,6 +538,8 @@ export function Sales() {
                               ? 'success'
                               : 'danger'
                         }
+                        size="sm"
+                        dot
                       >
                         {sale.status === 'draft'
                           ? 'Черновик'
@@ -531,12 +549,14 @@ export function Sales() {
                       </Badge>
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="sales-page__actions-cell">
                         {canWriteSales && sale.status === 'draft' && (
                         <div className="sales-page__actions">
                           <Button
                             type="button"
                             variant="primary"
+                            size="sm"
+                            aria-label={`Завершить продажу ${sale.saleNumber}`}
                             onClick={() =>
                               handleCompleteSale(sale.id)
                             }
@@ -550,6 +570,8 @@ export function Sales() {
                           <Button
                             type="button"
                             variant="danger"
+                            size="sm"
+                            aria-label={`Отменить продажу ${sale.saleNumber}`}
                             onClick={() => {
                               setSaleToCancel(sale.id)
                             }}
@@ -592,10 +614,16 @@ export function Sales() {
               </Alert>
             )}
 
-            <label className="sales-modal__field">
-              <span>Клиент</span>
+            <div className="sales-modal__section">
+              <div className="sales-modal__section-header">
+                <h3>Параметры продажи</h3>
+                <span>{isSaleNumberLoading ? 'Подготовка номера…' : nextSaleNumber}</span>
+              </div>
 
+              <div className="sales-modal__row">
+                <FormField label="Клиент" htmlFor="sale-client" required>
               <Select
+                id="sale-client"
                 fullWidth
                 value={clientId}
                 onChange={(event) =>
@@ -623,12 +651,11 @@ export function Sales() {
                     </option>
                   ))}
               </Select>
-            </label>
+                </FormField>
 
-            <label className="sales-modal__field">
-              <span>Способ оплаты</span>
-
+                <FormField label="Способ оплаты" htmlFor="sale-payment-method">
               <Select
+                id="sale-payment-method"
                 fullWidth
                 value={paymentMethod}
                 onChange={(event) =>
@@ -653,12 +680,19 @@ export function Sales() {
                   Другое
                 </option>
               </Select>
-            </label>
+                </FormField>
+              </div>
+            </div>
 
-            <label className="sales-modal__field">
-              <span>Товар</span>
+            <div className="sales-modal__section">
+              <div className="sales-modal__section-header">
+                <h3>Товары</h3>
+                <span>Добавьте позиции в черновик</span>
+              </div>
 
+              <FormField label="Товар" htmlFor="sale-product">
               <Select
+                id="sale-product"
                 fullWidth
                 value={productId}
                 onChange={(event) =>
@@ -687,7 +721,7 @@ export function Sales() {
                     </option>
                   ))}
               </Select>
-            </label>
+              </FormField>
 
             {selectedProduct && (
               <div className="sales-modal__stock">
@@ -699,14 +733,13 @@ export function Sales() {
               </div>
             )}
 
-            <div className="sales-modal__row">
-              <label className="sales-modal__field">
-                <span>
-                  Количество (
-                  {selectedProduct?.unit || 'ед.'})
-                </span>
-
+              <div className="sales-modal__row">
+                <FormField
+                  label={`Количество (${selectedProduct?.unit || 'ед.'})`}
+                  htmlFor="sale-quantity"
+                >
                 <Input
+                  id="sale-quantity"
                   fullWidth
                   type="number"
                   min="0"
@@ -717,12 +750,11 @@ export function Sales() {
                   }
                   placeholder="0"
                 />
-              </label>
+                </FormField>
 
-              <label className="sales-modal__field">
-                <span>Цена за единицу</span>
-
+                <FormField label="Цена за единицу" htmlFor="sale-unit-price">
                 <Input
+                  id="sale-unit-price"
                   fullWidth
                   type="number"
                   min="0.01"
@@ -733,12 +765,14 @@ export function Sales() {
                   }
                   placeholder="0"
                 />
-              </label>
-            </div>
+                </FormField>
+              </div>
 
-            <Button
+              <Button
               type="button"
               variant="secondary"
+              size="sm"
+              className="sales-modal__add-item"
               onClick={handleAddItem}
               disabled={
                 !selectedProduct ||
@@ -748,6 +782,7 @@ export function Sales() {
             >
               Добавить товар
             </Button>
+            </div>
 
             {saleItems.length > 0 && (
               <div className="sales-modal__items">
