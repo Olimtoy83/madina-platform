@@ -61,7 +61,43 @@
 }
 
 .statistics-card {
+  position: relative;
   min-width: 0;
+}
+
+.statistics-page__summary--primary .statistics-card::before {
+  position: absolute;
+  top: 0;
+  right: var(--space-4);
+  left: var(--space-4);
+  height: 2px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: var(--color-border);
+  content: '';
+}
+
+.statistics-card--sales::before {
+  background: var(--color-primary) !important;
+}
+
+.statistics-card--income::before,
+.statistics-card--balance-positive::before {
+  background: var(--color-success) !important;
+}
+
+.statistics-card--expense::before,
+.statistics-card--balance-negative::before {
+  background: var(--color-danger) !important;
+}
+
+.statistics-card--income strong,
+.statistics-card--balance-positive strong {
+  color: var(--color-success-text);
+}
+
+.statistics-card--expense strong,
+.statistics-card--balance-negative strong {
+  color: var(--color-danger-text);
 }
 
 .statistics-card > span {

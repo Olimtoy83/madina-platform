@@ -246,22 +246,28 @@ export function Statistics() {
         <p className="statistics-summary-group__label">Ключевые показатели</p>
 
         <div className="statistics-page__summary statistics-page__summary--primary">
-          <Card className="statistics-card">
+          <Card className="statistics-card statistics-card--sales">
             <span>Завершённые продажи</span>
             <strong>{renderNumber(report?.sales.completedCount)}</strong>
           </Card>
 
-          <Card className="statistics-card">
+          <Card className="statistics-card statistics-card--income">
             <span>Общий доход</span>
             <strong>{renderAmount(report?.financial.totalIncome)}</strong>
           </Card>
 
-          <Card className="statistics-card">
+          <Card className="statistics-card statistics-card--expense">
             <span>Общие расходы</span>
             <strong>{renderAmount(report?.financial.totalExpense)}</strong>
           </Card>
 
-          <Card className="statistics-card">
+          <Card
+            className={`statistics-card statistics-card--balance ${
+              (report?.financial.financialBalance ?? 0) < 0
+                ? 'statistics-card--balance-negative'
+                : 'statistics-card--balance-positive'
+            }`}
+          >
             <span>Финансовый результат</span>
             <strong>{renderAmount(report?.financial.financialBalance)}</strong>
           </Card>
