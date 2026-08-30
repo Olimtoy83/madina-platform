@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
+  Alert,
+  Badge,
   Button,
+  Card,
   ConfirmDialog,
+  EmptyState,
+  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -10,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@madina/ui'
+import type { PaymentMethod, Sale } from '@madina/core'
 import { useProducts } from '../../context/useProducts'
 import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
@@ -18,27 +24,38 @@ import { usePendingCommand } from '../../shared/usePendingCommand'
 import { usePermissions } from '../../context/usePermissions'
 import { getSaleById } from '../../shared/api/commerceApi'
 import { HttpError } from '../../shared/api/httpClient'
-import type { Sale } from '@madina/core'
+
+import './SaleDetails.css'
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Наличные',
+  card: 'Банковская карта',
+  'bank-transfer': 'Банковский перевод',
+  other: 'Другое',
+}
+
+export function getSaleStatusLabel(status: Sale['status']): string {
+  if (status === 'draft') return 'Черновик'
+  if (status === 'completed') return 'Завершено'
+  return 'Отменено'
+}
+
+export function getSaleStatusVariant(status: Sale['status']) {
+  if (status === 'draft') return 'warning' as const
+  if (status === 'completed') return 'success' as const
+  return 'danger' as const
+}
 
 export function SaleDetails() {
   const { saleId } = useParams()
   const navigate = useNavigate()
-
-  const {
-    completeSale,
-    cancelSale,
-  } = useSalesMutations()
+  const { completeSale, cancelSale } = useSalesMutations()
   const { snapshot } = useTransactionalState()
-
   const { products } = useProducts()
-
   const { showToast } = useToast()
   const { isPending, run } = usePendingCommand()
   const { can } = usePermissions()
-
-  const [isCancelConfirmOpen, setIsCancelConfirmOpen] =
-    useState(false)
-
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false)
   const [sale, setSale] = useState<Sale | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -47,11 +64,13 @@ export function SaleDetails() {
 
   useEffect(() => {
     if (!saleId) return
+
     const generation = requestGeneration.current + 1
     requestGeneration.current = generation
     setIsLoading(true)
     setLoadError(null)
     setIsNotFound(false)
+
     void getSaleById(saleId)
       .then((response) => {
         if (requestGeneration.current !== generation) return
@@ -60,211 +79,221 @@ export function SaleDetails() {
       .catch((error: unknown) => {
         if (requestGeneration.current !== generation) return
         setSale(null)
-        if (error instanceof HttpError && error.status === 404) setIsNotFound(true)
-        else setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить продажу.')
+
+        if (error instanceof HttpError && error.status === 404) {
+          setIsNotFound(true)
+          return
+        }
+
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Не удалось загрузить продажу.',
+        )
       })
       .finally(() => {
-        if (requestGeneration.current === generation) setIsLoading(false)
+        if (requestGeneration.current === generation) {
+          setIsLoading(false)
+        }
       })
   }, [saleId, snapshot])
 
-  if (isLoading) return <section><h1>Загрузка продажи…</h1></section>
+  if (isLoading) {
+    return (
+      <section className="sale-details" aria-busy="true">
+        <div className="sale-details__header">
+          <div>
+            <Skeleton variant="text" width="11rem" />
+            <Skeleton variant="text" width="16rem" />
+          </div>
+        </div>
+
+        <Card className="sale-details__loading-card">
+          <Skeleton variant="text" lines={4} />
+        </Card>
+      </section>
+    )
+  }
 
   if (!sale || isNotFound) {
     return (
-      <section>
-        <h1>{loadError ? 'Не удалось загрузить продажу' : 'Продажа не найдена'}</h1>
+      <section className="sale-details">
+        <div className="sale-details__header">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => navigate('/sales')}
+          >
+            ← Назад к продажам
+          </Button>
+        </div>
 
-        {loadError && <p>{loadError}</p>}
-
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => navigate('/sales')}
-        >
-          ← Назад к продажам
-        </Button>
+        <Card className="sale-details__state-card">
+          {loadError ? (
+            <Alert variant="danger" title="Не удалось загрузить продажу">
+              {loadError}
+            </Alert>
+          ) : (
+            <EmptyState
+              title="Продажа не найдена"
+              description="Возможно, она была удалена или больше недоступна."
+            />
+          )}
+        </Card>
       </section>
     )
   }
 
   const saleIdValue = sale.id
   const isDraft = sale.status === 'draft'
-
-  const paymentMethodLabels = {
-    cash: 'Наличные',
-    card: 'Банковская карта',
-    'bank-transfer': 'Банковский перевод',
-    other: 'Другое',
-  }
+  const completeCommandKey = `sale.complete:${saleIdValue}`
+  const cancelCommandKey = `sale.cancel:${saleIdValue}`
 
   async function handleComplete() {
     const command = await run(
-      `sale.complete:${saleIdValue}`,
+      completeCommandKey,
       () => completeSale(saleIdValue),
     )
 
-    if (!command.started || !command.value) {
-      return false
-    }
+    if (!command.started || !command.value) return
 
-    const result = command.value
-
-    if (!result.success) {
+    if (!command.value.success) {
       showToast({
         variant: 'error',
-        title: 'Ошибка',
-        message: result.message ?? 'Не удалось завершить продажу.',
+        title: 'Не удалось завершить продажу',
+        message: command.value.message ?? 'Не удалось сохранить изменение продажи.',
       })
-      return false
+      return
     }
 
-    showToast({
-      variant: 'success',
-      title: 'Продажа завершена',
-    })
+    showToast({ variant: 'success', title: 'Продажа завершена' })
   }
 
   async function handleCancel(): Promise<boolean> {
     const command = await run(
-      `sale.cancel:${saleIdValue}`,
+      cancelCommandKey,
       () => cancelSale(saleIdValue),
     )
 
-    if (!command.started || !command.value) {
-      return false
-    }
+    if (!command.started || !command.value) return false
 
-    const result = command.value
-
-    if (!result.success) {
+    if (!command.value.success) {
       showToast({
         variant: 'error',
         title: 'Не удалось отменить продажу',
-        message:
-          result.message ??
-          'Не удалось сохранить изменение продажи.',
+        message: command.value.message ?? 'Не удалось сохранить изменение продажи.',
       })
-
       return false
     }
 
-    showToast({
-      variant: 'warning',
-      title: 'Продажа отменена',
-    })
-
+    showToast({ variant: 'warning', title: 'Продажа отменена' })
     return true
   }
 
   return (
-    <section>
-      <Button
-        type="button"
-        variant="secondary"
-        onClick={() => navigate('/sales')}
-      >
-        ← Назад к продажам
-      </Button>
-
-      <h1>Продажа {sale.saleNumber}</h1>
-
-      <p>Клиент: {sale.clientName}</p>
-
-      <p>
-        Дата:{' '}
-        {sale.saleDate.toLocaleDateString('ru-RU')}
-      </p>
-
-      <p>
-        Способ оплаты:{' '}
-        {paymentMethodLabels[sale.paymentMethod]}
-      </p>
-
-      <p>
-        Статус:{' '}
-        {sale.status === 'draft'
-          ? 'Черновик'
-          : sale.status === 'completed'
-            ? 'Завершено'
-            : 'Отменено'}
-      </p>
-
-      {isDraft && can('sales:write') && (
+    <section className="sale-details">
+      <div className="sale-details__header">
         <div>
           <Button
             type="button"
-            variant="primary"
-            onClick={handleComplete}
-            disabled={isPending(`sale.complete:${saleIdValue}`)}
+            variant="secondary"
+            onClick={() => navigate('/sales')}
           >
-            {isPending(`sale.complete:${saleIdValue}`)
-              ? 'Завершение…'
-              : 'Завершить продажу'}
+            ← Назад к продажам
           </Button>
 
-          <Button
-            type="button"
-            variant="danger"
-            onClick={() => setIsCancelConfirmOpen(true)}
-            disabled={isPending(`sale.complete:${saleIdValue}`)}
-          >
-            Отменить продажу
-          </Button>
+          <h1>Продажа {sale.saleNumber}</h1>
+          <p>{sale.clientName}</p>
         </div>
-      )}
 
-      <h2>Товары</h2>
+        {isDraft && can('sales:write') && (
+          <div className="sale-details__actions">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleComplete}
+              disabled={isPending(completeCommandKey)}
+            >
+              {isPending(completeCommandKey)
+                ? 'Завершение…'
+                : 'Завершить продажу'}
+            </Button>
 
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeader>Товар</TableHeader>
-            <TableHeader>Количество</TableHeader>
-            <TableHeader>Единица</TableHeader>
-            <TableHeader>Цена</TableHeader>
-            <TableHeader>Сумма</TableHeader>
-          </TableRow>
-        </TableHead>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => setIsCancelConfirmOpen(true)}
+              disabled={
+                isPending(completeCommandKey) ||
+                isPending(cancelCommandKey)
+              }
+            >
+              Отменить продажу
+            </Button>
+          </div>
+        )}
+      </div>
 
-        <TableBody>
-          {sale.items.map((item) => {
-            const product = products.find(
-              (currentProduct) =>
-                currentProduct.id === item.productId,
-            )
+      <Card className="sale-details__summary-card">
+        <div className="sale-details__summary-item">
+          <span>Дата</span>
+          <strong>{sale.saleDate.toLocaleDateString('ru-RU')}</strong>
+        </div>
 
-            return (
-              <TableRow key={item.productId}>
-                <TableCell>
-                  {product?.name ?? item.productId}
-                </TableCell>
+        <div className="sale-details__summary-item">
+          <span>Способ оплаты</span>
+          <strong>{paymentMethodLabels[sale.paymentMethod]}</strong>
+        </div>
 
-                <TableCell>
-                  {item.quantity}
-                </TableCell>
+        <div className="sale-details__summary-item">
+          <span>Статус</span>
+          <Badge variant={getSaleStatusVariant(sale.status)}>
+            {getSaleStatusLabel(sale.status)}
+          </Badge>
+        </div>
 
-                <TableCell>
-                  {item.unit}
-                </TableCell>
+        <div className="sale-details__summary-item">
+          <span>Итого</span>
+          <strong>{sale.totalAmount.toLocaleString('ru-RU')} SAR</strong>
+        </div>
+      </Card>
 
-                <TableCell>
-                  {item.unitPrice.toLocaleString('ru-RU')} SAR
-                </TableCell>
+      <Card className="sale-details__items-card" padding="none">
+        <div className="sale-details__section-header">
+          <h2>Товары</h2>
+          <span>{sale.items.length} поз.</span>
+        </div>
 
-                <TableCell>
-                  {item.totalAmount.toLocaleString('ru-RU')} SAR
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+        <Table className="sale-details__table">
+          <TableHead>
+            <TableRow>
+              <TableHeader>Товар</TableHeader>
+              <TableHeader>Количество</TableHeader>
+              <TableHeader>Единица</TableHeader>
+              <TableHeader>Цена</TableHeader>
+              <TableHeader>Сумма</TableHeader>
+            </TableRow>
+          </TableHead>
 
-      <h2>
-        Итого:{' '}
-        {sale.totalAmount.toLocaleString('ru-RU')} SAR
-      </h2>
+          <TableBody>
+            {sale.items.map((item) => {
+              const product = products.find(
+                (currentProduct) => currentProduct.id === item.productId,
+              )
+
+              return (
+                <TableRow key={item.productId}>
+                  <TableCell>{product?.name ?? item.productId}</TableCell>
+                  <TableCell>{item.quantity}</TableCell>
+                  <TableCell>{item.unit}</TableCell>
+                  <TableCell>{item.unitPrice.toLocaleString('ru-RU')} SAR</TableCell>
+                  <TableCell>{item.totalAmount.toLocaleString('ru-RU')} SAR</TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </Card>
 
       {isCancelConfirmOpen && (
         <ConfirmDialog
@@ -275,16 +304,14 @@ export function SaleDetails() {
           confirmLabel="Отменить продажу"
           cancelLabel="Назад"
           variant="danger"
-          loading={isPending(`sale.cancel:${saleIdValue}`)}
+          loading={isPending(cancelCommandKey)}
           onConfirm={async () => {
-            const cancelled = await handleCancel()
-            if (cancelled) {
+            if (await handleCancel()) {
               setIsCancelConfirmOpen(false)
             }
           }}
         />
       )}
-
     </section>
   )
 }

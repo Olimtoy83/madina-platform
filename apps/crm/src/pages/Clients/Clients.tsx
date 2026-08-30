@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
   EmptyState,
+  FormField,
   Spinner,
 } from '@madina/ui'
 
@@ -196,9 +197,13 @@ export function Clients() {
       >
         <h2>Новый клиент</h2>
 
-        <label>
-          Имя
+        <FormField
+          label="Имя"
+          htmlFor="client-name"
+          required
+        >
           <Input
+            id="client-name"
             type="text"
             value={name}
             onChange={(event) =>
@@ -206,11 +211,11 @@ export function Clients() {
             }
             placeholder="Введите имя клиента"
           />
-        </label>
+        </FormField>
 
-        <label>
-          Телефон
+        <FormField label="Телефон" htmlFor="client-phone">
           <Input
+            id="client-phone"
             type="text"
             value={phone}
             onChange={(event) =>
@@ -218,11 +223,11 @@ export function Clients() {
             }
             placeholder="+966..."
           />
-        </label>
+        </FormField>
 
-        <label>
-          Email
+        <FormField label="Email" htmlFor="client-email">
           <Input
+            id="client-email"
             type="email"
             value={email}
             onChange={(event) =>
@@ -230,11 +235,11 @@ export function Clients() {
             }
             placeholder="example@email.com"
           />
-        </label>
+        </FormField>
 
-        <label>
-          Компания
+        <FormField label="Компания" htmlFor="client-company">
           <Input
+            id="client-company"
             type="text"
             value={company}
             onChange={(event) =>
@@ -242,22 +247,22 @@ export function Clients() {
             }
             placeholder="Название компании"
           />
-        </label>
+        </FormField>
 
-        <label>
-          Примечание
+        <FormField label="Примечание" htmlFor="client-note">
           <Textarea
+            id="client-note"
             value={note}
             onChange={(event) =>
               setNote(event.target.value)
             }
             placeholder="Дополнительная информация"
           />
-        </label>
+        </FormField>
 
-        <label>
-          Статус
+        <FormField label="Статус" htmlFor="client-status">
           <Select
+            id="client-status"
             value={status}
             onChange={(event) =>
               setStatus(
@@ -272,7 +277,7 @@ export function Clients() {
               Неактивен
             </option>
           </Select>
-        </label>
+        </FormField>
 
         <div className="clients-page__form-actions">
           <Button

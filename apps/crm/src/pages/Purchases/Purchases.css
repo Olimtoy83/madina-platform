@@ -36,7 +36,6 @@
 
 .purchases__table-wrapper {
   width: 100%;
-  overflow-x: auto;
 }
 
 .purchases__table {
@@ -157,7 +156,6 @@
 
 .purchases__items-table-wrapper {
   width: 100%;
-  overflow-x: auto;
 }
 
 .purchases__items-table {

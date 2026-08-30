@@ -1,0 +1,118 @@
+.sale-details {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.sale-details__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.sale-details__header h1 {
+  margin: var(--space-4) 0 var(--space-1);
+  color: var(--color-text-heading);
+  font-size: var(--font-size-display);
+  line-height: 1.2;
+}
+
+.sale-details__header p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.sale-details__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.sale-details__summary-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.sale-details__summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sale-details__summary-item span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.sale-details__summary-item strong {
+  color: var(--color-text-heading);
+}
+
+.sale-details__items-card {
+  overflow: hidden;
+}
+
+.sale-details__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sale-details__section-header h2 {
+  margin: 0;
+  color: var(--color-text-heading);
+  font-size: var(--font-size-section);
+}
+
+.sale-details__section-header span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.sale-details__table {
+  min-width: 680px;
+}
+
+.sale-details__loading-card,
+.sale-details__state-card {
+  min-height: 160px;
+}
+
+@media (max-width: 768px) {
+  .sale-details__header {
+    flex-direction: column;
+  }
+
+  .sale-details__actions {
+    width: 100%;
+  }
+
+  .sale-details__actions .mb-button {
+    flex: 1 1 180px;
+  }
+
+  .sale-details__summary-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .sale-details__header h1 {
+    font-size: var(--font-size-h1);
+  }
+
+  .sale-details__summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .sale-details__actions .mb-button {
+    width: 100%;
+  }
+}

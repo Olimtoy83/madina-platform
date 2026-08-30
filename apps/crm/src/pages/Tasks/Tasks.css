@@ -69,7 +69,6 @@
 
 .tasks-page__table-wrapper {
   width: 100%;
-  overflow-x: auto;
 }
 
 .tasks-page__table {
