@@ -43,3 +43,11 @@ test('non-admin roles cannot read audit events', () => {
   equal(hasPermission('operator', 'audit:read'), false)
   equal(hasPermission('manager', 'audit:read'), false)
 })
+
+test('Korea Auto reads are available to viewer and writes to operator and above', () => {
+  equal(hasPermission('viewer', 'korea-auto:read'), true)
+  equal(hasPermission('viewer', 'korea-auto:write'), false)
+  equal(hasPermission('operator', 'korea-auto:write'), true)
+  equal(hasPermission('manager', 'korea-auto:write'), true)
+  equal(hasPermission('admin', 'korea-auto:write'), true)
+})

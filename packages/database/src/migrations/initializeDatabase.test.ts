@@ -51,6 +51,7 @@ test('initializeDatabase prepares every migration on a fresh database', () => {
       '014_sales_bounded_read_indexes_v1',
       '015_purchases_bounded_read_index_v1',
       '020_audit_events_v1',
+      '030_korea_auto_vehicles_v1',
     ].join(','))
   })
 })
@@ -88,7 +89,7 @@ test('initializeDatabase adopts an exact legacy database and closes its connecti
 
     const renamed = `${filename}.closed`
     renameSync(filename, renamed)
-    equal(migrationIds(renamed).length, 9)
+    equal(migrationIds(renamed).length, 10)
   })
 })
 

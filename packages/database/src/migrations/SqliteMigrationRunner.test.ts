@@ -114,14 +114,15 @@ test('applies verified domain migrations to a fresh database', () => {
       SELECT name FROM sqlite_master
       WHERE type = 'table' AND name IN (
         'clients', 'tasks', 'products', 'purchases', 'purchase_items',
-        'sales', 'sale_items', 'stock_movements', 'transactions'
+        'sales', 'sale_items', 'stock_movements', 'transactions',
+        'korea_auto_vehicles'
       )
     `).all() as Array<{ name: string }>
     const migrations = database.prepare(`
       SELECT id FROM schema_migrations ORDER BY id
     `).all() as Array<{ id: string }>
 
-    equal(tables.length, 9)
+    equal(tables.length, 10)
     equal(migrations.map((migration) => migration.id).join(','), [
       '000_legacy_schema_baseline',
       '001_auth_foundation',
@@ -132,6 +133,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '014_sales_bounded_read_indexes_v1',
       '015_purchases_bounded_read_index_v1',
       '020_audit_events_v1',
+      '030_korea_auto_vehicles_v1',
     ].join(','))
   })
 })

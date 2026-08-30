@@ -9,6 +9,7 @@ import {
   ReportingReadService,
   StockMovementReadService,
   TaskMutationService,
+  VehicleService,
 } from '@madina/core'
 import {
   SqliteAuthRepository,
@@ -17,6 +18,7 @@ import {
   SqliteCommerceRepository,
   SqliteReportingQueryRepository,
   SqliteTaskRepository,
+  SqliteVehicleRepository,
   initializeDatabase,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
@@ -33,6 +35,7 @@ import { clientsRoutes } from './clients/index.js'
 import { commerceRoutes } from './commerce/index.js'
 import { reportingRoutes } from './reporting/index.js'
 import { tasksRoutes } from './tasks/index.js'
+import { koreaAutoRoutes } from './korea-auto/index.js'
 
 export async function apiV1Routes(
   app: FastifyInstance,
@@ -83,6 +86,8 @@ export async function apiV1Routes(
   const reportingReadService = new ReportingReadService(
     reportingQueryRepository,
   )
+  const vehicleRepository = new SqliteVehicleRepository(databaseFile)
+  const vehicleService = new VehicleService(vehicleRepository)
 
   app.addHook('onClose', async () => {
     authRepository.close()
@@ -91,6 +96,7 @@ export async function apiV1Routes(
     commerceRepository.close()
     reportingQueryRepository.close()
     taskRepository.close()
+    vehicleRepository.close()
   })
 
   app.get(
@@ -140,5 +146,11 @@ export async function apiV1Routes(
   app.register(reportingRoutes, {
     prefix: '/reports',
     reportingReadService,
+  })
+
+  app.register(koreaAutoRoutes, {
+    prefix: '/korea-auto',
+    vehicleRepository,
+    vehicleService,
   })
 }

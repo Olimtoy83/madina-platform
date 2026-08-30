@@ -14,12 +14,15 @@ export type Permission =
   | 'audit:read'
   | 'data:import'
   | 'users:manage'
+  | 'korea-auto:read'
+  | 'korea-auto:write'
 
 const readPermissions: readonly Permission[] = [
   'clients:read',
   'tasks:read',
   'commerce:read',
   'reports:read',
+  'korea-auto:read',
 ]
 
 const operatorPermissions: readonly Permission[] = [
@@ -27,6 +30,7 @@ const operatorPermissions: readonly Permission[] = [
   'clients:write',
   'tasks:write',
   'sales:write',
+  'korea-auto:write',
 ]
 
 const managerPermissions: readonly Permission[] = [

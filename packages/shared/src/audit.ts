@@ -19,6 +19,7 @@ export type AuditDomain =
   | 'clients'
   | 'tasks'
   | 'commerce'
+  | 'korea-auto'
   | 'users'
 
 export type AuditAction =
@@ -44,6 +45,9 @@ export type AuditAction =
   | 'sale.completed'
   | 'commerce.snapshot_imported'
   | 'products.bulk_imported'
+  | 'vehicle.created'
+  | 'vehicle.updated'
+  | 'vehicle.status_changed'
   | 'user.created'
   | 'user.role_changed'
   | 'user.status_changed'
