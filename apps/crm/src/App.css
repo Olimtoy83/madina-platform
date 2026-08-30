@@ -1,14 +1,14 @@
 ﻿.app-layout {
   display: flex;
   min-height: 100vh;
-  background: var(--color-background);
+  background: #f4f6f4;
 }
 
 .sidebar {
-  width: 240px;
-  min-width: 240px;
+  width: 252px;
+  min-width: 252px;
   min-height: 100vh;
-  padding: var(--space-5) var(--space-3);
+  padding: var(--space-5) var(--space-3) var(--space-4);
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-2) var(--space-6);
+  padding: var(--space-2) var(--space-2) var(--space-7);
 }
 
 .sidebar__logo {
@@ -29,17 +29,45 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-primary);
+  background: #075d52;
   color: var(--color-surface);
-  font-size: var(--font-size-body);
+  box-shadow: 0 4px 10px rgb(7 93 82 / 0.18);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-bold);
   letter-spacing: 0.5px;
 }
 
+.sidebar__brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar__brand-overline,
+.app-header__eyebrow {
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .sidebar__brand-name {
   color: var(--color-text);
-  font-size: 17px;
+  font-size: var(--font-size-body-lg);
   font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+}
+
+.sidebar__nav-label {
+  display: block;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .sidebar__nav {
@@ -51,7 +79,7 @@
 .sidebar__item {
   display: flex;
   align-items: center;
-  min-height: 42px;
+  min-height: 40px;
   padding: 0 var(--space-3);
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
@@ -60,7 +88,8 @@
   font-weight: var(--font-weight-medium);
   transition:
     background-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .sidebar__item:hover {
@@ -69,9 +98,15 @@
 }
 
 .sidebar__item--active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: var(--color-primary-active-soft);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+  color: #075d52;
   font-weight: var(--font-weight-semibold);
+}
+
+.sidebar__item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .sidebar--mobile {
@@ -91,7 +126,7 @@
 
 .app-layout__content {
   flex: 1;
-  padding: var(--space-6);
+  padding: var(--space-7);
 }
 
 @media (max-width: 768px) {
@@ -109,8 +144,8 @@
 }
 
 .app-header {
-  min-height: 64px;
-  padding: 0 var(--space-6);
+  min-height: 68px;
+  padding: 0 var(--space-7);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   display: flex;
@@ -118,12 +153,23 @@
   justify-content: space-between;
 }
 
-.app-header__title h1 {
-  margin: 0;
-  color: var(--color-text);
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.2px;
+.app-header__context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.app-header__context > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header__workspace {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
 }
 
 .app-header__actions {
@@ -136,10 +182,14 @@
   display: none;
 }
 
-.app-header__brand {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-body);
+.app-header__user {
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
@@ -148,23 +198,17 @@
     padding: 0 var(--space-4);
   }
 
-  .app-header__title h1 {
-    font-size: var(--font-size-body-lg);
-  }
-
-  .app-header__title {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-  }
-
   .app-header__menu-button {
     display: inline-flex;
     flex: 0 0 auto;
   }
 
-  .app-header__brand {
+  .app-header__user,
+  .app-header__eyebrow {
     display: none;
+  }
+
+  .app-header__workspace {
+    font-size: var(--font-size-body);
   }
 }

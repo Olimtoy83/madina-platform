@@ -41,8 +41,11 @@ export function Header({
   const title = getPageTitle(location.pathname)
 
   return (
-    <header className="app-header">
-      <div className="app-header__title">
+    <header
+      className="app-header"
+      aria-label={`Madina CRM: ${title}`}
+    >
+      <div className="app-header__context">
         <Button
           type="button"
           size="sm"
@@ -53,11 +56,14 @@ export function Header({
         >
           Меню
         </Button>
-        <h1>{title}</h1>
+        <div>
+          <span className="app-header__eyebrow">Madina Platform</span>
+          <span className="app-header__workspace">CRM workspace</span>
+        </div>
       </div>
 
       <div className="app-header__actions">
-        <span className="app-header__brand">
+        <span className="app-header__user">
           {user?.username ?? 'Madina CRM'}
         </span>
         <Button

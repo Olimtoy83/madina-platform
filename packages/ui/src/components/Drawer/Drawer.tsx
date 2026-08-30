@@ -121,7 +121,7 @@ export function Drawer({
             type="button"
             className="mb-drawer__close"
             onClick={onClose}
-            aria-label="Close drawer"
+            aria-label="Закрыть панель"
           >
             ×
           </button>

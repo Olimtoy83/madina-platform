@@ -13,7 +13,6 @@ import {
   Button,
   Card,
   Select,
-  Skeleton,
   Table,
   TableBody,
   TableCell,
@@ -163,7 +162,14 @@ export function Statistics() {
     if (value !== undefined) return value
 
     if (isInitialLoading) {
-      return <Skeleton variant="text" width="55%" />
+      return (
+        <span
+          className="mb-skeleton mb-skeleton--text"
+          style={{ width: '55%' }}
+          aria-busy="true"
+          aria-live="polite"
+        />
+      )
     }
 
     return '—'
@@ -173,7 +179,14 @@ export function Statistics() {
     if (value !== undefined) return `${formatAmount(value)} SAR`
 
     if (isInitialLoading) {
-      return <Skeleton variant="text" width="70%" />
+      return (
+        <span
+          className="mb-skeleton mb-skeleton--text"
+          style={{ width: '70%' }}
+          aria-busy="true"
+          aria-live="polite"
+        />
+      )
     }
 
     return '—'
@@ -183,7 +196,14 @@ export function Statistics() {
     if (report) return formatStockByUnit(report.inventory.stockByUnit)
 
     if (isInitialLoading) {
-      return <Skeleton variant="text" width="70%" />
+      return (
+        <span
+          className="mb-skeleton mb-skeleton--text"
+          style={{ width: '70%' }}
+          aria-busy="true"
+          aria-live="polite"
+        />
+      )
     }
 
     return '—'
@@ -203,6 +223,7 @@ export function Statistics() {
 
         <Select
           className="statistics-page__period"
+          aria-label="Период отчёта"
           value={period}
           onChange={(event) =>
             setPeriod(event.target.value as StatisticsReportPeriod)}
@@ -221,50 +242,60 @@ export function Statistics() {
         </Alert>
       )}
 
-      <div className="statistics-page__summary">
-        <Card className="statistics-card">
-          <span>Завершённые продажи</span>
-          <strong>{renderNumber(report?.sales.completedCount)}</strong>
-        </Card>
+      <section className="statistics-summary-group">
+        <p className="statistics-summary-group__label">Ключевые показатели</p>
 
-        <Card className="statistics-card">
-          <span>Общий доход</span>
-          <strong>{renderAmount(report?.financial.totalIncome)}</strong>
-        </Card>
+        <div className="statistics-page__summary statistics-page__summary--primary">
+          <Card className="statistics-card">
+            <span>Завершённые продажи</span>
+            <strong>{renderNumber(report?.sales.completedCount)}</strong>
+          </Card>
 
-        <Card className="statistics-card">
-          <span>Общие расходы</span>
-          <strong>{renderAmount(report?.financial.totalExpense)}</strong>
-        </Card>
+          <Card className="statistics-card">
+            <span>Общий доход</span>
+            <strong>{renderAmount(report?.financial.totalIncome)}</strong>
+          </Card>
 
-        <Card className="statistics-card">
-          <span>Финансовый результат</span>
-          <strong>{renderAmount(report?.financial.financialBalance)}</strong>
-        </Card>
+          <Card className="statistics-card">
+            <span>Общие расходы</span>
+            <strong>{renderAmount(report?.financial.totalExpense)}</strong>
+          </Card>
 
-        <Card className="statistics-card">
-          <span>Завершённые поступления</span>
-          <strong>{renderNumber(report?.purchases.completedCount)}</strong>
-        </Card>
+          <Card className="statistics-card">
+            <span>Финансовый результат</span>
+            <strong>{renderAmount(report?.financial.financialBalance)}</strong>
+          </Card>
+        </div>
+      </section>
 
-        <Card className="statistics-card">
-          <span>Товарных позиций</span>
-          <strong>{renderNumber(report?.inventory.productCount)}</strong>
-        </Card>
+      <section className="statistics-summary-group">
+        <p className="statistics-summary-group__label">Операционные показатели</p>
 
-        <Card className="statistics-card">
-          <span>Остатки на складе</span>
-          <strong title={report
-            ? formatStockByUnit(report.inventory.stockByUnit)
-            : undefined}
-          >
-            {renderStockByUnit()}
-          </strong>
-        </Card>
-      </div>
+        <div className="statistics-page__summary statistics-page__summary--secondary">
+          <Card className="statistics-card">
+            <span>Завершённые поступления</span>
+            <strong>{renderNumber(report?.purchases.completedCount)}</strong>
+          </Card>
+
+          <Card className="statistics-card">
+            <span>Товарных позиций</span>
+            <strong>{renderNumber(report?.inventory.productCount)}</strong>
+          </Card>
+
+          <Card className="statistics-card">
+            <span>Остатки на складе</span>
+            <strong title={report
+              ? formatStockByUnit(report.inventory.stockByUnit)
+              : undefined}
+            >
+              {renderStockByUnit()}
+            </strong>
+          </Card>
+        </div>
+      </section>
 
       <div className="statistics-page__grid">
-        <Card className="statistics-panel">
+        <Card className="statistics-panel" padding="none">
           <div className="statistics-panel__header">
             <h2>Финансы по категориям</h2>
           </div>
@@ -287,7 +318,7 @@ export function Statistics() {
           </div>
         </Card>
 
-        <Card className="statistics-panel">
+        <Card className="statistics-panel" padding="none">
           <div className="statistics-panel__header">
             <h2>Задачи</h2>
           </div>
@@ -316,7 +347,10 @@ export function Statistics() {
         </Card>
       </div>
 
-      <Card className="statistics-panel statistics-panel--table">
+      <Card
+        className="statistics-panel statistics-panel--table"
+        padding="none"
+      >
         <div className="statistics-panel__header">
           <div>
             <h2>Финансовые операции</h2>

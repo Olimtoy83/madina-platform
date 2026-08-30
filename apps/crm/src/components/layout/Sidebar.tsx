@@ -20,10 +20,13 @@ export function Sidebar({
       <div className="sidebar__brand">
         <div className="sidebar__logo">MB</div>
 
-        <div className="sidebar__brand-name">
-          Madina CRM
+        <div className="sidebar__brand-copy">
+          <span className="sidebar__brand-overline">Madina Platform</span>
+          <span className="sidebar__brand-name">CRM</span>
         </div>
       </div>
+
+      <span className="sidebar__nav-label">Рабочее пространство</span>
 
       <nav
         className="sidebar__nav"
