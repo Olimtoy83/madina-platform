@@ -35,6 +35,7 @@ import { useProducts } from '../../context/useProducts'
 import { usePurchasesMutations } from '../../context/usePurchasesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
   getNextPurchaseNumber,
   getPurchaseById,
@@ -73,6 +74,7 @@ function getPurchasesErrorMessage(error: unknown): string {
 
 export function Purchases() {
   const { showToast } = useToast()
+  const { isPending, run } = usePendingCommand()
 
   const { products } = useProducts()
 
@@ -448,7 +450,16 @@ export function Purchases() {
       note: note.trim() || undefined,
     }
 
-    const result = await addPurchase(newPurchase)
+    const command = await run(
+      'purchase.create',
+      () => addPurchase(newPurchase),
+    )
+
+    if (!command.started || !command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success) {
       showToast({
@@ -824,7 +835,16 @@ export function Purchases() {
                   variant="primary"
                   onClick={async () => {
                     setError(null)
-                    const result = await completePurchase(selectedPurchase.id)
+                    const command = await run(
+                      `purchase.complete:${selectedPurchase.id}`,
+                      () => completePurchase(selectedPurchase.id),
+                    )
+
+                    if (!command.started || !command.value) {
+                      return
+                    }
+
+                    const result = command.value
 
                     if (!result.success) {
                       showToast({
@@ -841,8 +861,11 @@ export function Purchases() {
                       message: 'Товары добавлены на склад',
                     })
                   }}
+                  disabled={isPending(`purchase.complete:${selectedPurchase.id}`)}
                 >
-                  Завершить поступление
+                  {isPending(`purchase.complete:${selectedPurchase.id}`)
+                    ? 'Завершение…'
+                    : 'Завершить поступление'}
                 </Button>
               )}
 
@@ -853,6 +876,7 @@ export function Purchases() {
                 onClick={() => {
                   setPurchaseToCancel(selectedPurchase.id)
                 }}
+                disabled={isPending(`purchase.complete:${selectedPurchase.id}`)}
               >
                 Отменить поступление
               </Button>
@@ -876,7 +900,11 @@ export function Purchases() {
       {isCreateOpen && (
         <Modal
           open={isCreateOpen}
-          onClose={() => setIsCreateOpen(false)}
+          onClose={() => {
+            if (!isPending('purchase.create')) {
+              setIsCreateOpen(false)
+            }
+          }}
           title="Новое поступление"
           description="Создайте черновик поступления."
           size="xl"
@@ -1099,6 +1127,7 @@ export function Purchases() {
               onClick={() =>
                 setIsCreateOpen(false)
               }
+              disabled={isPending('purchase.create')}
             >
               Отмена
             </Button>
@@ -1107,9 +1136,15 @@ export function Purchases() {
               type="button"
               variant="primary"
               onClick={savePurchase}
-              disabled={!nextPurchaseNumber || isPurchaseNumberLoading}
+              disabled={
+                !nextPurchaseNumber ||
+                isPurchaseNumberLoading ||
+                isPending('purchase.create')
+              }
             >
-              Создать поступление
+              {isPending('purchase.create')
+                ? 'Создание…'
+                : 'Создать поступление'}
             </Button>
           </div>
         </Modal>
@@ -1123,6 +1158,10 @@ export function Purchases() {
         confirmLabel="Отменить поступление"
         cancelLabel="Назад"
         variant="danger"
+        loading={
+          purchaseToCancel !== null &&
+          isPending(`purchase.cancel:${purchaseToCancel}`)
+        }
         onConfirm={async () => {
           if (!purchaseToCancel) {
             return
@@ -1130,7 +1169,16 @@ export function Purchases() {
 
           setError(null)
 
-          const result = await cancelPurchase(purchaseToCancel)
+          const command = await run(
+            `purchase.cancel:${purchaseToCancel}`,
+            () => cancelPurchase(purchaseToCancel),
+          )
+
+          if (!command.started || !command.value) {
+            return
+          }
+
+          const result = command.value
 
           if (!result.success) {
             showToast({

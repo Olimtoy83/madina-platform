@@ -75,47 +75,32 @@ export function ClientsProvider({
   const [loadError, setLoadError] =
     useState<Error | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
+  const reload = useCallback(async () => {
+    setIsLoading(true)
 
-    async function load() {
-      try {
-        const responses =
-          await getClients()
+    try {
+      const responses = await getClients()
 
-        if (cancelled) {
-          return
-        }
-
-        setClients(
-          responses.map(toClient),
-        )
-        setLoadError(null)
-      } catch (error) {
-        if (cancelled) {
-          return
-        }
-
-        setLoadError(
-          error instanceof Error
-            ? error
-            : new Error(
-                'Не удалось загрузить клиентов.',
-              ),
-        )
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    void load()
-
-    return () => {
-      cancelled = true
+      setClients(
+        responses.map(toClient),
+      )
+      setLoadError(null)
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error
+          : new Error(
+              'Не удалось загрузить клиентов.',
+            ),
+      )
+    } finally {
+      setIsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
 
   const addClient = useCallback(
     async (
@@ -222,6 +207,7 @@ export function ClientsProvider({
       clients,
       isLoading,
       loadError,
+      reload,
       addClient,
       updateClient,
       deactivateClient,
@@ -231,6 +217,7 @@ export function ClientsProvider({
       clients,
       isLoading,
       loadError,
+      reload,
       addClient,
       updateClient,
       deactivateClient,

@@ -6,6 +6,8 @@ export interface ClientsContextValue {
   isLoading: boolean
   loadError: Error | null
 
+  reload: () => Promise<void>
+
   addClient: (
     client: Client,
   ) => Promise<Client>

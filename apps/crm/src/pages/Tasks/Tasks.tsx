@@ -1,6 +1,7 @@
 ﻿import { useMemo, useState } from 'react'
 import { useTasks } from '../../context/useTasks'
 import { useToast } from '../../context/ToastProvider'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
   getTaskStats,
   type TaskPriority,
@@ -42,6 +43,7 @@ export function Tasks() {
     deleteTask,
   } = useTasks()
   const { showToast } = useToast()
+  const { isPending, run } = usePendingCommand()
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
@@ -91,19 +93,26 @@ export function Tasks() {
     const now = new Date()
 
     try {
-      await addTask({
-        id: crypto.randomUUID(),
-        createdAt: now,
-        updatedAt: now,
-        title: trimmedTitle,
-        description:
-          description.trim() || undefined,
-        status,
-        priority,
-        dueDate: dueDate
-          ? new Date(`${dueDate}T00:00:00`)
-          : undefined,
-      })
+      const result = await run(
+        'task.create',
+        () => addTask({
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+          title: trimmedTitle,
+          description:
+            description.trim() || undefined,
+          status,
+          priority,
+          dueDate: dueDate
+            ? new Date(`${dueDate}T00:00:00`)
+            : undefined,
+        }),
+      )
+
+      if (!result.started) {
+        return
+      }
 
       resetForm()
       setIsFormOpen(false)
@@ -147,7 +156,11 @@ export function Tasks() {
       {isFormOpen && (
         <Modal
           open={isFormOpen}
-          onClose={() => setIsFormOpen(false)}
+        onClose={() => {
+          if (!isPending('task.create')) {
+            setIsFormOpen(false)
+          }
+        }}
           title="Новая задача"
           description="Создание новой рабочей задачи"
           size="lg"
@@ -265,18 +278,26 @@ export function Tasks() {
               type="button"
               variant="primary"
               onClick={handleCreateTask}
-              disabled={!title.trim()}
+              disabled={
+                !title.trim() ||
+                isPending('task.create')
+              }
             >
-              Создать задачу
+              {isPending('task.create')
+                ? 'Создание…'
+                : 'Создать задачу'}
             </Button>
 
             <Button
               type="button"
               variant="secondary"
               onClick={() => {
-                resetForm()
-                setIsFormOpen(false)
+                if (!isPending('task.create')) {
+                  resetForm()
+                  setIsFormOpen(false)
+                }
               }}
+              disabled={isPending('task.create')}
             >
               Отмена
             </Button>
@@ -371,15 +392,26 @@ export function Tasks() {
                     <Select
                       size="sm"
                       value={task.status}
+                      disabled={
+                        isPending(`task.status:${task.id}`) ||
+                        isPending(`task.delete:${task.id}`)
+                      }
                       onChange={(event) => {
-                        void updateTask(
+                        const nextStatus =
+                          event.target.value as TaskStatus
+
+                        void run(
+                          `task.status:${task.id}`,
+                          () => updateTask(
                             task.id,
-                            {
-                              status:
-                                event.target.value as TaskStatus,
-                            },
-                          )
-                          .then(() => {
+                            { status: nextStatus },
+                          ),
+                        )
+                          .then((result) => {
+                          if (!result.started) {
+                            return
+                          }
+
                           showToast({
                             variant: 'info',
                             title: 'Статус задачи изменён',
@@ -425,6 +457,10 @@ export function Tasks() {
                       type="button"
                       variant="danger"
                       onClick={() => setTaskToDelete(task.id)}
+                      disabled={
+                        isPending(`task.status:${task.id}`) ||
+                        isPending(`task.delete:${task.id}`)
+                      }
                     >
                       Удалить
                     </Button>
@@ -443,13 +479,24 @@ export function Tasks() {
         confirmLabel="Удалить задачу"
         cancelLabel="Назад"
         variant="danger"
+        loading={
+          taskToDelete !== null &&
+          isPending(`task.delete:${taskToDelete}`)
+        }
         onConfirm={async () => {
           if (!taskToDelete) {
             return
           }
 
           try {
-            await deleteTask(taskToDelete)
+            const result = await run(
+              `task.delete:${taskToDelete}`,
+              () => deleteTask(taskToDelete),
+            )
+
+            if (!result.started) {
+              return
+            }
 
             showToast({
               variant: 'warning',

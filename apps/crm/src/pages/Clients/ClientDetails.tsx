@@ -12,6 +12,21 @@ import {
   Button,
   Card,
 } from '@madina/ui'
+import type { Client } from '@madina/core'
+import { getClient } from '../../shared/api/clientsApi'
+import { HttpError } from '../../shared/api/httpClient'
+
+function toClient(response: {
+  createdAt: string
+  updatedAt: string
+} & Omit<Client, 'createdAt' | 'updatedAt'>): Client {
+  return {
+    ...response,
+    createdAt: new Date(response.createdAt),
+    updatedAt: new Date(response.updatedAt),
+  }
+}
+
 export function ClientDetails() {
   const { clientId } = useParams()
   const navigate = useNavigate()
@@ -19,15 +34,69 @@ export function ClientDetails() {
   const { clients } = useClients()
   const { snapshot } = useTransactionalState()
 
-  const client = clients.find(
+  const providerClient = clients.find(
     (item) => item.id === clientId,
   )
+  const [client, setClient] = useState<Client | null>(
+    providerClient ?? null,
+  )
+  const [isClientLoading, setIsClientLoading] = useState(true)
+  const [clientLoadError, setClientLoadError] = useState<string | null>(null)
+  const [isClientNotFound, setIsClientNotFound] = useState(false)
+  const [clientReloadVersion, setClientReloadVersion] = useState(0)
 
   const [history, setHistory] = useState<SalesHistory | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const requestGeneration = useRef(0)
+
+  useEffect(() => {
+    if (!clientId) {
+      setClient(null)
+      setIsClientNotFound(true)
+      setIsClientLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    setIsClientLoading(true)
+    setClientLoadError(null)
+    setIsClientNotFound(false)
+
+    void getClient(clientId)
+      .then((response) => {
+        if (!cancelled) {
+          setClient(toClient(response))
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+
+        setClient(null)
+
+        if (error instanceof HttpError && error.status === 404) {
+          setIsClientNotFound(true)
+          return
+        }
+
+        setClientLoadError(
+          error instanceof Error
+            ? error.message
+            : 'Не удалось загрузить клиента.',
+        )
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsClientLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [clientId, clientReloadVersion])
 
   function refreshHistory() {
     if (!clientId) return
@@ -47,7 +116,11 @@ export function ClientDetails() {
       })
   }
 
-  useEffect(() => { refreshHistory() }, [clientId, snapshot])
+  useEffect(() => {
+    if (client && !isClientLoading) {
+      refreshHistory()
+    }
+  }, [client, isClientLoading, snapshot])
 
   async function loadMore() {
     const cursor = history?.sales.nextCursor
@@ -80,7 +153,41 @@ export function ClientDetails() {
     ? completedSummary.lastSaleDate
     : undefined
 
-  if (!client) {
+  if (isClientLoading) {
+    return (
+      <section className="client-details-page">
+        <h1>Загрузка клиента…</h1>
+      </section>
+    )
+  }
+
+  if (clientLoadError) {
+    return (
+      <section className="client-details-page">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => navigate('/clients')}
+        >
+          ← Назад к клиентам
+        </Button>
+
+        <h1>Не удалось загрузить клиента</h1>
+        <p>{clientLoadError}</p>
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() =>
+            setClientReloadVersion((version) => version + 1)
+          }
+        >
+          Повторить
+        </Button>
+      </section>
+    )
+  }
+
+  if (!client || isClientNotFound) {
     return (
       <section className="client-details-page">
         <Button

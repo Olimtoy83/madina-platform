@@ -13,6 +13,7 @@ import { useClients } from '../../context/useClients'
 import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
   getSaleItemTotal,
   getSaleItemsTotal,
@@ -44,6 +45,7 @@ import {
 
 export function Sales() {
   const { showToast } = useToast()
+  const { isPending, run } = usePendingCommand()
 
   const navigate = useNavigate()
 
@@ -292,7 +294,20 @@ export function Sales() {
   async function handleCompleteSale(saleId: string) {
     setError(null)
 
-    const result = await completeSale(saleId)
+    const command = await run(
+      `sale.complete:${saleId}`,
+      () => completeSale(saleId),
+    )
+
+    if (!command.started) {
+      return
+    }
+
+    if (!command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success) {
       showToast({
@@ -341,7 +356,20 @@ export function Sales() {
       status: 'draft',
     }
 
-    const result = await addSale(sale)
+    const command = await run(
+      'sale.create',
+      () => addSale(sale),
+    )
+
+    if (!command.started) {
+      return
+    }
+
+    if (!command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success) {
       showToast({
@@ -507,8 +535,11 @@ export function Sales() {
                             onClick={() =>
                               handleCompleteSale(sale.id)
                             }
+                            disabled={isPending(`sale.complete:${sale.id}`)}
                           >
-                            Завершить
+                            {isPending(`sale.complete:${sale.id}`)
+                              ? 'Завершение…'
+                              : 'Завершить'}
                           </Button>
 
                           <Button
@@ -517,6 +548,7 @@ export function Sales() {
                             onClick={() => {
                               setSaleToCancel(sale.id)
                             }}
+                            disabled={isPending(`sale.complete:${sale.id}`)}
                           >
                             Отменить
                           </Button>
@@ -787,6 +819,7 @@ export function Sales() {
               type="button"
               variant="secondary"
               onClick={closeModal}
+              disabled={isPending('sale.create')}
             >
               Отмена
             </Button>
@@ -799,9 +832,12 @@ export function Sales() {
                 !clientId ||
                 saleItems.length === 0
                 || !nextSaleNumber || isSaleNumberLoading
+                || isPending('sale.create')
               }
             >
-              Сохранить черновик
+              {isPending('sale.create')
+                ? 'Сохранение…'
+                : 'Сохранить черновик'}
             </Button>
           </div>
         </Modal>
@@ -811,8 +847,22 @@ export function Sales() {
         <ConfirmDialog
           open={saleToCancel !== null}
           onClose={() => setSaleToCancel(null)}
+          loading={isPending(`sale.cancel:${saleToCancel}`)}
           onConfirm={async () => {
-            const result = await cancelSale(saleToCancel)
+            const command = await run(
+              `sale.cancel:${saleToCancel}`,
+              () => cancelSale(saleToCancel),
+            )
+
+            if (!command.started) {
+              return
+            }
+
+            if (!command.value) {
+              return
+            }
+
+            const result = command.value
 
             if (!result.success) {
               showToast({

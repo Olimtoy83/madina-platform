@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useClients } from '../../context/useClients'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
   createClient,
   type ClientStatus,
@@ -12,6 +13,7 @@ import { getClientSalesMetrics } from '../../shared/api/commerceApi'
 import {
   Button,
   Card,
+  Alert,
   Input,
   Modal,
   Textarea,
@@ -23,11 +25,15 @@ import {
   TableHeader,
   TableRow,
   EmptyState,
+  Spinner,
 } from '@madina/ui'
 
 export function Clients() {
   const {
     clients,
+    isLoading,
+    loadError,
+    reload,
     addClient,
     updateClient,
     deactivateClient,
@@ -36,6 +42,7 @@ export function Clients() {
   const { snapshot } = useTransactionalState()
 
   const { showToast } = useToast()
+  const { isPending, run } = usePendingCommand()
 
   const [isFormOpen, setIsFormOpen] =
     useState(false)
@@ -94,7 +101,14 @@ export function Clients() {
         status,
       })
 
-      await addClient(client)
+      const command = await run(
+        'client.create',
+        () => addClient(client),
+      )
+
+      if (!command.started) {
+        return
+      }
 
       showToast({
         variant: 'success',
@@ -165,8 +179,10 @@ export function Clients() {
       <Modal
         open={isFormOpen}
         onClose={() => {
-          resetForm()
-          setIsFormOpen(false)
+          if (!isPending('client.create')) {
+            resetForm()
+            setIsFormOpen(false)
+          }
         }}
         title="Новый клиент"
         description="Создание нового клиента"
@@ -257,18 +273,26 @@ export function Clients() {
             type="button"
             variant="primary"
             onClick={handleCreateClient}
-            disabled={!name.trim()}
+            disabled={
+              !name.trim() ||
+              isPending('client.create')
+            }
           >
-            Создать клиента
+            {isPending('client.create')
+              ? 'Создание…'
+              : 'Создать клиента'}
           </Button>
 
           <Button
             type="button"
             variant="secondary"
-            onClick={() => {
-            resetForm()
-              setIsFormOpen(false)
-            }}
+              onClick={() => {
+                if (!isPending('client.create')) {
+                  resetForm()
+                  setIsFormOpen(false)
+                }
+              }}
+              disabled={isPending('client.create')}
           >
             Отмена
           </Button>
@@ -280,7 +304,7 @@ export function Clients() {
           <span>Всего клиентов</span>
 
           <strong>
-            {clients.length}
+            {isLoading ? '—' : clients.length}
           </strong>
         </Card>
 
@@ -289,7 +313,9 @@ export function Clients() {
 
           <strong>
             {
-              clients.filter(
+              isLoading
+                ? '—'
+                : clients.filter(
                 (client) =>
                   client.status === 'active',
               ).length
@@ -299,6 +325,21 @@ export function Clients() {
       </div>
 
       <Card className="clients-page__table-wrapper">
+        {loadError && (
+          <Alert
+            variant="danger"
+            title="Не удалось загрузить клиентов"
+          >
+            <p>{loadError.message}</p>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void reload()}
+            >
+              Повторить
+            </Button>
+          </Alert>
+        )}
         {metricsError && (
           <p className="clients-page__metrics-error">
             Показатели продаж не загружены: {metricsError}
@@ -320,7 +361,19 @@ export function Clients() {
           </TableHead>
 
           <TableBody>
-            {sortedClients.length === 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={9}>
+                  <Spinner /> Загрузка клиентов…
+                </TableCell>
+              </TableRow>
+            ) : loadError ? (
+              <TableRow>
+                <TableCell colSpan={9}>
+                  Клиенты пока недоступны. Повторите загрузку.
+                </TableCell>
+              </TableRow>
+            ) : sortedClients.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9}>
                   <EmptyState
@@ -381,15 +434,26 @@ export function Clients() {
                       <Select
                         size="sm"
                         value={client.status}
+                        disabled={
+                          isPending(`client.status:${client.id}`) ||
+                          isPending(`client.deactivate:${client.id}`)
+                        }
                         onChange={async (event) => {
                           try {
-                            await updateClient(
-                              client.id,
-                              {
-                                status:
-                                  event.target.value as ClientStatus,
-                              },
+                            const command = await run(
+                              `client.status:${client.id}`,
+                              () => updateClient(
+                                client.id,
+                                {
+                                  status:
+                                    event.target.value as ClientStatus,
+                                },
+                              ),
                             )
+
+                            if (!command.started) {
+                              return
+                            }
 
                             showToast({
                               variant: 'success',
@@ -422,6 +486,10 @@ export function Clients() {
                         onClick={() => {
                         setClientToDeactivate(client.id)
                         }}
+                        disabled={
+                          isPending(`client.status:${client.id}`) ||
+                          isPending(`client.deactivate:${client.id}`)
+                        }
                       >
                         Деактивировать
                       </Button>
@@ -447,6 +515,7 @@ export function Clients() {
               type="button"
               variant="secondary"
               onClick={() => setClientToDeactivate(null)}
+              disabled={isPending(`client.deactivate:${clientToDeactivate}`)}
             >
               Назад
             </Button>
@@ -456,7 +525,14 @@ export function Clients() {
               variant="danger"
               onClick={async () => {
                 try {
-                  await deactivateClient(clientToDeactivate)
+                  const command = await run(
+                    `client.deactivate:${clientToDeactivate}`,
+                    () => deactivateClient(clientToDeactivate),
+                  )
+
+                  if (!command.started) {
+                    return
+                  }
 
                   showToast({
                     variant: 'success',
@@ -472,8 +548,11 @@ export function Clients() {
                   })
                 }
               }}
+              disabled={isPending(`client.deactivate:${clientToDeactivate}`)}
             >
-              Деактивировать
+              {isPending(`client.deactivate:${clientToDeactivate}`)
+                ? 'Деактивация…'
+                : 'Деактивировать'}
             </Button>
           </div>
         </Modal>

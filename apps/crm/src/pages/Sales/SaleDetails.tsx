@@ -14,6 +14,7 @@ import { useProducts } from '../../context/useProducts'
 import { useSalesMutations } from '../../context/useSalesMutations'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import { useToast } from '../../context/ToastProvider'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import { getSaleById } from '../../shared/api/commerceApi'
 import { HttpError } from '../../shared/api/httpClient'
 import type { Sale } from '@madina/core'
@@ -31,6 +32,7 @@ export function SaleDetails() {
   const { products } = useProducts()
 
   const { showToast } = useToast()
+  const { isPending, run } = usePendingCommand()
 
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] =
     useState(false)
@@ -95,7 +97,16 @@ export function SaleDetails() {
   }
 
   async function handleComplete() {
-    const result = await completeSale(saleIdValue)
+    const command = await run(
+      `sale.complete:${saleIdValue}`,
+      () => completeSale(saleIdValue),
+    )
+
+    if (!command.started || !command.value) {
+      return false
+    }
+
+    const result = command.value
 
     if (!result.success) {
       showToast({
@@ -103,7 +114,7 @@ export function SaleDetails() {
         title: 'Ошибка',
         message: result.message ?? 'Не удалось завершить продажу.',
       })
-      return
+      return false
     }
 
     showToast({
@@ -112,8 +123,17 @@ export function SaleDetails() {
     })
   }
 
-  async function handleCancel() {
-    const result = await cancelSale(saleIdValue)
+  async function handleCancel(): Promise<boolean> {
+    const command = await run(
+      `sale.cancel:${saleIdValue}`,
+      () => cancelSale(saleIdValue),
+    )
+
+    if (!command.started || !command.value) {
+      return false
+    }
+
+    const result = command.value
 
     if (!result.success) {
       showToast({
@@ -124,13 +144,15 @@ export function SaleDetails() {
           'Не удалось сохранить изменение продажи.',
       })
 
-      return
+      return false
     }
 
     showToast({
       variant: 'warning',
       title: 'Продажа отменена',
     })
+
+    return true
   }
 
   return (
@@ -172,14 +194,18 @@ export function SaleDetails() {
             type="button"
             variant="primary"
             onClick={handleComplete}
+            disabled={isPending(`sale.complete:${saleIdValue}`)}
           >
-            Завершить продажу
+            {isPending(`sale.complete:${saleIdValue}`)
+              ? 'Завершение…'
+              : 'Завершить продажу'}
           </Button>
 
           <Button
             type="button"
             variant="danger"
             onClick={() => setIsCancelConfirmOpen(true)}
+            disabled={isPending(`sale.complete:${saleIdValue}`)}
           >
             Отменить продажу
           </Button>
@@ -247,9 +273,12 @@ export function SaleDetails() {
           confirmLabel="Отменить продажу"
           cancelLabel="Назад"
           variant="danger"
-          onConfirm={() => {
-            handleCancel()
-            setIsCancelConfirmOpen(false)
+          loading={isPending(`sale.cancel:${saleIdValue}`)}
+          onConfirm={async () => {
+            const cancelled = await handleCancel()
+            if (cancelled) {
+              setIsCancelConfirmOpen(false)
+            }
           }}
         />
       )}

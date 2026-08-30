@@ -13,12 +13,14 @@ import { Statistics } from '../../pages/Statistics/Statistics'
 import { Clients } from '../../pages/Clients/Clients'
 import { ClientDetails } from '../../pages/Clients/ClientDetails'
 import { SalesReport } from '../../pages/SalesReport/SalesReport'
+import { RouteRecovery } from '../RouteRecovery'
 
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <AppLayout />,
+    errorElement: <RouteRecovery />,
     children: [
       {
         path: 'clients',
@@ -71,6 +73,10 @@ export const router = createBrowserRouter([
       {
         path: 'clients/:clientId',
         element: <ClientDetails />,
+      },
+      {
+        path: '*',
+        element: <RouteRecovery notFound />,
       },
     ],
   },

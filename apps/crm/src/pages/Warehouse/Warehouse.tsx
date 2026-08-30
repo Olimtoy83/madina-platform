@@ -5,6 +5,7 @@ import {
 } from 'react'
 import { useProducts } from '../../context/useProducts'
 import { useToast } from '../../context/ToastProvider'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import { useAuth } from '../../context/useAuth'
 import { useTransactionalState } from '../../context/useTransactionalState'
 import {
@@ -100,6 +101,7 @@ function formatProductWorkbookRowError(
 
 export function Warehouse() {
   const { showToast } = useToast()
+  const { isPending, run } = usePendingCommand()
   const { user } = useAuth()
   const { reload, snapshot } = useTransactionalState()
   const {
@@ -255,12 +257,21 @@ export function Warehouse() {
         ? quantity
         : -quantity
 
-    const result = await adjustProductStock(
-      selectedProduct.id,
-      signedQuantity,
-      adjustmentNote.trim() ||
-      'Корректировка остатка',
+    const command = await run(
+      `product.adjust:${selectedProduct.id}`,
+      () => adjustProductStock(
+        selectedProduct.id,
+        signedQuantity,
+        adjustmentNote.trim() ||
+        'Корректировка остатка',
+      ),
     )
+
+    if (!command.started || !command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success || !result.value) {
       showToast({
@@ -316,17 +327,26 @@ export function Warehouse() {
       return
     }
 
-    const result = await updateProduct(
-      updatedProduct.id,
-      {
-        name: updatedProduct.name,
-        category: updatedProduct.category,
-        unit: updatedProduct.unit,
-        costPrice: updatedProduct.costPrice,
-        salePrice: updatedProduct.salePrice,
-        status: updatedProduct.status,
-      },
+    const command = await run(
+      `product.update:${updatedProduct.id}`,
+      () => updateProduct(
+        updatedProduct.id,
+        {
+          name: updatedProduct.name,
+          category: updatedProduct.category,
+          unit: updatedProduct.unit,
+          costPrice: updatedProduct.costPrice,
+          salePrice: updatedProduct.salePrice,
+          status: updatedProduct.status,
+        },
+      ),
     )
+
+    if (!command.started || !command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success || !result.value) {
       setValidationError(result.message ?? 'Не удалось сохранить изменение товара.')
@@ -489,7 +509,16 @@ export function Warehouse() {
       updatedAt: now,
     }
 
-    const result = await addProduct(newProduct)
+    const command = await run(
+      'product.create',
+      () => addProduct(newProduct),
+    )
+
+    if (!command.started || !command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success) {
       showToast({
@@ -520,9 +549,16 @@ export function Warehouse() {
   async function confirmDeactivation() {
     if (!selectedProduct) return
 
-    const result = await deactivateProduct(
-      selectedProduct.id,
+    const command = await run(
+      `product.deactivate:${selectedProduct.id}`,
+      () => deactivateProduct(selectedProduct.id),
     )
+
+    if (!command.started || !command.value) {
+      return
+    }
+
+    const result = command.value
 
     if (!result.success || !result.value) {
       showToast({
@@ -1062,6 +1098,7 @@ export function Warehouse() {
               type="button"
               variant="secondary"
               onClick={cancelAdding}
+              disabled={isPending('product.create')}
             >
               Отмена
             </Button>
@@ -1070,9 +1107,14 @@ export function Warehouse() {
               type="button"
               variant="primary"
               onClick={handleAddProduct}
-              disabled={!addForm.name.trim()}
+              disabled={
+                !addForm.name.trim() ||
+                isPending('product.create')
+              }
             >
-              Сохранить товар
+              {isPending('product.create')
+                ? 'Сохранение…'
+                : 'Сохранить товар'}
             </Button>
           </div>
         </Modal>
@@ -1205,6 +1247,9 @@ export function Warehouse() {
                   type="button"
                   variant="danger"
                   onClick={startDeactivation}
+                  disabled={
+                    isPending(`product.deactivate:${selectedProduct.id}`)
+                  }
                 >
                   Деактивировать
                 </Button>
@@ -1213,6 +1258,9 @@ export function Warehouse() {
                   type="button"
                   variant="secondary"
                   onClick={startAdjustment}
+                  disabled={
+                    isPending(`product.adjust:${selectedProduct.id}`)
+                  }
                 >
                   Корректировка
                 </Button>
@@ -1221,6 +1269,9 @@ export function Warehouse() {
                   type="button"
                   variant="primary"
                   onClick={startEditing}
+                  disabled={
+                    isPending(`product.update:${selectedProduct.id}`)
+                  }
                 >
                   Редактировать
                 </Button>
@@ -1230,6 +1281,12 @@ export function Warehouse() {
                 <Modal
                   open={isAdjustmentOpen}
                   onClose={cancelAdjustment}
+                  closeOnEscape={
+                    !isPending(`product.adjust:${selectedProduct.id}`)
+                  }
+                  closeOnOverlayClick={
+                    !isPending(`product.adjust:${selectedProduct.id}`)
+                  }
                   title="Корректировка склада"
                   description="Изменение количества товара"
                   size="md"
@@ -1298,6 +1355,9 @@ export function Warehouse() {
                       type="button"
                       variant="secondary"
                       onClick={cancelAdjustment}
+                      disabled={
+                        isPending(`product.adjust:${selectedProduct.id}`)
+                      }
                     >
                       Отмена
                     </Button>
@@ -1308,10 +1368,13 @@ export function Warehouse() {
                       onClick={handleAdjustment}
                       disabled={
                         !adjustmentQuantity ||
-                        Number(adjustmentQuantity) <= 0
+                        Number(adjustmentQuantity) <= 0 ||
+                        isPending(`product.adjust:${selectedProduct.id}`)
                       }
                     >
-                      Сохранить корректировку
+                      {isPending(`product.adjust:${selectedProduct.id}`)
+                        ? 'Сохранение…'
+                        : 'Сохранить корректировку'}
                     </Button>
                   </div>
                 </Modal>
@@ -1329,13 +1392,20 @@ export function Warehouse() {
                 confirmLabel="Деактивировать"
                 cancelLabel="Отмена"
                 variant="danger"
+                loading={
+                  isPending(`product.deactivate:${selectedProduct.id}`)
+                }
                 onConfirm={confirmDeactivation}
               />
             </>
           ) : (
             <Modal
               open={isEditing}
-              onClose={() => setIsEditing(false)}
+              onClose={() => {
+                if (!isPending(`product.update:${selectedProduct.id}`)) {
+                  setIsEditing(false)
+                }
+              }}
               title="Редактирование товара"
               description="Изменение данных товара на складе"
               size="lg"
@@ -1585,6 +1655,9 @@ export function Warehouse() {
                   onClick={() =>
                     setIsEditing(false)
                   }
+                  disabled={
+                    isPending(`product.update:${selectedProduct.id}`)
+                  }
                 >
                   Отмена
                 </Button>
@@ -1593,9 +1666,14 @@ export function Warehouse() {
                   type="button"
                   variant="primary"
                   onClick={handleSaveEdit}
-                  disabled={!editForm.name.trim()}
+                  disabled={
+                    !editForm.name.trim() ||
+                    isPending(`product.update:${selectedProduct.id}`)
+                  }
                 >
-                  Сохранить
+                  {isPending(`product.update:${selectedProduct.id}`)
+                    ? 'Сохранение…'
+                    : 'Сохранить'}
                 </Button>
               </div>
             </Modal>
