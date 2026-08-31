@@ -1,14 +1,17 @@
 import { buildApp } from './app.js'
+import {
+  getServerConfiguration,
+} from './database.js'
+import { installGracefulShutdown } from './lifecycle.js'
 
 const app = buildApp()
 
-const port = Number(process.env.PORT ?? 3000)
-const host = process.env.HOST ?? '127.0.0.1'
-
 try {
+  const configuration = getServerConfiguration()
+  installGracefulShutdown(app)
   await app.listen({
-    port,
-    host,
+    port: configuration.port,
+    host: configuration.host,
   })
 } catch (error) {
   app.log.error(error)
