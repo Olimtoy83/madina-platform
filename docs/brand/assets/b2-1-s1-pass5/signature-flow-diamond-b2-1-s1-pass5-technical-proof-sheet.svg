@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1100" role="img" aria-labelledby="title desc">
+  <title id="title">B2.1-S1 Pass 5 — Master Geometry Technical Validation</title>
+  <desc id="desc">Technical proof sheet measured from the accepted Pass 5 master SVG. It shows the source geometry, bounding box, symmetry axes, raster conclusions and measured normalized relationships.</desc>
+  <defs>
+    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse"><path d="M54 0H0V54" fill="none" stroke="#d7d7d7" stroke-width="1"/></pattern>
+    <path id="outer-flow" d="M500 50 C494 156 462 244 392 300 C352 332 318 346 286 372 C215 435 125 484 50 500 C162 490 270 451 340 401 C404 355 466 254 500 50 Z"/>
+    <path id="inner-flow" d="M500 225 C496 283 473 332 436 366 C402 397 361 425 294 456 C261 472 226 489 190 500 L320 500 C356 482 388 461 418 433 C463 390 488 332 500 300 Z"/>
+    <g id="master" fill="#111"><use href="#outer-flow"/><use href="#outer-flow" transform="rotate(90 500 500)"/><use href="#outer-flow" transform="rotate(180 500 500)"/><use href="#outer-flow" transform="rotate(270 500 500)"/><use href="#inner-flow"/><use href="#inner-flow" transform="rotate(90 500 500)"/><use href="#inner-flow" transform="rotate(180 500 500)"/><use href="#inner-flow" transform="rotate(270 500 500)"/></g>
+    <style>text{font-family:Arial,sans-serif;fill:#161616}.h{font-size:38px;font-weight:700}.s{font-size:22px;fill:#555}.k{font-size:23px;font-weight:700}.v{font-size:22px}.note{font-size:19px;fill:#555}</style>
+  </defs>
+  <rect width="1800" height="1100" fill="#fff"/>
+  <text class="h" x="60" y="72">B2.1-S1 PASS 5 — MASTER GEOMETRY TECHNICAL VALIDATION</text>
+  <text class="s" x="60" y="110">Measured from the accepted SVG source; legacy generative annotations are not used.</text>
+  <rect x="60" y="160" width="620" height="620" fill="url(#grid)" stroke="#999"/>
+  <line x1="370" y1="160" x2="370" y2="780" stroke="#888" stroke-dasharray="7 7"/><line x1="60" y1="470" x2="680" y2="470" stroke="#888" stroke-dasharray="7 7"/>
+  <g transform="translate(70 170) scale(.6)"><use href="#master"/></g>
+  <rect x="100" y="200" width="540" height="540" fill="none" stroke="#b02020" stroke-width="2" stroke-dasharray="9 6"/>
+  <text class="note" x="100" y="815">Measured bounding box: x=50…950, y=50…950 → U = 900 master units</text>
+  <text class="k" x="750" y="190">SOURCE / TOPOLOGY</text>
+  <text class="v" x="750" y="230">• 2 canonical closed fill paths; 4 exact rotations each</text>
+  <text class="v" x="750" y="266">• 4-fold rotational symmetry by construction</text>
+  <text class="v" x="750" y="302">• Outer + inner flow remain separate; white channel is retained</text>
+  <text class="v" x="750" y="338">• No automatic geometry correction applied during validation</text>
+  <text class="k" x="750" y="410">MEASURED PROPORTIONS</text>
+  <text class="v" x="750" y="450">Overall extent U: 900 × 900 units</text>
+  <text class="v" x="750" y="486">Outer cardinal radius: 450 = 0.500 U</text>
+  <text class="v" x="750" y="522">Central aperture envelope: 360 × 360 = 0.400 U</text>
+  <text class="v" x="750" y="558">Outer-flow maximum width: ≈53.3 = 0.059 U</text>
+  <text class="v" x="750" y="594">Inner-flow maximum width: ≈50.7 = 0.056 U</text>
+  <text class="v" x="750" y="630">Inter-flow channel: ≈23.5…75.0 = 0.026…0.083 U</text>
+  <text class="note" x="750" y="664">Widths are sampled normal-distance estimates; tips intentionally tend to zero.</text>
+  <text class="k" x="750" y="740">CONTINUITY CHECK</text>
+  <text class="v" x="750" y="780">Major cubic joins are near-tangent (0…2.5° outer; 0…1.1° inner).</text>
+  <text class="v" x="750" y="816">Intentional cusps remain at cardinal tips and axial construction junctions.</text>
+  <text class="note" x="750" y="850">The central aperture uses point-junction closure; it is visually stable at master scale.</text>
+  <line x1="60" y1="900" x2="1740" y2="900" stroke="#bbb"/>
+  <text class="k" x="60" y="950">RASTER VALIDATION</text>
+  <text class="v" x="60" y="990">64 / 32 / 24 px: two-level flow and aperture remain legible. 20 px: lower safety margin. 16 / 12 px: fragile channels and axial junctions.</text>
+  <text class="v" x="60" y="1030">Minimum reliable canonical-master size: 24 px. A controlled micro variant is recommended below 20 px; it is not constructed in this Unit.</text>
+</svg>

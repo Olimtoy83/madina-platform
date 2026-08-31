@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Madina Barakasi — B2.1-S1 Signature Flow Diamond, reconstruction pass 5</title>
+  <desc id="desc">A monochrome, four-axis symmetric B2.1-S1 reconstruction. Each flow grows from a cardinal tip into a smooth shoulder, then contracts organically toward a soft central concave-diamond aperture.</desc>
+  <defs>
+    <!-- The outer flow retains Pass 4's cardinal extent and silhouette, with a local, tangent-continuous shoulder restoration. -->
+    <path id="outer-flow" d="M500 50 C494 156 462 244 392 300 C352 332 318 346 286 372 C215 435 125 484 50 500 C162 490 270 451 340 401 C404 355 466 254 500 50 Z"/>
+    <!-- The inner flow is a rotationally repeated, continuous four-flow system. The additional cubic spans carry the intentional variable-width shoulder without a polygonal kink. -->
+    <path id="inner-flow" d="M500 225 C496 283 473 332 436 366 C402 397 361 425 294 456 C261 472 226 489 190 500 L320 500 C356 482 388 461 418 433 C463 390 488 332 500 300 Z"/>
+  </defs>
+  <g fill="#111111">
+    <use href="#outer-flow"/>
+    <use href="#outer-flow" transform="rotate(90 500 500)"/>
+    <use href="#outer-flow" transform="rotate(180 500 500)"/>
+    <use href="#outer-flow" transform="rotate(270 500 500)"/>
+    <use href="#inner-flow"/>
+    <use href="#inner-flow" transform="rotate(90 500 500)"/>
+    <use href="#inner-flow" transform="rotate(180 500 500)"/>
+    <use href="#inner-flow" transform="rotate(270 500 500)"/>
+  </g>
+</svg>
