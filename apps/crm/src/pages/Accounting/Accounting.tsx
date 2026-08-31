@@ -184,7 +184,7 @@ export function Accounting() {
           <p>Управленческий анализ финансовых операций CRM.</p>
         </div>
 
-        <div className="accounting-filters">
+        <div className="accounting-filters" aria-label="Фильтры учёта">
           <Select
             value={period}
             onChange={(event) =>
@@ -278,7 +278,7 @@ export function Accounting() {
         </Card>
       </div>
 
-      <Card className="accounting-panel accounting-panel--table">
+      <Card className="accounting-panel accounting-panel--table" padding="none">
         <div className="accounting-panel__header">
           <div>
             <h2>Операции</h2>
@@ -299,12 +299,12 @@ export function Accounting() {
             <Table className="accounting-table">
               <TableHead>
                 <TableRow>
-                  <TableHeader>Дата</TableHeader>
-                  <TableHeader>Тип</TableHeader>
-                  <TableHeader>Категория</TableHeader>
-                  <TableHeader>Описание</TableHeader>
-                  <TableHeader>Оплата</TableHeader>
-                  <TableHeader>Сумма</TableHeader>
+                  <TableHeader scope="col">Дата</TableHeader>
+                  <TableHeader scope="col">Тип</TableHeader>
+                  <TableHeader scope="col">Категория</TableHeader>
+                  <TableHeader scope="col">Описание</TableHeader>
+                  <TableHeader scope="col">Оплата</TableHeader>
+                  <TableHeader scope="col" className="accounting-table__amount-cell">Сумма</TableHeader>
                 </TableRow>
               </TableHead>
 
@@ -328,7 +328,7 @@ export function Accounting() {
                       <TableCell>
                         {paymentMethodLabels[transaction.paymentMethod]}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="accounting-table__amount-cell">
                         <strong className={isIncome
                           ? 'accounting-amount accounting-amount--income'
                           : 'accounting-amount accounting-amount--expense'}

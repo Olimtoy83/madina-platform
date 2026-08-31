@@ -169,3 +169,18 @@
     align-items: stretch;
   }
 }
+
+/* Stage 4B: operational client workspace consistency. */
+.clients-page { display: flex; flex-direction: column; gap: var(--space-5); }
+.clients-page__header { margin-bottom: 0; gap: var(--space-4); }
+.clients-page__summary { margin-bottom: 0; gap: var(--space-4); }
+.clients-page__summary-card { min-height: 104px; }
+.clients-page__table-wrapper { overflow: hidden; }
+.clients-page__table-wrapper .mb-table__wrapper { border: 0; border-radius: 0; }
+.clients-page__table .mb-table__header { background: var(--color-surface-muted); }
+.clients-page__table .mb-table__row:hover { background: var(--color-primary-soft); }
+.clients-page__number-cell, .clients-page__amount-cell { text-align: right !important; font-variant-numeric: tabular-nums; }
+.clients-page__amount-cell { white-space: nowrap; font-weight: 600; color: var(--color-text-heading); }
+.clients-page__actions-cell { width: 1%; white-space: nowrap; }
+.clients-page__metrics-error { margin: 0; padding: var(--space-3) var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-caption); }
+@media (max-width: 768px) { .clients-page { gap: var(--space-4); } }

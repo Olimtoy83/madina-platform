@@ -170,3 +170,15 @@
 .income-table__load-more-error {
   padding-bottom: 0;
 }
+
+/* Stage 4B: reporting density and financial scanability. */
+.income-page { display: flex; flex-direction: column; gap: var(--space-5); }
+.income-page__header, .income-summary { margin-bottom: 0; }
+.income-summary { gap: var(--space-4); }
+.income-card { min-height: 104px; }
+.income-filters { margin-bottom: 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.income-table-wrapper { overflow: hidden; }
+.income-table-wrapper .mb-table__wrapper { border: 0; border-radius: 0; }
+.income-table .mb-table__header { background: var(--color-surface-muted); }
+.income-table .mb-table__row:hover { background: var(--color-primary-soft); }
+.income-table__amount-cell { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--color-text-heading); }

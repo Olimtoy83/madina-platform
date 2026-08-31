@@ -15,6 +15,7 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  FormField,
   Input,
   Modal,
   Select,
@@ -135,7 +136,7 @@ export function Tasks() {
 
   return (
     <section className="tasks-page">
-      <div className="tasks-page__header">
+      <header className="tasks-page__header">
         <div>
           <h1>Задачи</h1>
 
@@ -156,7 +157,7 @@ export function Tasks() {
             : 'Новая задача'}
         </Button>
         )}
-      </div>
+      </header>
 
       {canWriteTasks && isFormOpen && (
         <Modal
@@ -171,10 +172,9 @@ export function Tasks() {
           size="lg"
         >
 
-          <div>
-            <label>
-              Название
+          <FormField label="Название" htmlFor="task-title" required>
               <Input
+                id="task-title"
                 fullWidth
                 type="text"
                 value={title}
@@ -183,13 +183,11 @@ export function Tasks() {
                 }
                 placeholder="Введите название задачи"
               />
-            </label>
-          </div>
+          </FormField>
 
-          <div>
-            <label>
-              Описание
+          <FormField label="Описание" htmlFor="task-description">
               <Textarea
+                id="task-description"
                 fullWidth
                 value={description}
                 onChange={(event) =>
@@ -199,13 +197,11 @@ export function Tasks() {
                 }
                 placeholder="Описание задачи"
               />
-            </label>
-          </div>
+          </FormField>
 
-          <div>
-            <label>
-              Приоритет
+          <FormField label="Приоритет" htmlFor="task-priority">
               <Select
+                id="task-priority"
                 fullWidth
                 value={priority}
                 onChange={(event) =>
@@ -227,13 +223,11 @@ export function Tasks() {
                   Высокий
                 </option>
               </Select>
-            </label>
-          </div>
+          </FormField>
 
-          <div>
-            <label>
-              Статус
+          <FormField label="Статус" htmlFor="task-status">
               <Select
+                id="task-status"
                 fullWidth
                 value={status}
                 onChange={(event) =>
@@ -259,13 +253,11 @@ export function Tasks() {
                   Отменено
                 </option>
               </Select>
-            </label>
-          </div>
+          </FormField>
 
-          <div>
-            <label>
-              Срок выполнения
+          <FormField label="Срок выполнения" htmlFor="task-due-date">
               <Input
+                id="task-due-date"
                 fullWidth
                 type="date"
                 value={dueDate}
@@ -275,10 +267,9 @@ export function Tasks() {
                   )
                 }
               />
-            </label>
-          </div>
+          </FormField>
 
-          <div>
+          <div className="tasks-page__form-actions">
             <Button
               type="button"
               variant="primary"
@@ -336,15 +327,15 @@ export function Tasks() {
         </Card>
       </div>
 
-      <Card className="tasks-page__table-wrapper">
+      <Card className="tasks-page__table-wrapper" padding="none">
         <Table className="tasks-page__table">
           <TableHead>
             <TableRow>
-              <TableHeader>Задача</TableHeader>
-              <TableHeader>Приоритет</TableHeader>
-              <TableHeader>Статус</TableHeader>
-              <TableHeader>Срок</TableHeader>
-              <TableHeader>Действия</TableHeader>
+              <TableHeader scope="col">Задача</TableHeader>
+              <TableHeader scope="col">Приоритет</TableHeader>
+              <TableHeader scope="col">Статус</TableHeader>
+              <TableHeader scope="col">Срок</TableHeader>
+              <TableHeader scope="col" className="tasks-page__actions-cell">Действия</TableHeader>
             </TableRow>
           </TableHead>
 

@@ -175,12 +175,12 @@ export function Income() {
 
   return (
     <section className="income-page">
-      <div className="income-page__header">
+      <header className="income-page__header">
         <div>
           <h1>Доходы и расходы</h1>
           <p>Финансовые операции CRM</p>
         </div>
-      </div>
+      </header>
 
       {initialError && (
         <Alert variant="danger" title="Не удалось загрузить отчёт">
@@ -213,7 +213,7 @@ export function Income() {
         </Card>
       </div>
 
-      <div className="income-filters">
+      <div className="income-filters" aria-label="Фильтры отчёта по доходам">
         <Button
           type="button"
           variant={filter === 'all' ? 'primary' : 'secondary'}
@@ -242,17 +242,17 @@ export function Income() {
         </Button>
       </div>
 
-      <Card className="income-table-wrapper">
+      <Card className="income-table-wrapper" padding="none">
         <Table className="income-table">
           <TableHead>
             <TableRow>
-              <TableHeader>Дата</TableHeader>
-              <TableHeader>Тип</TableHeader>
-              <TableHeader>Категория</TableHeader>
-              <TableHeader>Описание</TableHeader>
-              <TableHeader>Оплата</TableHeader>
-              <TableHeader>Сумма</TableHeader>
-              <TableHeader>Статус</TableHeader>
+              <TableHeader scope="col">Дата</TableHeader>
+              <TableHeader scope="col">Тип</TableHeader>
+              <TableHeader scope="col">Категория</TableHeader>
+              <TableHeader scope="col">Описание</TableHeader>
+              <TableHeader scope="col">Оплата</TableHeader>
+              <TableHeader scope="col" className="income-table__amount-cell">Сумма</TableHeader>
+              <TableHeader scope="col">Статус</TableHeader>
             </TableRow>
           </TableHead>
 
@@ -285,7 +285,7 @@ export function Income() {
                   <TableCell>
                     {paymentMethodLabels[transaction.paymentMethod]}
                   </TableCell>
-                  <TableCell>{formatAmount(transaction.amount)} SAR</TableCell>
+                  <TableCell className="income-table__amount-cell">{formatAmount(transaction.amount)} SAR</TableCell>
                   <TableCell>
                     <Badge variant="success">
                       {statusLabels[transaction.status]}

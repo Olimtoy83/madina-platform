@@ -214,7 +214,7 @@ export function ClientDetails() {
 
   return (
     <section className="client-details-page">
-      <div className="client-details-page__header">
+      <header className="client-details-page__header">
         <div>
           <Button
             type="button"
@@ -246,7 +246,7 @@ export function ClientDetails() {
 
           <p>Карточка клиента CRM</p>
         </div>
-      </div>
+      </header>
 
       <Card className="client-details-page__summary-card">
         <article>

@@ -165,7 +165,7 @@ export function Dashboard() {
 
   return (
     <section className="dashboard">
-      <div className="dashboard__intro">
+      <header className="dashboard__intro">
         <div>
           <h2>Dashboard</h2>
 
@@ -173,7 +173,7 @@ export function Dashboard() {
             Обзор текущего состояния бизнеса
           </p>
         </div>
-      </div>
+      </header>
 
       {summaryError && (
         <Alert

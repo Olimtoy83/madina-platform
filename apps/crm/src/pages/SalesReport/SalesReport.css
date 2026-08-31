@@ -119,3 +119,14 @@
     font-size: var(--font-size-h1);
   }
 }
+
+/* Stage 4B: report hierarchy mirrors Statistics without changing semantics. */
+.sales-report-page { display: flex; flex-direction: column; gap: var(--space-5); }
+.sales-report-page__header, .sales-report-page__summary { margin-bottom: 0; }
+.sales-report-page__header h1, .sales-report-card strong, .sales-report-page__breakdown-header h2, .sales-report-page__status-list strong { color: var(--color-text-heading); }
+.sales-report-page__header p, .sales-report-card span, .sales-report-page__status-list span { color: var(--color-text-muted); }
+.sales-report-page__period { align-self: flex-start; }
+.sales-report-page__summary { gap: var(--space-4); }
+.sales-report-card { min-height: 104px; }
+.sales-report-page__breakdown-header, .sales-report-page__status-list > div { border-color: var(--color-border); }
+.sales-report-page__status-list > div:hover { background: var(--color-primary-soft); }

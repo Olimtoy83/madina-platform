@@ -171,3 +171,18 @@
     font-size: var(--font-size-metric-sm);
   }
 }
+
+/* Stage 4B: compact task scanning and local table scrolling. */
+.tasks-page { gap: var(--space-5); }
+.tasks-page__header { gap: var(--space-4); }
+.tasks-page__header h1, .tasks-page__card strong, .tasks-page__table td strong { color: var(--color-text-heading); }
+.tasks-page__header p, .tasks-page__card span, .tasks-page__table td p { color: var(--color-text-muted); }
+.tasks-page__summary { gap: var(--space-4); }
+.tasks-page__card { min-height: 104px; }
+.tasks-page__table-wrapper { overflow: hidden; }
+.tasks-page__table-wrapper .mb-table__wrapper { border: 0; border-radius: 0; }
+.tasks-page__table .mb-table__header { background: var(--color-surface-muted); }
+.tasks-page__table .mb-table__row:hover { background: var(--color-primary-soft); }
+.tasks-page__actions-cell { width: 1%; white-space: nowrap; }
+.tasks-page__form-actions { display: flex; gap: var(--space-3); padding-top: var(--space-2); }
+@media (max-width: 600px) { .tasks-page__form-actions { flex-direction: column; } }

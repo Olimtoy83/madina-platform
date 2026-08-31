@@ -352,3 +352,15 @@
     padding: 20px;
   }
 }
+
+/* Stage 4B: reporting surfaces share the approved financial language. */
+.accounting-page { gap: var(--space-5); }
+.accounting-page__header { gap: var(--space-4); }
+.accounting-page__header h1, .accounting-card strong, .accounting-panel__header h2, .accounting-category-list strong, .accounting-result strong { color: var(--color-text-heading); }
+.accounting-page__header p, .accounting-card span, .accounting-panel__header span, .accounting-category-list span, .accounting-result span { color: var(--color-text-muted); }
+.accounting-filters { padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.accounting-summary { gap: var(--space-4); }
+.accounting-panel--table .mb-table__wrapper { border: 0; border-radius: 0; }
+.accounting-table .mb-table__header { background: var(--color-surface-muted); }
+.accounting-table .mb-table__row:hover { background: var(--color-primary-soft); }
+.accounting-table__amount-cell { text-align: right !important; white-space: nowrap; font-variant-numeric: tabular-nums; }

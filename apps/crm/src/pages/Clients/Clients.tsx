@@ -158,7 +158,7 @@ export function Clients() {
 
   return (
     <section className="clients-page">
-      <div className="clients-page__header">
+      <header className="clients-page__header">
         <div>
           <h1>Клиенты</h1>
 
@@ -180,7 +180,7 @@ export function Clients() {
             : 'Новый клиент'}
         </Button>
         )}
-      </div>
+      </header>
 
       {canWriteClients && (
       <Modal
@@ -336,7 +336,7 @@ export function Clients() {
         </Card>
       </div>
 
-      <Card className="clients-page__table-wrapper">
+      <Card className="clients-page__table-wrapper" padding="none">
         {loadError && (
           <Alert
             variant="danger"
@@ -360,15 +360,15 @@ export function Clients() {
         <Table className="clients-page__table">
           <TableHead>
             <TableRow>
-              <TableHeader>Клиент</TableHeader>
-              <TableHeader>Телефон</TableHeader>
-              <TableHeader>Email</TableHeader>
-              <TableHeader>Компания</TableHeader>
-              <TableHeader>Продажи</TableHeader>
-              <TableHeader>Сумма</TableHeader>
-              <TableHeader>Последняя покупка</TableHeader>
-              <TableHeader>Статус</TableHeader>
-              <TableHeader>Действия</TableHeader>
+              <TableHeader scope="col">Клиент</TableHeader>
+              <TableHeader scope="col">Телефон</TableHeader>
+              <TableHeader scope="col">Email</TableHeader>
+              <TableHeader scope="col">Компания</TableHeader>
+              <TableHeader scope="col" className="clients-page__number-cell">Продажи</TableHeader>
+              <TableHeader scope="col" className="clients-page__amount-cell">Сумма</TableHeader>
+              <TableHeader scope="col">Последняя покупка</TableHeader>
+              <TableHeader scope="col">Статус</TableHeader>
+              <TableHeader scope="col" className="clients-page__actions-cell">Действия</TableHeader>
             </TableRow>
           </TableHead>
 
@@ -424,17 +424,17 @@ export function Clients() {
                       {client.company ?? '—'}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="clients-page__number-cell">
                       {stats ? stats.salesCount : '—'}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="clients-page__amount-cell">
                       {stats
                         ? `${stats.totalAmount.toLocaleString('ru-RU')} SAR`
                         : '—'}
                     </TableCell>
 
-                    <TableCell>
+                    <TableCell className="clients-page__actions-cell">
                       {stats?.lastSaleDate
                         ? stats.lastSaleDate.toLocaleDateString(
                           'ru-RU',

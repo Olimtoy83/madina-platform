@@ -131,3 +131,14 @@
     font-size: var(--font-size-h1);
   }
 }
+
+/* Stage 4B: detail view aligned with the Sales detail pattern. */
+.client-details-page { display: flex; flex-direction: column; gap: var(--space-5); }
+.client-details-page__header { margin-bottom: 0; }
+.client-details-page__header h1, .client-details-page__info h2, .client-details-page__section-header h2 { color: var(--color-text-heading); }
+.client-details-page__header p, .client-details-page__info span, .client-details-page__section-header span, .client-details-page__sales > p, .client-details-page__sale-row p { color: var(--color-text-muted); }
+.client-details-page__info, .client-details-page__sales { margin-bottom: 0; }
+.client-details-page__info > div, .client-details-page__section-header, .client-details-page__sale-row { border-color: var(--color-border); }
+.client-details-page__sale-row:hover { background: var(--color-primary-soft); }
+.client-details-page__sale-row strong { font-variant-numeric: tabular-nums; }
+.client-details-page__load-more { display: flex; justify-content: center; padding: var(--space-4); }
