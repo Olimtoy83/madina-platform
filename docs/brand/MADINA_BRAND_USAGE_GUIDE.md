@@ -12,7 +12,11 @@ Do not redraw, trace, optimize, recolor, or otherwise alter this file.
 2. **Micro Pass 2** — approved small-size derivative only; it preserves the
    Pass 5 outer silhouette while redistributing inner rails for 20 px and
    16 px use. It never replaces Pass 5 as the master.
-3. The preview and technical proof sheet in the Pass 5 package are controls,
+3. **Satin Green Architectural Relief** — approved secondary dimensional
+   application only. Its Hero, transparent, and front-reference PNGs are
+   derivatives of Pass 5, never canonical masters or substitutes for the SVG.
+   Proof I / 40 W is the approved visual-direction reference.
+4. The preview and technical proof sheet in the Pass 5 package are controls,
    not application assets.
 
 ## Official applications
@@ -81,6 +85,11 @@ Do not change geometry, crop the mark, alter proportions, recolor individual
 flows, add effects, place it on insufficient contrast, substitute SADEED AUTO
 graphite/gold styling, or use Micro Pass 2 as the full-size master.
 
+The Satin Green Architectural Relief is a secondary high-resolution
+application. It must never replace the canonical Pass 5 SVG in product UI,
+technical reproduction, or normal brand use, and it permits no geometry
+reinterpretation.
+
 ## Developer notes
 
 - Keep Pass 5 as the single geometry source of truth.
@@ -96,3 +105,6 @@ graphite/gold styling, or use Micro Pass 2 as the full-size master.
 | --- | --- | --- |
 | assets/b2-1-s1-pass5/signature-flow-diamond-b2-1-s1-pass5-master.svg | Canonical Pass 5 master | 30DAFE49CF80F9CDBD15493EBE807F180359DE0409CFF6C9D2FF485264F095DA |
 | Historical signature-flow-diamond-b2-1-s1-micro-pass2-master.svg | Approved small-size source | AEF1884E31E0C5DA9BE17005B74C92158D5374F9B0192EFD67B8D47F1F5191E4 |
+| assets/b2-1-s1-pass5/3d/madina-b2-1-s1-pass5-3d-hero.png | Satin Green Architectural Relief Hero derivative | C0CE2A69C1C79FE7E049A51F497522276E9C167D4FCB995BCF91F5450207745D |
+| assets/b2-1-s1-pass5/3d/madina-b2-1-s1-pass5-3d-transparent.png | Satin Green Architectural Relief transparent derivative | 54920970CE314DCCBB6356E7949BE0C8E340EC584C3BD30CB4434CBFBD486F51 |
+| assets/b2-1-s1-pass5/3d/madina-b2-1-s1-pass5-3d-front-reference.png | Pass 5 geometry-validation derivative | 6B6D34B9810B1FE6903CA8B4E028F7FCAB4310B643D3703B525BB45A9F9600CB |
