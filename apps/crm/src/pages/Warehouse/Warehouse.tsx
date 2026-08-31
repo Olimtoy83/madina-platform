@@ -586,7 +586,7 @@ export function Warehouse() {
 
   return (
     <section className="warehouse">
-      <div className="warehouse__header">
+      <header className="warehouse__header">
         <div>
           <h1>Warehouse</h1>
 
@@ -638,7 +638,7 @@ export function Warehouse() {
           </Button>
           )}
         </div>
-      </div>
+      </header>
 
       {validationError && (
         <Alert
@@ -695,7 +695,7 @@ export function Warehouse() {
         </Alert>
       )}
 
-      <div className="warehouse__toolbar">
+      <div className="warehouse__toolbar" aria-label="Фильтры товаров">
         <Input
           type="search"
           value={search}
@@ -833,18 +833,18 @@ export function Warehouse() {
         )}
       </Modal>
 
-      <Card className="warehouse__table-wrapper">
+      <Card className="warehouse__table-wrapper" padding="none">
         <Table className="warehouse__table">
           <TableHead>
             <TableRow>
-              <TableHeader>Товар</TableHeader>
-              <TableHeader>Категория</TableHeader>
-              <TableHeader>Количество</TableHeader>
-              <TableHeader>Единица</TableHeader>
-              <TableHeader>Себестоимость</TableHeader>
-              <TableHeader>Цена продажи</TableHeader>
-              <TableHeader>Статус</TableHeader>
-              <TableHeader>Действия</TableHeader>
+              <TableHeader scope="col">Товар</TableHeader>
+              <TableHeader scope="col">Категория</TableHeader>
+              <TableHeader scope="col" className="warehouse__quantity-cell">Количество</TableHeader>
+              <TableHeader scope="col">Единица</TableHeader>
+              <TableHeader scope="col" className="warehouse__amount-cell">Себестоимость</TableHeader>
+              <TableHeader scope="col" className="warehouse__amount-cell">Цена продажи</TableHeader>
+              <TableHeader scope="col">Статус</TableHeader>
+              <TableHeader scope="col" className="warehouse__actions-cell">Действия</TableHeader>
             </TableRow>
           </TableHead>
 
@@ -861,7 +861,7 @@ export function Warehouse() {
             ) : (
               filteredProducts.map((product) => (
                 <TableRow key={product.id}>
-                  <TableCell>
+                  <TableCell className="warehouse__product-name">
                     {product.name}
                   </TableCell>
 
@@ -869,7 +869,7 @@ export function Warehouse() {
                     {categoryLabels[product.category]}
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="warehouse__quantity-cell">
                     {product.quantity}
                   </TableCell>
 
@@ -877,15 +877,15 @@ export function Warehouse() {
                     {unitLabels[product.unit]}
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="warehouse__amount-cell">
                     {product.costPrice} SAR
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="warehouse__amount-cell">
                     {product.salePrice} SAR
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="warehouse__actions-cell">
                     <Badge
                       variant={
                         product.status === 'active'
@@ -904,6 +904,7 @@ export function Warehouse() {
                       type="button"
                       variant="secondary"
                       size="sm"
+                      aria-label={`Открыть товар ${product.name}`}
                       onClick={() =>
                         openProduct(product)
                       }

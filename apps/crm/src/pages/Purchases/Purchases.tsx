@@ -533,7 +533,7 @@ export function Purchases() {
 
   return (
     <section className="purchases">
-      <div className="purchases__header">
+      <header className="purchases__header">
         <div>
           <h1>Поступления</h1>
           <p>
@@ -551,7 +551,7 @@ export function Purchases() {
           Добавить поступление
         </Button>
         )}
-      </div>
+      </header>
 
       {error && !isCreateOpen && (
         <Alert
@@ -564,17 +564,17 @@ export function Purchases() {
         </Alert>
       )}
 
-      <Card className="purchases__table-wrapper">
+      <Card className="purchases__table-wrapper" padding="none">
         <Table className="purchases__table">
           <TableHead>
             <TableRow>
-              <TableHeader>Номер</TableHeader>
-              <TableHeader>Дата</TableHeader>
-              <TableHeader>Поставщик</TableHeader>
-              <TableHeader>Товаров</TableHeader>
-              <TableHeader>Сумма</TableHeader>
-              <TableHeader>Статус</TableHeader>
-              <TableHeader>Действие</TableHeader>
+              <TableHeader scope="col">Номер</TableHeader>
+              <TableHeader scope="col">Дата</TableHeader>
+              <TableHeader scope="col">Поставщик</TableHeader>
+              <TableHeader scope="col" className="purchases__quantity-cell">Товаров</TableHeader>
+              <TableHeader scope="col" className="purchases__amount-cell">Сумма</TableHeader>
+              <TableHeader scope="col">Статус</TableHeader>
+              <TableHeader scope="col" className="purchases__actions-cell">Действие</TableHeader>
             </TableRow>
           </TableHead>
 
@@ -608,7 +608,7 @@ export function Purchases() {
             ) : (
               purchases.map((purchase) => (
                 <TableRow key={purchase.id}>
-                  <TableCell>
+                  <TableCell className="purchases__purchase-number">
                     {purchase.purchaseNumber}
                   </TableCell>
 
@@ -622,23 +622,34 @@ export function Purchases() {
                     {purchase.supplierName}
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="purchases__quantity-cell">
                     {purchase.itemCount}
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="purchases__amount-cell">
                     {purchase.totalAmount} SAR
                   </TableCell>
 
                   <TableCell>
-                    {statusLabels[purchase.status]}
+                    <Badge
+                      size="sm"
+                      dot
+                      variant={purchase.status === 'draft'
+                        ? 'warning'
+                        : purchase.status === 'completed'
+                          ? 'success'
+                          : 'danger'}
+                    >
+                      {statusLabels[purchase.status]}
+                    </Badge>
                   </TableCell>
 
-                  <TableCell>
+                  <TableCell className="purchases__actions-cell">
                     <Button
                       type="button"
                       variant="secondary"
                       size="sm"
+                      aria-label={`Открыть поступление ${purchase.purchaseNumber}`}
                       onClick={() => {
                         setError(null)
                         openPurchaseDetails(purchase.id)
@@ -787,10 +798,10 @@ export function Purchases() {
               <Table className="purchases__items-table">
                 <TableHead>
                   <TableRow>
-                    <TableHeader>Товар</TableHeader>
-                    <TableHeader>Количество</TableHeader>
-                    <TableHeader>Цена закупки</TableHeader>
-                    <TableHeader>Сумма</TableHeader>
+                    <TableHeader scope="col">Товар</TableHeader>
+                    <TableHeader scope="col" className="purchases__quantity-cell">Количество</TableHeader>
+                    <TableHeader scope="col" className="purchases__amount-cell">Цена закупки</TableHeader>
+                    <TableHeader scope="col" className="purchases__amount-cell">Сумма</TableHeader>
                   </TableRow>
                 </TableHead>
 
@@ -806,16 +817,16 @@ export function Purchases() {
                           )}
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell className="purchases__quantity-cell">
                           {item.quantity}{' '}
                           {unitLabels[item.unit]}
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell className="purchases__amount-cell">
                           {item.unitCost} SAR
                         </TableCell>
 
-                        <TableCell>
+                        <TableCell className="purchases__amount-cell">
                           {
                             getPurchaseItemTotal(
                               item.quantity,

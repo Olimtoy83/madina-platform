@@ -307,3 +307,132 @@
     flex-direction: column;
   }
 }
+
+/* Stage 4A: shared operational surface language */
+.warehouse {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.warehouse__header {
+  align-items: flex-end;
+  margin-bottom: 0;
+}
+
+.warehouse__header h1,
+.warehouse__product-card-header h2 {
+  color: var(--color-text-heading);
+}
+
+.warehouse__header p,
+.warehouse__product-card-header p {
+  color: var(--color-text-muted);
+}
+
+.warehouse__toolbar {
+  margin-bottom: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.warehouse__toolbar input {
+  width: min(360px, 100%);
+}
+
+.warehouse__table-wrapper {
+  overflow: hidden;
+}
+
+.warehouse__table-wrapper .mb-table__wrapper {
+  border: 0;
+  border-radius: 0;
+}
+
+.warehouse__table {
+  min-width: 940px;
+}
+
+.warehouse__table .mb-table__header {
+  background: var(--color-surface-muted);
+}
+
+.warehouse__table .mb-table__cell {
+  color: var(--color-text-secondary);
+}
+
+.warehouse__table .mb-table__row:hover {
+  background: var(--color-primary-soft);
+}
+
+.warehouse__product-name {
+  color: var(--color-text-heading) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
+.warehouse__quantity-cell,
+.warehouse__amount-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.warehouse__amount-cell {
+  color: var(--color-text-heading) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
+.warehouse__actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.warehouse__edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.warehouse__form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.warehouse__form-field label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+
+.warehouse__product-card {
+  margin-top: 0;
+}
+
+.warehouse__detail {
+  border-color: var(--color-border-light);
+  background: var(--color-surface-muted);
+}
+
+.warehouse__detail span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.warehouse__detail strong {
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.warehouse__product-card-actions {
+  flex-wrap: wrap;
+  margin-top: var(--space-5);
+}
+
+@media (max-width: 700px) {
+  .warehouse__edit-form {
+    grid-template-columns: 1fr;
+  }
+}

@@ -161,12 +161,12 @@ export function StockMovements() {
 
   return (
     <section className="stock-movements">
-      <div className="stock-movements__header">
+      <header className="stock-movements__header">
         <div>
           <h1>Движение склада</h1>
           <p>История поступлений, продаж и корректировок товаров.</p>
         </div>
-      </div>
+      </header>
 
       {initialError && (
         <Alert variant="danger" title="Не удалось загрузить историю движений">
@@ -189,7 +189,7 @@ export function StockMovements() {
         </Card>
       </div>
 
-      <div className="stock-movements__filters">
+      <div className="stock-movements__filters" aria-label="Фильтры истории движений">
         <div className="stock-movements__filter">
           <label htmlFor="movement-type">Тип движения</label>
           <Select fullWidth id="movement-type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as MovementFilter)}>
@@ -215,7 +215,7 @@ export function StockMovements() {
         </div>
       </div>
 
-      <Card className="stock-movements__table-card">
+      <Card className="stock-movements__table-card" padding="none">
         <div className="stock-movements__table-header">
           <div>
             <h2>История движений</h2>
@@ -230,15 +230,15 @@ export function StockMovements() {
         ) : (
           <div className="stock-movements__table-wrapper">
             <Table className="stock-movements__table">
-              <TableHead><TableRow><TableHeader>Дата</TableHeader><TableHeader>Тип</TableHeader><TableHeader>Товар</TableHeader><TableHeader>Количество</TableHeader><TableHeader>Единица</TableHeader><TableHeader>Основание</TableHeader></TableRow></TableHead>
+              <TableHead><TableRow><TableHeader scope="col">Дата</TableHeader><TableHeader scope="col">Тип</TableHeader><TableHeader scope="col">Товар</TableHeader><TableHeader scope="col" className="stock-movements__quantity-cell">Количество</TableHeader><TableHeader scope="col">Единица</TableHeader><TableHeader scope="col">Основание</TableHeader></TableRow></TableHead>
               <TableBody>
                 {movements.map((movement) => {
                   const product = products.find((item) => item.id === movement.productId)
                   return <TableRow key={movement.id}>
                     <TableCell>{movement.createdAt.toLocaleDateString('ru-RU')}</TableCell>
-                    <TableCell><Badge size="sm" variant={movement.type === 'purchase' ? 'success' : movement.type === 'sale' ? 'danger' : 'default'}>{getMovementType(movement.type)}</Badge></TableCell>
+                    <TableCell><Badge size="sm" dot variant={movement.type === 'purchase' ? 'success' : movement.type === 'sale' ? 'danger' : 'default'}>{getMovementType(movement.type)}</Badge></TableCell>
                     <TableCell><span className="stock-movements__product-name">{product?.name ?? movement.productId}</span></TableCell>
-                    <TableCell><strong className={movement.type === 'sale' ? 'stock-movements__quantity stock-movements__quantity--expense' : 'stock-movements__quantity stock-movements__quantity--income'}>{movement.type === 'sale' ? movement.quantity : `+${movement.quantity}`}</strong></TableCell>
+                    <TableCell className="stock-movements__quantity-cell"><strong className={movement.type === 'sale' ? 'stock-movements__quantity stock-movements__quantity--expense' : 'stock-movements__quantity stock-movements__quantity--income'}>{movement.type === 'sale' ? movement.quantity : `+${movement.quantity}`}</strong></TableCell>
                     <TableCell>{getUnitLabel(movement.unit)}</TableCell>
                     <TableCell><span className="stock-movements__reference">{movement.note ?? movement.referenceId ?? '—'}</span></TableCell>
                   </TableRow>

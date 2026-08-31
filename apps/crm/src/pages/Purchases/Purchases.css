@@ -362,3 +362,125 @@
   justify-content: center;
   margin-top: 16px;
 }
+
+/* Stage 4A: align the purchasing workflow with Sales */
+.purchases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.purchases__header {
+  align-items: flex-end;
+  margin-bottom: 0;
+}
+
+.purchases__header p {
+  font-size: var(--font-size-page-description);
+}
+
+.purchases__table-wrapper,
+.purchases__purchase-card {
+  overflow: hidden;
+}
+
+.purchases__table-wrapper .mb-table__wrapper,
+.purchases__items-table-wrapper .mb-table__wrapper {
+  border: 0;
+  border-radius: 0;
+}
+
+.purchases__table .mb-table__header,
+.purchases__items-table .mb-table__header {
+  background: var(--color-surface-muted);
+}
+
+.purchases__table .mb-table__row:hover,
+.purchases__items-table .mb-table__row:hover {
+  background: var(--color-primary-soft);
+}
+
+.purchases__purchase-number {
+  color: var(--color-primary) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
+.purchases__quantity-cell,
+.purchases__amount-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.purchases__amount-cell {
+  color: var(--color-text-heading) !important;
+  font-weight: var(--font-weight-semibold);
+}
+
+.purchases__actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.purchases__purchase-card {
+  margin-top: 0;
+}
+
+.purchases__purchase-card-header {
+  margin-bottom: var(--space-5);
+}
+
+.purchases__detail {
+  border-color: var(--color-border-light);
+  background: var(--color-surface-muted);
+}
+
+.purchases__detail strong,
+.purchases__form-total strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.purchases__items-table {
+  border: 0;
+}
+
+.purchases__form {
+  padding: 0;
+  gap: var(--space-5);
+}
+
+.purchases__form > label,
+.purchases__form-item label {
+  gap: var(--space-2);
+}
+
+.purchases__form > label > span,
+.purchases__form-item label > span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+
+.purchases__form-items {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+.purchases__form-item {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.purchases__form-total {
+  justify-content: space-between;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.purchases__modal-actions {
+  margin-top: 0;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
