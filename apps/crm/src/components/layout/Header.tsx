@@ -56,10 +56,7 @@ export function Header({
         >
           Меню
         </Button>
-        <div>
-          <span className="app-header__eyebrow">Madina Platform</span>
-          <span className="app-header__workspace">CRM workspace</span>
-        </div>
+        <span className="app-header__workspace">{title}</span>
       </div>
 
       <div className="app-header__actions">

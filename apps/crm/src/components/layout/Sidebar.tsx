@@ -1,7 +1,9 @@
-﻿import { NavLink } from 'react-router-dom'
+﻿import { Link, NavLink } from 'react-router-dom'
 
 import { useAuth } from '../../context/useAuth'
 import { getVisibleNavigationItems } from './navigation'
+// A CSS mask applies the approved CRM color without altering canonical geometry.
+import brandMarkUrl from '../../../../../docs/brand/assets/b2-1-s1-pass5/signature-flow-diamond-b2-1-s1-pass5-master.svg'
 
 interface SidebarProps {
   onNavigate?: () => void
@@ -17,14 +19,26 @@ export function Sidebar({
 
   return (
     <aside className={`sidebar${mobile ? ' sidebar--mobile' : ''}`}>
-      <div className="sidebar__brand">
-        <div className="sidebar__logo">MB</div>
+      <Link
+        className="sidebar__brand"
+        to="/"
+        onClick={onNavigate}
+        aria-label="Madina Platform CRM — главная"
+      >
+        <span
+          className="sidebar__logo"
+          aria-hidden="true"
+          style={{
+            maskImage: `url(${brandMarkUrl})`,
+            WebkitMaskImage: `url(${brandMarkUrl})`,
+          }}
+        />
 
         <div className="sidebar__brand-copy">
           <span className="sidebar__brand-overline">Madina Platform</span>
           <span className="sidebar__brand-name">CRM</span>
         </div>
-      </div>
+      </Link>
 
       <span className="sidebar__nav-label">Рабочее пространство</span>
 
