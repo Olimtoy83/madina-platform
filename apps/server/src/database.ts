@@ -4,6 +4,7 @@ import {
   isAbsolute,
   resolve,
 } from 'node:path'
+import { isLoopbackHost } from './security/trustedProxy.js'
 
 export interface ServerConfiguration {
   nodeEnv: string
@@ -65,6 +66,12 @@ export function getServerConfiguration(
 
   const host = requiredString(environment.HOST, 'HOST')
   const databaseFile = requiredString(environment.DATABASE_FILE, 'DATABASE_FILE')
+
+  if (!isLoopbackHost(host)) {
+    throw new ServerConfigurationError(
+      'HOST must be a loopback address in production; use a controlled reverse proxy for public traffic.',
+    )
+  }
 
   if (!isAbsolute(databaseFile)) {
     throw new ServerConfigurationError(

@@ -47,3 +47,15 @@ test('production configuration accepts valid explicit settings', () => {
   equal(configuration.port, 3001)
   equal(configuration.databaseFile, 'C:\\madina-data\\madina.sqlite')
 })
+
+test('production configuration requires a loopback server host', () => {
+  throws(
+    () => getServerConfiguration({
+      NODE_ENV: 'production',
+      HOST: '0.0.0.0',
+      PORT: '3001',
+      DATABASE_FILE: 'C:\\madina-data\\madina.sqlite',
+    }),
+    ServerConfigurationError,
+  )
+})

@@ -4,6 +4,12 @@ import Fastify from 'fastify'
 import { randomUUID } from 'node:crypto'
 import { apiV1Routes } from './routes/api/v1/index.js'
 import { healthRoutes } from './routes/health.js'
+import { GlobalRateLimiter } from './security/GlobalRateLimiter.js'
+import {
+  installProductionSecurity,
+  logRedactionPaths,
+} from './security/productionSecurity.js'
+import { firstPilotTrustedProxyAddresses } from './security/trustedProxy.js'
 
 export const productWorkbookMultipartLimits = {
   fieldNameSize: 100,
@@ -16,10 +22,39 @@ export const productWorkbookMultipartLimits = {
 } as const
 
 export function buildApp() {
+  const isProduction = process.env.NODE_ENV === 'production'
+  const globalRateLimiter = new GlobalRateLimiter()
   const app = Fastify({
-    logger: true,
+    logger: {
+      redact: {
+        paths: [...logRedactionPaths],
+        censor: '[REDACTED]',
+      },
+    },
     genReqId: () => randomUUID(),
+    trustProxy: isProduction
+      ? [...firstPilotTrustedProxyAddresses]
+      : false,
   })
+
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.url === '/health' || request.url === '/ready') return
+
+    const limit = globalRateLimiter.check(request.ip)
+    if (!limit.allowed) {
+      reply.header('Retry-After', String(limit.retryAfterSeconds))
+      reply.code(429).send({
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Too many requests. Try again later.',
+      })
+      return reply
+    }
+
+    globalRateLimiter.record(request.ip)
+  })
+
+  installProductionSecurity(app, isProduction)
 
   app.register(cookie)
   app.register(multipart, {

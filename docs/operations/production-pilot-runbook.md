@@ -16,6 +16,8 @@ Internet
 - Set `DATABASE_FILE` and `MADINA_BACKUP_DIR` to absolute directories outside the repository and build output, on a durable local filesystem. Do not use network, sync, or shared filesystems.
 - Restrict database and backup access to the service account and authorized operators.
 - Run the compiled server under an external process supervisor; this repository does not provide one.
+- The reverse proxy must forward the original client address and HTTPS protocol. In production Fastify trusts only a loopback proxy (`127.0.0.1` or `::1`); it is not approved for direct internet exposure.
+- The first pilot remains same-origin, so CORS is deliberately not enabled.
 
 ## Production configuration and start
 
@@ -31,6 +33,13 @@ pnpm --filter server start
 ```
 
 `DATABASE_FILE` must be an absolute path in production. `/health` is process liveness; `/ready` additionally verifies that SQLite is usable. A normal `SIGTERM` or `SIGINT` closes Fastify, runs lifecycle hooks that close repositories, and exits successfully.
+
+## Internet-facing security policy
+
+- Every response has baseline anti-sniffing, referrer, frame, permissions, and safe CSP framing/object headers. HSTS is emitted only in production, where HTTPS terminates at the controlled reverse proxy.
+- The CSP deliberately avoids `script-src` and `style-src` in this stage, so it does not risk breaking the existing CRM bundle. A full asset-specific CSP remains a separate browser-validation stage.
+- The server applies conservative in-memory rate limiting per resolved client IP. `/health` and `/ready` are exempt for monitoring. This is single-process pilot protection, not distributed abuse protection.
+- Unexpected production errors return generic responses; request logs retain the diagnostic error. Cookie, authorization, Set-Cookie, and password fields are redacted from structured logs.
 
 ## Deployment procedure
 
