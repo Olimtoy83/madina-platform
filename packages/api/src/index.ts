@@ -2,6 +2,7 @@ export type {
   HealthResponse,
   ReadinessResponse,
 } from './health/index.js'
+export * from './retail/index.js'
 export type { ApiV1Response } from './v1/index.js'
 export type { ApiErrorResponse } from './errors/index.js'
 export type {

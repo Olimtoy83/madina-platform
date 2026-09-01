@@ -34,6 +34,7 @@ import { authRoutes } from './auth/index.js'
 import { clientsRoutes } from './clients/index.js'
 import { commerceRoutes } from './commerce/index.js'
 import { reportingRoutes } from './reporting/index.js'
+import { retailRoutes } from './retail/index.js'
 import { tasksRoutes } from './tasks/index.js'
 import { koreaAutoRoutes } from './korea-auto/index.js'
 
@@ -146,6 +147,10 @@ export async function apiV1Routes(
   app.register(reportingRoutes, {
     prefix: '/reports',
     reportingReadService,
+  })
+
+  app.register(retailRoutes, {
+    prefix: '/retail',
   })
 
   app.register(koreaAutoRoutes, {
