@@ -99,6 +99,9 @@ importers:
       '@madina/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@madina/retail':
+        specifier: workspace:*
+        version: link:../../packages/retail
       exceljs:
         specifier: ^4.4.0
         version: 4.4.0
@@ -149,6 +152,9 @@ importers:
       '@madina/core':
         specifier: workspace:*
         version: link:../core
+      '@madina/retail':
+        specifier: workspace:*
+        version: link:../retail
       '@madina/shared':
         specifier: workspace:*
         version: link:../shared

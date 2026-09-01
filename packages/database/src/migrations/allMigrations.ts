@@ -6,6 +6,7 @@ import { stockMovementHistoryMigrations } from './stockMovementHistoryMigrations
 import { salesBoundedReadMigrations } from './salesBoundedReadMigrations.js'
 import { purchasesBoundedReadMigrations } from './purchasesBoundedReadMigrations.js'
 import { koreaAutoMigrations } from './koreaAutoMigrations.js'
+import { retailMigrations } from './retailMigrations.js'
 
 export const allMigrations: readonly SqliteMigration[] = [
   ...authMigrations,
@@ -15,4 +16,5 @@ export const allMigrations: readonly SqliteMigration[] = [
   ...purchasesBoundedReadMigrations,
   ...auditMigrations,
   ...koreaAutoMigrations,
+  ...retailMigrations,
 ]

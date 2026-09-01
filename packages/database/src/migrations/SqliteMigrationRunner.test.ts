@@ -115,14 +115,14 @@ test('applies verified domain migrations to a fresh database', () => {
       WHERE type = 'table' AND name IN (
         'clients', 'tasks', 'products', 'purchases', 'purchase_items',
         'sales', 'sale_items', 'stock_movements', 'transactions',
-        'korea_auto_vehicles'
+        'korea_auto_vehicles', 'retail_locations', 'retail_user_location_grants'
       )
     `).all() as Array<{ name: string }>
     const migrations = database.prepare(`
       SELECT id FROM schema_migrations ORDER BY id
     `).all() as Array<{ id: string }>
 
-    equal(tables.length, 10)
+    equal(tables.length, 12)
     equal(migrations.map((migration) => migration.id).join(','), [
       '000_legacy_schema_baseline',
       '001_auth_foundation',
@@ -134,6 +134,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '015_purchases_bounded_read_index_v1',
       '020_audit_events_v1',
       '030_korea_auto_vehicles_v1',
+      '031_retail_access_locations_v1',
     ].join(','))
   })
 })

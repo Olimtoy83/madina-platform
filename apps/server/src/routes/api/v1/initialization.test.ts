@@ -14,6 +14,7 @@ import {
   clientsSchemaSql,
   commerceLegacySchemaSql,
   DomainSchemaVerificationError,
+  allMigrations,
   tasksSchemaSql,
 } from '@madina/database'
 import { buildApp } from '../../../app.js'
@@ -53,7 +54,7 @@ test('server starts on a fresh unified-initialized database', async () => {
         const migrations = database.prepare(`
           SELECT COUNT(*) AS count FROM schema_migrations
         `).get() as { count: number }
-        equal(migrations.count, 10)
+        equal(migrations.count, allMigrations.length)
       } finally {
         database.close()
       }

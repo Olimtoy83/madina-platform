@@ -20,6 +20,7 @@ export type AuditDomain =
   | 'tasks'
   | 'commerce'
   | 'korea-auto'
+  | 'retail'
   | 'users'
 
 export type AuditAction =
@@ -54,6 +55,10 @@ export type AuditAction =
   | 'user.password_reset'
   | 'user.sessions_revoked'
   | 'user.bootstrap_admin_created'
+  | 'retail.location_created'
+  | 'retail.location_updated'
+  | 'retail.location_granted'
+  | 'retail.location_revoked'
 
 export type JsonValue =
   | null

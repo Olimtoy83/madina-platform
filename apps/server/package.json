@@ -23,6 +23,7 @@
     "@madina/auth": "workspace:*",
     "@madina/core": "workspace:*",
     "@madina/database": "workspace:*",
+    "@madina/retail": "workspace:*",
     "exceljs": "^4.4.0",
     "fastify": "^5.12.1"
   }
