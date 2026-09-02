@@ -1,4 +1,4 @@
-import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailInventoryRepository } from '@madina/database'
+import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailInventoryRepository, SqliteRetailReconciliationRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
 import type { FastifyPluginAsync } from 'fastify'
@@ -9,6 +9,7 @@ interface RetailRoutesOptions {
   retailAccessRepository?: SqliteRetailAccessRepository
   retailCatalogRepository?: SqliteRetailCatalogRepository
   retailInventoryRepository?: SqliteRetailInventoryRepository
+  retailReconciliationRepository?: SqliteRetailReconciliationRepository
 }
 
 function sendRetailPermissionError(reply: { code(statusCode: number): { send(payload: unknown): void } }): void {
@@ -27,10 +28,11 @@ function hasRetailPermission(
 }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
-  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository) return
+  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailReconciliationRepository) return
   const retailAccessRepository = options.retailAccessRepository
   const retailCatalogRepository = options.retailCatalogRepository
   const retailInventoryRepository = options.retailInventoryRepository
+  const retailReconciliationRepository = options.retailReconciliationRepository
 
   app.get('/locations', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
@@ -83,6 +85,12 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
       movements: await retailInventoryRepository.listMovements(productId, locationId),
     }
   })
+
+  app.get('/locations/:locationId/reconciliations', { preHandler: requireRetailLocationAccess(app, retailAccessRepository, 'retail:reconciliation:read', (r) => (r.params as { locationId?: string }).locationId) }, async (request) => ({ reconciliations: await retailReconciliationRepository.list((request.params as { locationId: string }).locationId) }))
+  app.post('/locations/:locationId/reconciliations', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:reconciliation:manage', (r) => (r.params as { locationId?: string }).locationId), requireTrustedOrigin()] }, async (request, reply) => { const body=request.body as { purpose?: 'opening'|'daily' }; if(!body || (body.purpose !== 'opening' && body.purpose !== 'daily')) return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail reconciliation input is invalid.'}); const reconciliation=await retailReconciliationRepository.create((request.params as {locationId:string}).locationId,body.purpose,getAuthenticatedCommandContext(request)); reply.code(201);return {reconciliation} })
+  app.get('/locations/:locationId/reconciliations/:sessionId', { preHandler: requireRetailLocationAccess(app, retailAccessRepository, 'retail:reconciliation:read', (r) => (r.params as { locationId?: string }).locationId) }, async (request,reply) => { const s=await retailReconciliationRepository.find((request.params as {sessionId:string}).sessionId); if(!s || s.locationId !== (request.params as {locationId:string}).locationId) return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail reconciliation not found.'}); return {reconciliation:s,lines:await retailReconciliationRepository.lines(s.id)} })
+  app.post('/locations/:locationId/reconciliations/:sessionId/counts', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:reconciliation:manage', (r) => (r.params as { locationId?: string }).locationId), requireTrustedOrigin()] }, async (request,reply) => { const b=request.body as {productId?:string;actualQuantity?:number}; const actual=b?.actualQuantity; if(!b || typeof b.productId!=='string'||!Number.isSafeInteger(actual)||actual===undefined||actual<0)return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail reconciliation count is invalid.'}); const s=await retailReconciliationRepository.find((request.params as {sessionId:string}).sessionId);if(!s||s.locationId!==(request.params as {locationId:string}).locationId)return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail reconciliation not found.'}); return {line:await retailReconciliationRepository.recordCount(s.id,b.productId,actual,getAuthenticatedCommandContext(request))} })
+  app.post('/locations/:locationId/reconciliations/:sessionId/complete', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:reconciliation:manage', (r) => (r.params as { locationId?: string }).locationId), requireTrustedOrigin()] }, async (request,reply) => { const s=await retailReconciliationRepository.find((request.params as {sessionId:string}).sessionId);if(!s||s.locationId!==(request.params as {locationId:string}).locationId)return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail reconciliation not found.'});return {reconciliation:await retailReconciliationRepository.complete(s.id,getAuthenticatedCommandContext(request))} })
 
   app.get('/products', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)

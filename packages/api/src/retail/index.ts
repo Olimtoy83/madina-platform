@@ -49,3 +49,6 @@ export interface RetailInventoryMovementResponse {
   sourceLineId: string
   createdAt: string
 }
+
+export interface RetailReconciliationSessionResponse { id: string; locationId: string; purpose: 'opening' | 'daily'; status: 'open' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
+export interface RetailReconciliationLineResponse { sessionId: string; productId: string; expectedQuantity: number; actualQuantity: number; variance: number; classification: 'matched' | 'shortage' | 'surplus'; recordedAt: string; recordedBy: string }

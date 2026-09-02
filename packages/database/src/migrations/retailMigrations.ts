@@ -74,4 +74,13 @@ const retailInventoryLedger = createSqlMigration('033_retail_inventory_ledger_v1
     BEGIN SELECT RAISE(ABORT, 'Retail inventory movements are immutable.'); END;
 `)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger] as const
+const retailInventoryReconciliation = createSqlMigration('034_retail_inventory_reconciliation_v1', `
+  CREATE TABLE retail_inventory_reconciliations (id TEXT PRIMARY KEY, location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT, purpose TEXT NOT NULL CHECK (purpose IN ('opening', 'daily')), status TEXT NOT NULL CHECK (status IN ('open', 'completed')), created_at TEXT NOT NULL, created_by TEXT NOT NULL, completed_at TEXT);
+  CREATE TABLE retail_inventory_reconciliation_lines (session_id TEXT NOT NULL REFERENCES retail_inventory_reconciliations(id) ON DELETE RESTRICT, product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT, expected_quantity INTEGER NOT NULL CHECK (expected_quantity >= 0), actual_quantity INTEGER NOT NULL CHECK (actual_quantity >= 0), variance INTEGER NOT NULL, recorded_at TEXT NOT NULL, recorded_by TEXT NOT NULL, PRIMARY KEY (session_id, product_id));
+  CREATE INDEX retail_inventory_reconciliation_location_created_idx ON retail_inventory_reconciliations (location_id, created_at, id);
+  CREATE TRIGGER retail_inventory_reconciliations_no_completed_update BEFORE UPDATE ON retail_inventory_reconciliations WHEN OLD.status = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail reconciliation is immutable.'); END;
+  CREATE TRIGGER retail_inventory_reconciliation_lines_no_completed_change BEFORE UPDATE ON retail_inventory_reconciliation_lines WHEN (SELECT status FROM retail_inventory_reconciliations WHERE id = OLD.session_id) = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail reconciliation lines are immutable.'); END;
+  CREATE TRIGGER retail_inventory_reconciliation_lines_no_delete BEFORE DELETE ON retail_inventory_reconciliation_lines BEGIN SELECT RAISE(ABORT, 'Retail reconciliation lines are immutable evidence.'); END;
+`)
+
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation] as const

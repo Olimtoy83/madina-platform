@@ -23,6 +23,7 @@ import {
   SqliteRetailAccessRepository,
   SqliteRetailCatalogRepository,
   SqliteRetailInventoryRepository,
+  SqliteRetailReconciliationRepository,
 } from '@madina/database'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
@@ -348,6 +349,54 @@ test('Retail inventory reads require an active location grant and inventory capa
     inventory.close()
     catalog.close()
     access.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Retail reconciliation routes enforce capabilities, active grants, location scope, and completed-history reads', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-reconciliation-routes-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [
+    { id: 'admin-1', role: 'admin' }, { id: 'manager-1', role: 'manager' }, { id: 'operator-1', role: 'operator' },
+  ])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const catalog = new SqliteRetailCatalogRepository(databaseFile)
+  const inventory = new SqliteRetailInventoryRepository(databaseFile)
+  const reconciliation = new SqliteRetailReconciliationRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'reconciliation-route-test' }
+  const locationA = await access.createLocation({ code: 'STORE-A', name: 'Store A', type: 'store', status: 'active' }, context)
+  const locationB = await access.createLocation({ code: 'STORE-B', name: 'Store B', type: 'store', status: 'active' }, context)
+  const inactive = await access.createLocation({ code: 'STORE-I', name: 'Store I', type: 'store', status: 'inactive' }, context)
+  const product = await catalog.createProduct({ sourceId: 'P-1', name: 'Product' }, context)
+  await inventory.recordMovement({ productId: product.id, locationId: locationA.id, quantityDelta: 4, type: 'opening', sourceType: 'test', sourceId: 'seed', sourceLineId: '1' }, context)
+  await access.grant('manager-1', locationA.id, context)
+  await access.grant('manager-1', inactive.id, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  try {
+    await app.ready()
+    const createA = `/api/v1/retail/locations/${locationA.id}/reconciliations`
+    equal((await app.inject({ method: 'POST', url: createA })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'GET', url: createA })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${locationB.id}/reconciliations` })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${inactive.id}/reconciliations`, payload: { purpose: 'daily', role: 'admin' } })).statusCode, 403)
+    const created = await request(app, sessions['manager-1']!, { method: 'POST', url: createA, payload: { purpose: 'daily', locationId: locationB.id, role: 'admin' } })
+    equal(created.statusCode, 201)
+    const sessionId = (created.json() as { reconciliation: { id: string; locationId: string } }).reconciliation.id
+    equal((created.json() as { reconciliation: { locationId: string } }).reconciliation.locationId, locationA.id)
+    const base = `/api/v1/retail/locations/${locationA.id}/reconciliations/${sessionId}`
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${base}/counts`, payload: { productId: product.id, actualQuantity: 3, locationId: locationB.id, capability: 'retail:reconciliation:manage' } })).statusCode, 200)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${locationB.id}/reconciliations/${sessionId}/complete`, payload: {} })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${base}/complete`, payload: {} })).statusCode, 200)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: base })).statusCode, 200)
+    await access.revoke('manager-1', locationA.id, context)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: base })).statusCode, 403)
+  } finally {
+    await app.close(); reconciliation.close(); inventory.close(); catalog.close(); access.close()
     if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
     else process.env.DATABASE_FILE = previousDatabaseFile
     rmSync(directory, { recursive: true, force: true })

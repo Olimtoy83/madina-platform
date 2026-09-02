@@ -49,6 +49,12 @@ export interface RetailInventoryMovement {
   createdAt: Date
 }
 
+export type RetailReconciliationPurpose = 'opening' | 'daily'
+export type RetailReconciliationStatus = 'open' | 'completed'
+export type RetailReconciliationClassification = 'matched' | 'shortage' | 'surplus'
+export interface RetailReconciliationSession { id: string; locationId: string; purpose: RetailReconciliationPurpose; status: RetailReconciliationStatus; createdAt: Date; createdBy: string; completedAt?: Date }
+export interface RetailReconciliationLine { sessionId: string; productId: string; expectedQuantity: number; actualQuantity: number; variance: number; classification: RetailReconciliationClassification; recordedAt: Date; recordedBy: string }
+
 export interface RetailProductImportRow {
   sourceRef: string
   sourceId: string
@@ -96,10 +102,12 @@ export type RetailCapability =
   | 'retail:products:manage'
   | 'retail:products:import'
   | 'retail:inventory:read'
+  | 'retail:reconciliation:read'
+  | 'retail:reconciliation:manage'
 
 export const retailCapabilitiesByBaseRole = {
-  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read'],
-  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read'],
+  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage'],
+  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage'],
   operator: [],
   viewer: [],
 } as const
