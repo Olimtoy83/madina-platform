@@ -103,7 +103,7 @@ function request(
   app: FastifyInstance,
   session: string,
   options: {
-    method: 'GET' | 'POST' | 'DELETE'
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
     url: string
     payload?: unknown
   },
@@ -230,6 +230,73 @@ test('Retail Location routes enforce capability and scoped active grants with ac
     equal(events.filter((event) => event.action === 'retail.location_granted').length, 2)
     equal(events.filter((event) => event.action === 'retail.location_revoked').length, 1)
     equal(events.every((event) => event.actorUserId === 'admin-1'), true)
+  } finally {
+    audit.close()
+    await app.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Retail Product routes enforce catalog capabilities and preserve deterministic barcode/import behavior', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-product-routes-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [
+    { id: 'admin-1', role: 'admin' },
+    { id: 'manager-1', role: 'manager' },
+    { id: 'operator-1', role: 'operator' },
+  ])
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  const audit = new SqliteAuditRepository(databaseFile)
+  try {
+    await app.ready()
+    equal((await app.inject({ method: 'POST', url: '/api/v1/retail/products' })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'GET', url: '/api/v1/retail/products' })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: '/api/v1/retail/products' })).statusCode, 200)
+    const created = await request(app, sessions['admin-1']!, {
+      method: 'POST', url: '/api/v1/retail/products',
+      payload: { sourceId: 'WL-992025 / A', name: 'Wilmax plate', role: 'admin' },
+    })
+    equal(created.statusCode, 201)
+    const product = (created.json() as { product: { id: string; baseUnit: string } }).product
+    equal(product.baseUnit, 'piece')
+    equal((await request(app, sessions['operator-1']!, {
+      method: 'POST', url: '/api/v1/retail/products', payload: { sourceId: 'ATTACK', name: 'Attack', role: 'admin' },
+    })).statusCode, 403)
+    equal((await request(app, sessions['admin-1']!, {
+      method: 'POST', url: `/api/v1/retail/products/${product.id}/barcodes`, payload: { value: '005052609920253' },
+    })).statusCode, 201)
+    equal((await request(app, sessions['admin-1']!, {
+      method: 'POST', url: `/api/v1/retail/products/${product.id}/barcodes`, payload: { value: '5052609920253' },
+    })).statusCode, 201)
+    const lookup = await request(app, sessions['manager-1']!, { method: 'GET', url: '/api/v1/retail/products/by-barcode/005052609920253' })
+    equal(lookup.statusCode, 200)
+    equal((lookup.json() as { product: { id: string } }).product.id, product.id)
+    const other = await request(app, sessions['admin-1']!, { method: 'POST', url: '/api/v1/retail/products', payload: { sourceId: 'OTHER', name: 'Other' } })
+    const otherProduct = (other.json() as { product: { id: string } }).product
+    equal((await request(app, sessions['admin-1']!, {
+      method: 'POST', url: `/api/v1/retail/products/${otherProduct.id}/barcodes`, payload: { value: '5052609920253' },
+    })).statusCode, 409)
+    const dryRun = await request(app, sessions['admin-1']!, {
+      method: 'POST', url: '/api/v1/retail/products/imports',
+      payload: { dryRun: true, rows: [{ sourceRef: 'r-1', sourceId: 'IMP-1', name: 'Imported', barcode: '000123' }] },
+    })
+    equal(dryRun.statusCode, 200)
+    equal((dryRun.json() as { result: { summary: { created: number } } }).result.summary.created, 1)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: '/api/v1/retail/products/by-barcode/000123' })).statusCode, 404)
+    equal((await request(app, sessions['admin-1']!, {
+      method: 'POST', url: '/api/v1/retail/products/imports',
+      payload: { dryRun: false, rows: [{ sourceRef: 'r-1', sourceId: 'IMP-1', name: 'Imported', barcode: '000123' }] },
+    })).statusCode, 200)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: '/api/v1/retail/products/by-barcode/000123' })).statusCode, 200)
+    const actions = (await audit.findAll()).map((event) => event.action)
+    equal(actions.includes('retail.product_created'), true)
+    equal(actions.includes('retail.product_barcode_added'), true)
+    equal(actions.includes('retail.products_imported'), true)
   } finally {
     audit.close()
     await app.close()

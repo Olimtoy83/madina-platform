@@ -20,6 +20,7 @@ import {
   SqliteTaskRepository,
   SqliteVehicleRepository,
   SqliteRetailAccessRepository,
+  SqliteRetailCatalogRepository,
   initializeDatabase,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
@@ -90,6 +91,7 @@ export async function apiV1Routes(
   )
   const vehicleRepository = new SqliteVehicleRepository(databaseFile)
   const retailAccessRepository = new SqliteRetailAccessRepository(databaseFile)
+  const retailCatalogRepository = new SqliteRetailCatalogRepository(databaseFile)
   const vehicleService = new VehicleService(vehicleRepository)
 
   app.addHook('onClose', async () => {
@@ -101,6 +103,7 @@ export async function apiV1Routes(
     taskRepository.close()
     vehicleRepository.close()
     retailAccessRepository.close()
+    retailCatalogRepository.close()
   })
 
   app.get(
@@ -155,6 +158,7 @@ export async function apiV1Routes(
   app.register(retailRoutes, {
     prefix: '/retail',
     retailAccessRepository,
+    retailCatalogRepository,
   })
 
   app.register(koreaAutoRoutes, {

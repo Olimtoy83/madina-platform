@@ -1,4 +1,4 @@
-import type { SqliteRetailAccessRepository } from '@madina/database'
+import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
 import type { FastifyPluginAsync } from 'fastify'
@@ -7,6 +7,7 @@ import { requireRetailLocationAccess } from '../../../../security/retailLocation
 
 interface RetailRoutesOptions {
   retailAccessRepository?: SqliteRetailAccessRepository
+  retailCatalogRepository?: SqliteRetailCatalogRepository
 }
 
 function sendRetailPermissionError(reply: { code(statusCode: number): { send(payload: unknown): void } }): void {
@@ -25,8 +26,9 @@ function hasRetailPermission(
 }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
-  if (!options.retailAccessRepository) return
+  if (!options.retailAccessRepository || !options.retailCatalogRepository) return
   const retailAccessRepository = options.retailAccessRepository
+  const retailCatalogRepository = options.retailCatalogRepository
 
   app.get('/locations', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
@@ -51,6 +53,68 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
   }, async (request) => {
     const locationId = (request.params as { locationId: string }).locationId
     return { location: await retailAccessRepository.findLocation(locationId) }
+  })
+
+  app.get('/products', { preHandler: requireAuthentication(app) }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:read')) return sendRetailPermissionError(reply)
+    const search = (request.query as { search?: string }).search
+    return { products: await retailCatalogRepository.listProducts(typeof search === 'string' ? search : undefined) }
+  })
+
+  app.get('/products/by-barcode/:barcode', { preHandler: requireAuthentication(app) }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:read')) return sendRetailPermissionError(reply)
+    const product = await retailCatalogRepository.findProductByBarcode((request.params as { barcode: string }).barcode)
+    if (!product) return reply.code(404).send({ statusCode: 404, error: 'Not Found', message: 'Retail Product barcode not found.' })
+    return { product }
+  })
+
+  app.get('/products/:productId', { preHandler: requireAuthentication(app) }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:read')) return sendRetailPermissionError(reply)
+    const product = await retailCatalogRepository.findProduct((request.params as { productId: string }).productId)
+    if (!product) return reply.code(404).send({ statusCode: 404, error: 'Not Found', message: 'Retail Product not found.' })
+    return { product, barcodes: await retailCatalogRepository.listBarcodes(product.id) }
+  })
+
+  app.post('/products', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:manage')) return sendRetailPermissionError(reply)
+    const body = request.body as { sourceId?: string; name?: string; status?: 'active' | 'inactive' } | undefined
+    if (!body || typeof body.sourceId !== 'string' || typeof body.name !== 'string' || (body.status !== undefined && body.status !== 'active' && body.status !== 'inactive')) return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Product input is invalid.' })
+    try { const product = await retailCatalogRepository.createProduct({ sourceId: body.sourceId, name: body.name, status: body.status }, getAuthenticatedCommandContext(request)); reply.code(201); return { product } } catch (error) { return reply.code(409).send({ statusCode: 409, error: 'Conflict', message: error instanceof Error ? error.message : 'Retail Product conflict.' }) }
+  })
+
+  app.patch('/products/:productId', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:manage')) return sendRetailPermissionError(reply)
+    const body = request.body as { name?: string; status?: 'active' | 'inactive' } | undefined
+    if (!body || typeof body.name !== 'string' || (body.status !== 'active' && body.status !== 'inactive')) return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Product input is invalid.' })
+    try { return { product: await retailCatalogRepository.updateProduct((request.params as { productId: string }).productId, { name: body.name, status: body.status }, getAuthenticatedCommandContext(request)) } } catch (error) { return reply.code(error instanceof Error && error.message === 'Retail Product not found.' ? 404 : 400).send({ statusCode: error instanceof Error && error.message === 'Retail Product not found.' ? 404 : 400, error: 'Retail Product error', message: error instanceof Error ? error.message : 'Retail Product error.' }) }
+  })
+
+  app.post('/products/:productId/barcodes', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:manage')) return sendRetailPermissionError(reply)
+    const body = request.body as { value?: string } | undefined
+    if (!body || typeof body.value !== 'string') return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Product barcode input is invalid.' })
+    try { const barcode = await retailCatalogRepository.addBarcode((request.params as { productId: string }).productId, body.value, getAuthenticatedCommandContext(request)); reply.code(201); return { barcode } } catch (error) { return reply.code(409).send({ statusCode: 409, error: 'Conflict', message: error instanceof Error ? error.message : 'Retail Product barcode conflict.' }) }
+  })
+
+  app.post('/products/imports', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:import')) return sendRetailPermissionError(reply)
+    const body = request.body as { dryRun?: boolean; rows?: unknown } | undefined
+    if (!body || typeof body.dryRun !== 'boolean' || !Array.isArray(body.rows)) return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Product import input is invalid.' })
+    return { result: await retailCatalogRepository.importProducts(body.rows as never, body.dryRun, getAuthenticatedCommandContext(request)) }
   })
 
   app.post('/locations', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {

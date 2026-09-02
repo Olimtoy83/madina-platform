@@ -59,6 +59,10 @@ export type AuditAction =
   | 'retail.location_updated'
   | 'retail.location_granted'
   | 'retail.location_revoked'
+  | 'retail.product_created'
+  | 'retail.product_updated'
+  | 'retail.product_barcode_added'
+  | 'retail.products_imported'
 
 export type JsonValue =
   | null

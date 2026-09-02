@@ -135,6 +135,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '020_audit_events_v1',
       '030_korea_auto_vehicles_v1',
       '031_retail_access_locations_v1',
+      '032_retail_products_barcodes_v1',
     ].join(','))
   })
 })
