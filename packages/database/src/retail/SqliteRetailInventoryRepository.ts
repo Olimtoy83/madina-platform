@@ -53,68 +53,8 @@ export class SqliteRetailInventoryRepository {
   }
 
   async recordMovement(input: RecordRetailInventoryMovementInput, context: CommandContext): Promise<RetailInventoryMovement> {
-    const movement = this.makeMovement(input)
     return this.transaction(async () => {
-      const existing = this.findMovementBySource(movement.sourceType, movement.sourceId, movement.sourceLineId)
-      if (existing) return existing
-
-      this.assertActiveProduct(movement.productId)
-      this.assertActiveLocation(movement.locationId)
-      const current = this.findBalanceSync(movement.productId, movement.locationId)?.onHandQuantity ?? 0
-      const next = current + movement.quantityDelta
-      if (next < 0) throw new Error('Retail Inventory movement would produce negative on-hand quantity.')
-
-      this.database.prepare('INSERT INTO retail_inventory_movements (id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(movement.id, movement.productId, movement.locationId, movement.quantityDelta, movement.type, movement.sourceType, movement.sourceId, movement.sourceLineId, movement.createdAt.toISOString())
-      this.database.prepare(`INSERT INTO retail_inventory_balances (product_id, location_id, on_hand_quantity, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(product_id, location_id) DO UPDATE SET on_hand_quantity = excluded.on_hand_quantity, updated_at = excluded.updated_at`).run(movement.productId, movement.locationId, next, movement.createdAt.toISOString())
-      this.audit(context, movement)
-      return movement
-    })
-  }
-
-  private makeMovement(input: RecordRetailInventoryMovementInput): RetailInventoryMovement {
-    if (!Number.isSafeInteger(input.quantityDelta) || input.quantityDelta === 0) throw new Error('Retail Inventory quantityDelta must be a non-zero safe integer.')
-    if (!movementTypes.includes(input.type)) throw new Error('Retail Inventory movement type is invalid.')
-    const now = new Date()
-    return {
-      id: randomUUID(),
-      productId: requiredText(input.productId, 'productId'),
-      locationId: requiredText(input.locationId, 'locationId'),
-      quantityDelta: input.quantityDelta,
-      type: input.type,
-      sourceType: requiredText(input.sourceType, 'sourceType'),
-      sourceId: requiredText(input.sourceId, 'sourceId'),
-      sourceLineId: requiredText(input.sourceLineId, 'sourceLineId'),
-      createdAt: now,
-    }
-  }
-
-  private findBalanceSync(productId: string, locationId: string): RetailInventoryBalance | undefined {
-    const row = this.database.prepare('SELECT product_id, location_id, on_hand_quantity, updated_at FROM retail_inventory_balances WHERE product_id = ? AND location_id = ?').get(productId, locationId) as BalanceRow | undefined
-    return row ? toBalance(row) : undefined
-  }
-
-  private findMovementBySource(sourceType: string, sourceId: string, sourceLineId: string): RetailInventoryMovement | undefined {
-    const row = this.database.prepare('SELECT id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at FROM retail_inventory_movements WHERE source_type = ? AND source_id = ? AND source_line_id = ?').get(sourceType, sourceId, sourceLineId) as MovementRow | undefined
-    return row ? toMovement(row) : undefined
-  }
-
-  private assertActiveProduct(productId: string): void {
-    const row = this.database.prepare('SELECT status FROM retail_products WHERE id = ?').get(productId) as { status: string } | undefined
-    if (!row) throw new Error('Retail Product not found.')
-    if (row.status !== 'active') throw new Error('Retail Product is inactive.')
-  }
-
-  private assertActiveLocation(locationId: string): void {
-    const row = this.database.prepare('SELECT status FROM retail_locations WHERE id = ?').get(locationId) as { status: string } | undefined
-    if (!row) throw new Error('Retail Location not found.')
-    if (row.status !== 'active') throw new Error('Retail Location is inactive.')
-  }
-
-  private audit(context: CommandContext, movement: RetailInventoryMovement): void {
-    appendAuditEvent(this.database, {
-      id: randomUUID(), occurredAt: new Date(), actorType: context.actorType, actorUserId: context.actorUserId, requestId: context.requestId,
-      domain: 'retail', entityType: 'retail_inventory_movement', entityId: movement.id, action: 'retail.inventory_movement_recorded',
-      metadata: { productId: movement.productId, locationId: movement.locationId, quantityDelta: movement.quantityDelta, type: movement.type, sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineId: movement.sourceLineId },
+      return recordRetailInventoryMovement(this.database, input, context)
     })
   }
 
@@ -124,4 +64,26 @@ export class SqliteRetailInventoryRepository {
   }
 
   close(): void { this.database.close() }
+}
+
+/** The Stage 4 mutation primitive. Callers that compose it must own the SQLite transaction. */
+export function recordRetailInventoryMovement(database: DatabaseSync, input: RecordRetailInventoryMovementInput, context: CommandContext): RetailInventoryMovement {
+  if (!Number.isSafeInteger(input.quantityDelta) || input.quantityDelta === 0) throw new Error('Retail Inventory quantityDelta must be a non-zero safe integer.')
+  if (!movementTypes.includes(input.type)) throw new Error('Retail Inventory movement type is invalid.')
+  const movement: RetailInventoryMovement = { id: randomUUID(), productId: requiredText(input.productId, 'productId'), locationId: requiredText(input.locationId, 'locationId'), quantityDelta: input.quantityDelta, type: input.type, sourceType: requiredText(input.sourceType, 'sourceType'), sourceId: requiredText(input.sourceId, 'sourceId'), sourceLineId: requiredText(input.sourceLineId, 'sourceLineId'), createdAt: new Date() }
+  const existing = database.prepare('SELECT id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at FROM retail_inventory_movements WHERE source_type = ? AND source_id = ? AND source_line_id = ?').get(movement.sourceType, movement.sourceId, movement.sourceLineId) as MovementRow | undefined
+  if (existing) return toMovement(existing)
+  const product = database.prepare('SELECT status FROM retail_products WHERE id = ?').get(movement.productId) as { status: string } | undefined
+  if (!product) throw new Error('Retail Product not found.')
+  if (product.status !== 'active') throw new Error('Retail Product is inactive.')
+  const location = database.prepare('SELECT status FROM retail_locations WHERE id = ?').get(movement.locationId) as { status: string } | undefined
+  if (!location) throw new Error('Retail Location not found.')
+  if (location.status !== 'active') throw new Error('Retail Location is inactive.')
+  const balance = database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id = ? AND location_id = ?').get(movement.productId, movement.locationId) as { on_hand_quantity: number } | undefined
+  const next = (balance?.on_hand_quantity ?? 0) + movement.quantityDelta
+  if (next < 0) throw new Error('Retail Inventory movement would produce negative on-hand quantity.')
+  database.prepare('INSERT INTO retail_inventory_movements (id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(movement.id, movement.productId, movement.locationId, movement.quantityDelta, movement.type, movement.sourceType, movement.sourceId, movement.sourceLineId, movement.createdAt.toISOString())
+  database.prepare('INSERT INTO retail_inventory_balances (product_id, location_id, on_hand_quantity, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(product_id, location_id) DO UPDATE SET on_hand_quantity = excluded.on_hand_quantity, updated_at = excluded.updated_at').run(movement.productId, movement.locationId, next, movement.createdAt.toISOString())
+  appendAuditEvent(database, { id: randomUUID(), occurredAt: new Date(), actorType: context.actorType, actorUserId: context.actorUserId, requestId: context.requestId, domain: 'retail', entityType: 'retail_inventory_movement', entityId: movement.id, action: 'retail.inventory_movement_recorded', metadata: { productId: movement.productId, locationId: movement.locationId, quantityDelta: movement.quantityDelta, type: movement.type, sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineId: movement.sourceLineId } })
+  return movement
 }

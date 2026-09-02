@@ -52,3 +52,7 @@ export interface RetailInventoryMovementResponse {
 
 export interface RetailReconciliationSessionResponse { id: string; locationId: string; purpose: 'opening' | 'daily'; status: 'open' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
 export interface RetailReconciliationLineResponse { sessionId: string; productId: string; expectedQuantity: number; actualQuantity: number; variance: number; classification: 'matched' | 'shortage' | 'surplus'; recordedAt: string; recordedBy: string }
+
+export interface RetailGoodsReceiptResponse { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: 'draft' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
+export interface RetailGoodsReceiptLineRequest { productId: string; quantity: number }
+export interface RetailGoodsReceiptLineResponse { id: string; receiptId: string; productId: string; quantity: number }

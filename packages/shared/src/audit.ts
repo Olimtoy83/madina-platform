@@ -67,6 +67,9 @@ export type AuditAction =
   | 'retail.reconciliation_created'
   | 'retail.reconciliation_count_recorded'
   | 'retail.reconciliation_completed'
+  | 'retail.goods_receipt_created'
+  | 'retail.goods_receipt_updated'
+  | 'retail.goods_receipt_completed'
 
 export type JsonValue =
   | null

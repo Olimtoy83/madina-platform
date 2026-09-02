@@ -83,4 +83,31 @@ const retailInventoryReconciliation = createSqlMigration('034_retail_inventory_r
   CREATE TRIGGER retail_inventory_reconciliation_lines_no_delete BEFORE DELETE ON retail_inventory_reconciliation_lines BEGIN SELECT RAISE(ABORT, 'Retail reconciliation lines are immutable evidence.'); END;
 `)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation] as const
+const retailGoodsReceipts = createSqlMigration('035_retail_goods_receipts_v1', `
+  CREATE TABLE retail_goods_receipts (
+    id TEXT PRIMARY KEY,
+    receipt_reference TEXT NOT NULL,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    supplier_reference TEXT,
+    shipment_reference TEXT,
+    notes TEXT,
+    status TEXT NOT NULL CHECK (status IN ('draft', 'completed')),
+    created_at TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    completed_at TEXT,
+    UNIQUE (location_id, receipt_reference)
+  );
+  CREATE TABLE retail_goods_receipt_lines (
+    id TEXT PRIMARY KEY,
+    receipt_id TEXT NOT NULL REFERENCES retail_goods_receipts(id) ON DELETE RESTRICT,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK (quantity > 0),
+    UNIQUE (receipt_id, product_id)
+  );
+  CREATE INDEX retail_goods_receipts_location_created_idx ON retail_goods_receipts (location_id, created_at, id);
+  CREATE TRIGGER retail_goods_receipts_no_completed_update BEFORE UPDATE ON retail_goods_receipts WHEN OLD.status = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail Goods Receipt is immutable.'); END;
+  CREATE TRIGGER retail_goods_receipt_lines_no_completed_update BEFORE UPDATE ON retail_goods_receipt_lines WHEN (SELECT status FROM retail_goods_receipts WHERE id = OLD.receipt_id) = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail Goods Receipt lines are immutable.'); END;
+  CREATE TRIGGER retail_goods_receipt_lines_no_completed_delete BEFORE DELETE ON retail_goods_receipt_lines WHEN (SELECT status FROM retail_goods_receipts WHERE id = OLD.receipt_id) = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail Goods Receipt lines are immutable.'); END;
+`)
+
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts] as const

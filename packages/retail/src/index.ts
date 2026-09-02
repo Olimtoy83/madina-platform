@@ -55,6 +55,10 @@ export type RetailReconciliationClassification = 'matched' | 'shortage' | 'surpl
 export interface RetailReconciliationSession { id: string; locationId: string; purpose: RetailReconciliationPurpose; status: RetailReconciliationStatus; createdAt: Date; createdBy: string; completedAt?: Date }
 export interface RetailReconciliationLine { sessionId: string; productId: string; expectedQuantity: number; actualQuantity: number; variance: number; classification: RetailReconciliationClassification; recordedAt: Date; recordedBy: string }
 
+export type RetailGoodsReceiptStatus = 'draft' | 'completed'
+export interface RetailGoodsReceipt { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: RetailGoodsReceiptStatus; createdAt: Date; createdBy: string; completedAt?: Date }
+export interface RetailGoodsReceiptLine { id: string; receiptId: string; productId: string; quantity: number }
+
 export interface RetailProductImportRow {
   sourceRef: string
   sourceId: string
@@ -104,10 +108,12 @@ export type RetailCapability =
   | 'retail:inventory:read'
   | 'retail:reconciliation:read'
   | 'retail:reconciliation:manage'
+  | 'retail:goods-receipts:read'
+  | 'retail:goods-receipts:manage'
 
 export const retailCapabilitiesByBaseRole = {
-  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage'],
-  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage'],
+  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage'],
+  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage'],
   operator: [],
   viewer: [],
 } as const

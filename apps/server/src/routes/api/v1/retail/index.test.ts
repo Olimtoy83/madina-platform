@@ -402,3 +402,41 @@ test('Retail reconciliation routes enforce capabilities, active grants, location
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test('Goods Receipt routes enforce warehouse-only capability and active Location authorization without payload escalation', async () => {
+  const directory=mkdtempSync(join(tmpdir(),'madina-retail-goods-receipt-routes-')),databaseFile=join(directory,'madina.sqlite'),previousDatabaseFile=process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions=await seedSessions(databaseFile,[{id:'admin-1',role:'admin'},{id:'manager-1',role:'manager'},{id:'operator-1',role:'operator'}])
+  const access=new SqliteRetailAccessRepository(databaseFile),catalog=new SqliteRetailCatalogRepository(databaseFile),inventory=new SqliteRetailInventoryRepository(databaseFile)
+  const context={actorType:'user' as const,actorUserId:'admin-1',requestId:'goods-receipt-route-test'}
+  const warehouseA=await access.createLocation({code:'WH-A',name:'Warehouse A',type:'central_warehouse',status:'active'},context)
+  const warehouseB=await access.createLocation({code:'WH-B',name:'Warehouse B',type:'central_warehouse',status:'active'},context)
+  const store=await access.createLocation({code:'STORE',name:'Store',type:'store',status:'active'},context)
+  const inactive=await access.createLocation({code:'WH-I',name:'Inactive Warehouse',type:'central_warehouse',status:'inactive'},context)
+  const product=await catalog.createProduct({sourceId:'P-1',name:'Product'},context)
+  await access.grant('manager-1',warehouseA.id,context);await access.grant('manager-1',inactive.id,context)
+  process.env.DATABASE_FILE=databaseFile
+  const app=buildApp()
+  try { await app.ready()
+    const base=`/api/v1/retail/locations/${warehouseA.id}/goods-receipts`
+    const payload={receiptReference:'GR-API-1',lines:[{productId:product.id,quantity:4}],locationId:warehouseB.id,role:'admin',capability:'retail:goods-receipts:manage'}
+    equal((await app.inject({method:'POST',url:base,payload})).statusCode,401)
+    equal((await request(app,sessions['operator-1']!,{method:'POST',url:base,payload})).statusCode,403)
+    await access.revoke('manager-1',warehouseA.id,context)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:base,payload})).statusCode,403)
+    await access.grant('manager-1',warehouseA.id,context)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${inactive.id}/goods-receipts`,payload})).statusCode,403)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${store.id}/goods-receipts`,payload})).statusCode,403)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${warehouseB.id}/goods-receipts`,payload})).statusCode,403)
+    const created=await request(app,sessions['manager-1']!,{method:'POST',url:base,payload})
+    equal(created.statusCode,201)
+    const receiptId=(created.json() as {goodsReceipt:{id:string;locationId:string}}).goodsReceipt.id
+    equal((created.json() as {goodsReceipt:{locationId:string}}).goodsReceipt.locationId,warehouseA.id)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${receiptId}/complete`,payload:{locationId:warehouseB.id,role:'admin'}})).statusCode,200)
+    equal((await inventory.findBalance(product.id,warehouseA.id))?.onHandQuantity,4)
+    equal((await inventory.findBalance(product.id,warehouseB.id)),undefined)
+    equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,200)
+    await access.revoke('manager-1',warehouseA.id,context)
+    equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,403)
+  } finally { await app.close();inventory.close();catalog.close();access.close();if(previousDatabaseFile===undefined)delete process.env.DATABASE_FILE;else process.env.DATABASE_FILE=previousDatabaseFile;rmSync(directory,{recursive:true,force:true}) }
+})
