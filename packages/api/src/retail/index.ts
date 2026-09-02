@@ -30,3 +30,22 @@ export interface RetailProductImportRequest {
   dryRun: boolean
   rows: readonly RetailProductImportRowRequest[]
 }
+
+export interface RetailInventoryBalanceResponse {
+  productId: string
+  locationId: string
+  onHandQuantity: number
+  updatedAt: string
+}
+
+export interface RetailInventoryMovementResponse {
+  id: string
+  productId: string
+  locationId: string
+  quantityDelta: number
+  type: 'opening' | 'goods_receipt' | 'transfer' | 'sale' | 'return' | 'reconciliation_adjustment'
+  sourceType: string
+  sourceId: string
+  sourceLineId: string
+  createdAt: string
+}

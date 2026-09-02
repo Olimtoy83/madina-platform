@@ -20,6 +20,9 @@ import {
   initializeDatabase,
   SqliteAuditRepository,
   SqliteAuthRepository,
+  SqliteRetailAccessRepository,
+  SqliteRetailCatalogRepository,
+  SqliteRetailInventoryRepository,
 } from '@madina/database'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
@@ -300,6 +303,51 @@ test('Retail Product routes enforce catalog capabilities and preserve determinis
   } finally {
     audit.close()
     await app.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Retail inventory reads require an active location grant and inventory capability', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-inventory-routes-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [
+    { id: 'admin-1', role: 'admin' },
+    { id: 'manager-1', role: 'manager' },
+    { id: 'operator-1', role: 'operator' },
+  ])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const catalog = new SqliteRetailCatalogRepository(databaseFile)
+  const inventory = new SqliteRetailInventoryRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'inventory-route-test' }
+  const location = await access.createLocation({ code: 'STORE-A', name: 'Store A', type: 'store', status: 'active' }, context)
+  const otherLocation = await access.createLocation({ code: 'STORE-B', name: 'Store B', type: 'store', status: 'active' }, context)
+  const product = await catalog.createProduct({ sourceId: 'P-1', name: 'Product' }, context)
+  await inventory.recordMovement({ productId: product.id, locationId: location.id, quantityDelta: 6, type: 'opening', sourceType: 'test', sourceId: 'opening-1', sourceLineId: 'line-1' }, context)
+  await access.grant('manager-1', location.id, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+
+  try {
+    await app.ready()
+    equal((await app.inject({ method: 'GET', url: `/api/v1/retail/locations/${location.id}/inventory/balances` })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'GET', url: `/api/v1/retail/locations/${location.id}/inventory/balances` })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${otherLocation.id}/inventory/balances` })).statusCode, 403)
+    const balances = await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${location.id}/inventory/balances` })
+    equal(balances.statusCode, 200)
+    equal((balances.json() as { balances: Array<{ productId: string; onHandQuantity: number }> }).balances[0]?.productId, product.id)
+    equal((balances.json() as { balances: Array<{ onHandQuantity: number }> }).balances[0]?.onHandQuantity, 6)
+    const history = await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${location.id}/inventory/products/${product.id}/movements` })
+    equal(history.statusCode, 200)
+    equal((history.json() as { movements: unknown[] }).movements.length, 1)
+  } finally {
+    await app.close()
+    inventory.close()
+    catalog.close()
+    access.close()
     if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
     else process.env.DATABASE_FILE = previousDatabaseFile
     rmSync(directory, { recursive: true, force: true })

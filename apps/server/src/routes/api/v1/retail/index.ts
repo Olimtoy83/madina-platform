@@ -1,4 +1,4 @@
-import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository } from '@madina/database'
+import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailInventoryRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
 import type { FastifyPluginAsync } from 'fastify'
@@ -8,6 +8,7 @@ import { requireRetailLocationAccess } from '../../../../security/retailLocation
 interface RetailRoutesOptions {
   retailAccessRepository?: SqliteRetailAccessRepository
   retailCatalogRepository?: SqliteRetailCatalogRepository
+  retailInventoryRepository?: SqliteRetailInventoryRepository
 }
 
 function sendRetailPermissionError(reply: { code(statusCode: number): { send(payload: unknown): void } }): void {
@@ -26,9 +27,10 @@ function hasRetailPermission(
 }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
-  if (!options.retailAccessRepository || !options.retailCatalogRepository) return
+  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository) return
   const retailAccessRepository = options.retailAccessRepository
   const retailCatalogRepository = options.retailCatalogRepository
+  const retailInventoryRepository = options.retailInventoryRepository
 
   app.get('/locations', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
@@ -53,6 +55,33 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
   }, async (request) => {
     const locationId = (request.params as { locationId: string }).locationId
     return { location: await retailAccessRepository.findLocation(locationId) }
+  })
+
+  app.get('/locations/:locationId/inventory/balances', {
+    preHandler: requireRetailLocationAccess(
+      app,
+      retailAccessRepository,
+      'retail:inventory:read',
+      (request) => (request.params as { locationId?: string }).locationId,
+    ),
+  }, async (request) => {
+    const locationId = (request.params as { locationId: string }).locationId
+    return { balances: await retailInventoryRepository.listBalances(locationId) }
+  })
+
+  app.get('/locations/:locationId/inventory/products/:productId/movements', {
+    preHandler: requireRetailLocationAccess(
+      app,
+      retailAccessRepository,
+      'retail:inventory:read',
+      (request) => (request.params as { locationId?: string }).locationId,
+    ),
+  }, async (request) => {
+    const { locationId, productId } = request.params as { locationId: string; productId: string }
+    return {
+      balance: await retailInventoryRepository.findBalance(productId, locationId),
+      movements: await retailInventoryRepository.listMovements(productId, locationId),
+    }
   })
 
   app.get('/products', { preHandler: requireAuthentication(app) }, async (request, reply) => {

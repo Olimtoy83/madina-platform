@@ -44,4 +44,34 @@ const retailProductsBarcodes = createSqlMigration('032_retail_products_barcodes_
     ON retail_product_barcodes (product_id, value);
 `)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes] as const
+const retailInventoryLedger = createSqlMigration('033_retail_inventory_ledger_v1', `
+  CREATE TABLE retail_inventory_balances (
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    on_hand_quantity INTEGER NOT NULL CHECK (on_hand_quantity >= 0),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (product_id, location_id)
+  );
+  CREATE TABLE retail_inventory_movements (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    quantity_delta INTEGER NOT NULL CHECK (quantity_delta <> 0),
+    movement_type TEXT NOT NULL CHECK (movement_type IN ('opening', 'goods_receipt', 'transfer', 'sale', 'return', 'reconciliation_adjustment')),
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_line_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (source_type, source_id, source_line_id)
+  );
+  CREATE INDEX retail_inventory_movements_location_product_created_idx
+    ON retail_inventory_movements (location_id, product_id, created_at, id);
+  CREATE TRIGGER retail_inventory_movements_no_update
+    BEFORE UPDATE ON retail_inventory_movements
+    BEGIN SELECT RAISE(ABORT, 'Retail inventory movements are immutable.'); END;
+  CREATE TRIGGER retail_inventory_movements_no_delete
+    BEFORE DELETE ON retail_inventory_movements
+    BEGIN SELECT RAISE(ABORT, 'Retail inventory movements are immutable.'); END;
+`)
+
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger] as const

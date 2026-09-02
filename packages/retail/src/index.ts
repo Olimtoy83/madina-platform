@@ -22,6 +22,33 @@ export interface RetailProductBarcode {
   updatedAt: Date
 }
 
+export type RetailInventoryMovementType =
+  | 'opening'
+  | 'goods_receipt'
+  | 'transfer'
+  | 'sale'
+  | 'return'
+  | 'reconciliation_adjustment'
+
+export interface RetailInventoryBalance {
+  productId: string
+  locationId: string
+  onHandQuantity: number
+  updatedAt: Date
+}
+
+export interface RetailInventoryMovement {
+  id: string
+  productId: string
+  locationId: string
+  quantityDelta: number
+  type: RetailInventoryMovementType
+  sourceType: string
+  sourceId: string
+  sourceLineId: string
+  createdAt: Date
+}
+
 export interface RetailProductImportRow {
   sourceRef: string
   sourceId: string
@@ -68,10 +95,11 @@ export type RetailCapability =
   | 'retail:products:read'
   | 'retail:products:manage'
   | 'retail:products:import'
+  | 'retail:inventory:read'
 
 export const retailCapabilitiesByBaseRole = {
-  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import'],
-  manager: ['retail:locations:read', 'retail:products:read'],
+  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read'],
+  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read'],
   operator: [],
   viewer: [],
 } as const

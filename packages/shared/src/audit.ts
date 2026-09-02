@@ -63,6 +63,7 @@ export type AuditAction =
   | 'retail.product_updated'
   | 'retail.product_barcode_added'
   | 'retail.products_imported'
+  | 'retail.inventory_movement_recorded'
 
 export type JsonValue =
   | null
