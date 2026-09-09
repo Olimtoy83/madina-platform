@@ -119,13 +119,14 @@ test('applies verified domain migrations to a fresh database', () => {
         'retail_products', 'retail_product_barcodes', 'retail_inventory_balances',
         'retail_inventory_movements', 'retail_inventory_reconciliations', 'retail_inventory_reconciliation_lines',
         'retail_goods_receipts', 'retail_goods_receipt_lines'
+        ,'retail_transfers','retail_transfer_lines'
       )
     `).all() as Array<{ name: string }>
     const migrations = database.prepare(`
       SELECT id FROM schema_migrations ORDER BY id
     `).all() as Array<{ id: string }>
 
-    equal(tables.length, 20)
+    equal(tables.length, 22)
     equal(migrations.map((migration) => migration.id).join(','), [
       '000_legacy_schema_baseline',
       '001_auth_foundation',
@@ -142,6 +143,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '033_retail_inventory_ledger_v1',
       '034_retail_inventory_reconciliation_v1',
       '035_retail_goods_receipts_v1',
+      '036_retail_transfers_v1',
     ].join(','))
   })
 })

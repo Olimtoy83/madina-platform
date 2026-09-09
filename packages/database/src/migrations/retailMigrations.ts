@@ -109,5 +109,14 @@ const retailGoodsReceipts = createSqlMigration('035_retail_goods_receipts_v1', `
   CREATE TRIGGER retail_goods_receipt_lines_no_completed_update BEFORE UPDATE ON retail_goods_receipt_lines WHEN (SELECT status FROM retail_goods_receipts WHERE id = OLD.receipt_id) = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail Goods Receipt lines are immutable.'); END;
   CREATE TRIGGER retail_goods_receipt_lines_no_completed_delete BEFORE DELETE ON retail_goods_receipt_lines WHEN (SELECT status FROM retail_goods_receipts WHERE id = OLD.receipt_id) = 'completed' BEGIN SELECT RAISE(ABORT, 'Completed Retail Goods Receipt lines are immutable.'); END;
 `)
+const retailTransfers = createSqlMigration('036_retail_transfers_v1', `
+  CREATE TABLE retail_transfers (id TEXT PRIMARY KEY, source_location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT, destination_location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT, status TEXT NOT NULL CHECK (status IN ('draft','dispatched','received')), created_at TEXT NOT NULL, created_by TEXT NOT NULL, dispatched_at TEXT, received_at TEXT, CHECK (source_location_id <> destination_location_id));
+  CREATE TABLE retail_transfer_lines (id TEXT PRIMARY KEY, transfer_id TEXT NOT NULL REFERENCES retail_transfers(id) ON DELETE RESTRICT, product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT, quantity INTEGER NOT NULL CHECK (quantity > 0), UNIQUE (transfer_id,product_id));
+  CREATE INDEX retail_transfers_source_created_idx ON retail_transfers (source_location_id,created_at,id);
+  CREATE INDEX retail_transfers_destination_created_idx ON retail_transfers (destination_location_id,created_at,id);
+  CREATE TRIGGER retail_transfers_no_received_update BEFORE UPDATE ON retail_transfers WHEN OLD.status='received' BEGIN SELECT RAISE(ABORT,'Received Retail Transfer is immutable.'); END;
+  CREATE TRIGGER retail_transfer_lines_no_non_draft_change BEFORE UPDATE ON retail_transfer_lines WHEN (SELECT status FROM retail_transfers WHERE id=OLD.transfer_id)<>'draft' BEGIN SELECT RAISE(ABORT,'Non-draft Retail Transfer lines are immutable.'); END;
+  CREATE TRIGGER retail_transfer_lines_no_non_draft_delete BEFORE DELETE ON retail_transfer_lines WHEN (SELECT status FROM retail_transfers WHERE id=OLD.transfer_id)<>'draft' BEGIN SELECT RAISE(ABORT,'Non-draft Retail Transfer lines are immutable.'); END;
+`)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts] as const
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers] as const

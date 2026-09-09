@@ -58,6 +58,9 @@ export interface RetailReconciliationLine { sessionId: string; productId: string
 export type RetailGoodsReceiptStatus = 'draft' | 'completed'
 export interface RetailGoodsReceipt { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: RetailGoodsReceiptStatus; createdAt: Date; createdBy: string; completedAt?: Date }
 export interface RetailGoodsReceiptLine { id: string; receiptId: string; productId: string; quantity: number }
+export type RetailTransferStatus = 'draft'|'dispatched'|'received'
+export interface RetailTransfer { id:string; sourceLocationId:string; destinationLocationId:string; status:RetailTransferStatus; createdAt:Date; createdBy:string; dispatchedAt?:Date; receivedAt?:Date }
+export interface RetailTransferLine { id:string; transferId:string; productId:string; quantity:number }
 
 export interface RetailProductImportRow {
   sourceRef: string
@@ -110,10 +113,12 @@ export type RetailCapability =
   | 'retail:reconciliation:manage'
   | 'retail:goods-receipts:read'
   | 'retail:goods-receipts:manage'
+  | 'retail:transfers:read'
+  | 'retail:transfers:manage'
 
 export const retailCapabilitiesByBaseRole = {
-  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage'],
-  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage'],
+  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage', 'retail:transfers:read', 'retail:transfers:manage'],
+  manager: ['retail:locations:read', 'retail:products:read', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage', 'retail:transfers:read', 'retail:transfers:manage'],
   operator: [],
   viewer: [],
 } as const

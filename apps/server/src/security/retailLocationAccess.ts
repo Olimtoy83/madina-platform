@@ -67,3 +67,14 @@ export function requireRetailLocationAccess(
     }
   }
 }
+
+export function requireRetailLocationsAccess(app: FastifyInstance, repository: RetailLocationAccessRepository, capability: RetailCapability, getLocationIds: (request: FastifyRequest) => Promise<readonly string[]>) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) { reply.code(401).send({ statusCode: 401, error: 'Unauthorized', message: 'Authentication required.' }); return }
+    if (!hasRetailCapability(principal.role, capability)) { reply.code(403).send({ statusCode: 403, error: 'Forbidden', message: 'Retail permission denied.' }); return }
+    const ids = await getLocationIds(request)
+    if (!ids.length || new Set(ids).size !== ids.length) { reply.code(403).send({ statusCode: 403, error: 'Forbidden', message: 'Active Retail Location access is required.' }); return }
+    for (const id of ids) { const location = await repository.findLocation(id); if (!location || location.status !== 'active' || !await repository.hasActiveGrant(principal.id, id)) { reply.code(403).send({ statusCode: 403, error: 'Forbidden', message: 'Active Retail Location access is required.' }); return } }
+  }
+}

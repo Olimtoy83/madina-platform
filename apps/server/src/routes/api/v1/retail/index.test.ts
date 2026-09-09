@@ -440,3 +440,66 @@ test('Goods Receipt routes enforce warehouse-only capability and active Location
     equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,403)
   } finally { await app.close();inventory.close();catalog.close();access.close();if(previousDatabaseFile===undefined)delete process.env.DATABASE_FILE;else process.env.DATABASE_FILE=previousDatabaseFile;rmSync(directory,{recursive:true,force:true}) }
 })
+
+test('Retail Transfer routes require both persisted Locations and reject request-field escalation', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-transfer-routes-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [
+    { id: 'manager-1', role: 'manager' }, { id: 'operator-1', role: 'operator' },
+  ])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const catalog = new SqliteRetailCatalogRepository(databaseFile)
+  const inventory = new SqliteRetailInventoryRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'manager-1', requestId: 'transfer-route-test' }
+  const source = await access.createLocation({ code: 'SOURCE', name: 'Source', type: 'store', status: 'active' }, context)
+  const destination = await access.createLocation({ code: 'DESTINATION', name: 'Destination', type: 'store', status: 'active' }, context)
+  const inactive = await access.createLocation({ code: 'INACTIVE', name: 'Inactive', type: 'store', status: 'inactive' }, context)
+  const product = await catalog.createProduct({ sourceId: 'P-1', name: 'Product' }, context)
+  await inventory.recordMovement({ productId: product.id, locationId: source.id, quantityDelta: 8, type: 'opening', sourceType: 'test', sourceId: 'seed', sourceLineId: '1' }, context)
+  await access.grant('manager-1', source.id, context)
+  await access.grant('manager-1', inactive.id, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  const base = `/api/v1/retail/locations/${source.id}/transfers`
+  const payload = { destinationLocationId: destination.id, lines: [{ productId: product.id, quantity: 3 }], role: 'admin', capability: 'retail:transfers:manage', grants: [source.id, destination.id], sourceLocationId: inactive.id }
+
+  try {
+    await app.ready()
+    equal((await app.inject({ method: 'POST', url: base, payload })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'POST', url: base, payload })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: base, payload })).statusCode, 403)
+    await access.grant('manager-1', destination.id, context)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${inactive.id}/transfers`, payload })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: base, payload: { ...payload, destinationLocationId: inactive.id } })).statusCode, 403)
+
+    const created = await request(app, sessions['manager-1']!, { method: 'POST', url: base, payload })
+    equal(created.statusCode, 201)
+    const transfer = (created.json() as { transfer: { id: string; sourceLocationId: string; destinationLocationId: string } }).transfer
+    equal(transfer.sourceLocationId, source.id)
+    equal(transfer.destinationLocationId, destination.id)
+
+    await access.revoke('manager-1', source.id, context)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${base}/${transfer.id}/dispatch`, payload: { sourceLocationId: inactive.id, destinationLocationId: inactive.id, role: 'admin', grants: [inactive.id] } })).statusCode, 403)
+    await access.grant('manager-1', source.id, context)
+    await access.revoke('manager-1', destination.id, context)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${base}/${transfer.id}/dispatch`, payload: { sourceLocationId: source.id, destinationLocationId: source.id, capability: 'retail:transfers:manage' } })).statusCode, 403)
+    await access.grant('manager-1', destination.id, context)
+
+    const dispatched = await request(app, sessions['manager-1']!, { method: 'POST', url: `${base}/${transfer.id}/dispatch`, payload: { sourceLocationId: inactive.id, destinationLocationId: inactive.id, role: 'operator', capability: 'retail:locations:read', grants: [] } })
+    equal(dispatched.statusCode, 200)
+    equal((await inventory.findBalance(product.id, source.id))?.onHandQuantity, 5)
+    await access.revoke('manager-1', destination.id, context)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${destination.id}/transfers/${transfer.id}/receive`, payload: { sourceLocationId: inactive.id, destinationLocationId: inactive.id, role: 'admin' } })).statusCode, 403)
+    await access.grant('manager-1', destination.id, context)
+    const received = await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${destination.id}/transfers/${transfer.id}/receive`, payload: { sourceLocationId: inactive.id, destinationLocationId: inactive.id, role: 'operator', capability: 'retail:locations:read' } })
+    equal(received.statusCode, 200)
+    equal((await inventory.findBalance(product.id, destination.id))?.onHandQuantity, 3)
+  } finally {
+    await app.close(); inventory.close(); catalog.close(); access.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

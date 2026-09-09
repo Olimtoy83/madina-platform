@@ -88,7 +88,7 @@ async function seedSession(
       tokenHash: hashSessionSecret(secret),
       createdAt: now,
       lastSeenAt: now,
-      expiresAt: new Date('2026-09-04T12:00:00.000Z'),
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
       sessionVersion: 1,
     }
     await repository.createSession(session)

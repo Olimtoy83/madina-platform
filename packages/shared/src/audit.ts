@@ -70,6 +70,7 @@ export type AuditAction =
   | 'retail.goods_receipt_created'
   | 'retail.goods_receipt_updated'
   | 'retail.goods_receipt_completed'
+  | 'retail.transfer_created' | 'retail.transfer_updated' | 'retail.transfer_dispatched' | 'retail.transfer_received'
 
 export type JsonValue =
   | null

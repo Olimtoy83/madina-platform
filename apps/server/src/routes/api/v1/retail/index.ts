@@ -1,9 +1,9 @@
-import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailReconciliationRepository } from '@madina/database'
+import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailReconciliationRepository, SqliteRetailTransferRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
 import type { FastifyPluginAsync } from 'fastify'
 import { getAuthenticatedCommandContext, requireAuthentication, requireTrustedOrigin } from '../../../../plugins/authentication.js'
-import { requireRetailLocationAccess } from '../../../../security/retailLocationAccess.js'
+import { requireRetailLocationAccess, requireRetailLocationsAccess } from '../../../../security/retailLocationAccess.js'
 
 interface RetailRoutesOptions {
   retailAccessRepository?: SqliteRetailAccessRepository
@@ -11,6 +11,7 @@ interface RetailRoutesOptions {
   retailInventoryRepository?: SqliteRetailInventoryRepository
   retailReconciliationRepository?: SqliteRetailReconciliationRepository
   retailGoodsReceiptRepository?: SqliteRetailGoodsReceiptRepository
+  retailTransferRepository?: SqliteRetailTransferRepository
 }
 
 function sendRetailPermissionError(reply: { code(statusCode: number): { send(payload: unknown): void } }): void {
@@ -29,12 +30,13 @@ function hasRetailPermission(
 }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
-  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository) return
+  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository) return
   const retailAccessRepository = options.retailAccessRepository
   const retailCatalogRepository = options.retailCatalogRepository
   const retailInventoryRepository = options.retailInventoryRepository
   const retailReconciliationRepository = options.retailReconciliationRepository
   const retailGoodsReceiptRepository = options.retailGoodsReceiptRepository
+  const retailTransferRepository = options.retailTransferRepository
 
   app.get('/locations', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
@@ -98,6 +100,10 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
   app.post('/locations/:locationId/goods-receipts', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:goods-receipts:manage', (r) => (r.params as { locationId?: string }).locationId), requireTrustedOrigin()] }, async (request,reply) => { const body=request.body as {receiptReference?:string;supplierReference?:string;shipmentReference?:string;notes?:string;lines?:unknown};if(!body||typeof body.receiptReference!=='string'||!Array.isArray(body.lines))return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Goods Receipt input is invalid.'});const goodsReceipt=await retailGoodsReceiptRepository.create({receiptReference:body.receiptReference,locationId:(request.params as {locationId:string}).locationId,supplierReference:body.supplierReference,shipmentReference:body.shipmentReference,notes:body.notes,lines:body.lines as Array<{productId:string;quantity:number}>},getAuthenticatedCommandContext(request));reply.code(201);return {goodsReceipt,lines:await retailGoodsReceiptRepository.lines(goodsReceipt.id)} })
   app.patch('/locations/:locationId/goods-receipts/:receiptId', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:goods-receipts:manage', (r) => (r.params as { locationId?: string }).locationId), requireTrustedOrigin()] }, async (request,reply) => { const item=await retailGoodsReceiptRepository.find((request.params as {receiptId:string}).receiptId);if(!item||item.locationId!==(request.params as {locationId:string}).locationId)return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail Goods Receipt not found.'});const body=request.body as {supplierReference?:string;shipmentReference?:string;notes?:string;lines?:unknown};if(!body||!Array.isArray(body.lines))return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Goods Receipt input is invalid.'});const goodsReceipt=await retailGoodsReceiptRepository.update(item.id,{...body,lines:body.lines as Array<{productId:string;quantity:number}>},getAuthenticatedCommandContext(request));return {goodsReceipt,lines:await retailGoodsReceiptRepository.lines(item.id)} })
   app.post('/locations/:locationId/goods-receipts/:receiptId/complete', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:goods-receipts:manage', (r) => (r.params as { locationId?: string }).locationId), requireTrustedOrigin()] }, async (request,reply) => { const item=await retailGoodsReceiptRepository.find((request.params as {receiptId:string}).receiptId);if(!item||item.locationId!==(request.params as {locationId:string}).locationId)return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail Goods Receipt not found.'});return {goodsReceipt:await retailGoodsReceiptRepository.complete(item.id,getAuthenticatedCommandContext(request)),lines:await retailGoodsReceiptRepository.lines(item.id)} })
+  const transferAccess=(cap:'retail:transfers:read'|'retail:transfers:manage')=>[requireRetailLocationAccess(app,retailAccessRepository,cap,(r)=>(r.params as {locationId?:string}).locationId),requireRetailLocationAccess(app,retailAccessRepository,cap,(r)=>(r.body as {destinationLocationId?:string})?.destinationLocationId)]
+  app.post('/locations/:locationId/transfers',{preHandler:[...transferAccess('retail:transfers:manage'),requireTrustedOrigin()]},async(request,reply)=>{const b=request.body as {destinationLocationId?:string;lines?:Array<{productId:string;quantity:number}>};if(!b?.destinationLocationId||!Array.isArray(b.lines))return reply.code(400).send({message:'Retail Transfer input is invalid.'});const transfer=await retailTransferRepository.create({sourceLocationId:(request.params as {locationId:string}).locationId,destinationLocationId:b.destinationLocationId,lines:b.lines},getAuthenticatedCommandContext(request));reply.code(201);return{transfer,lines:await retailTransferRepository.lines(transfer.id)}})
+  app.post('/locations/:locationId/transfers/:transferId/dispatch',{preHandler:[requireRetailLocationsAccess(app,retailAccessRepository,'retail:transfers:manage',async r=>{const t=await retailTransferRepository.find((r.params as {transferId:string}).transferId);return t?[t.sourceLocationId,t.destinationLocationId]:[]}),requireTrustedOrigin()]},async(request,reply)=>{const t=await retailTransferRepository.find((request.params as {transferId:string}).transferId);if(!t||t.sourceLocationId!==(request.params as {locationId:string}).locationId)return reply.code(404).send({message:'Retail Transfer not found.'});return{transfer:await retailTransferRepository.dispatch(t.id,getAuthenticatedCommandContext(request))}})
+  app.post('/locations/:locationId/transfers/:transferId/receive',{preHandler:[requireRetailLocationsAccess(app,retailAccessRepository,'retail:transfers:manage',async r=>{const t=await retailTransferRepository.find((r.params as {transferId:string}).transferId);return t?[t.sourceLocationId,t.destinationLocationId]:[]}),requireTrustedOrigin()]},async(request,reply)=>{const t=await retailTransferRepository.find((request.params as {transferId:string}).transferId);if(!t||t.destinationLocationId!==(request.params as {locationId:string}).locationId)return reply.code(404).send({message:'Retail Transfer not found.'});return{transfer:await retailTransferRepository.receive(t.id,getAuthenticatedCommandContext(request))}})
 
   app.get('/products', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
