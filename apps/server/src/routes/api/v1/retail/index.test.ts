@@ -16,6 +16,7 @@ import {
   type User,
   type UserRole,
 } from '@madina/auth'
+import { hasRetailCapability } from '@madina/retail'
 import {
   initializeDatabase,
   SqliteAuditRepository,
@@ -56,6 +57,37 @@ test('retail boundary composes without routes or CRM dependencies', async () => 
   } finally {
     await app.close()
   }
+})
+
+test('Stage 8B sales and price capabilities map only to admin and manager', () => {
+  for(const capability of ['retail:sales:read','retail:sales:manage','retail:prices:read','retail:prices:manage'] as const){equal(hasRetailCapability('admin',capability),true);equal(hasRetailCapability('manager',capability),true);equal(hasRetailCapability('operator',capability),false);equal(hasRetailCapability('viewer',capability),false)}
+})
+
+test('Retail Sale, price, and currency APIs enforce Stage 8B authority boundaries', async () => {
+  const directory=mkdtempSync(join(tmpdir(),'madina-retail-sale-api-')),databaseFile=join(directory,'madina.sqlite'),previousDatabaseFile=process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions=await seedSessions(databaseFile,[{id:'admin-1',role:'admin'},{id:'admin-2',role:'admin'},{id:'manager-1',role:'manager'},{id:'operator-1',role:'operator'}])
+  const access=new SqliteRetailAccessRepository(databaseFile),catalog=new SqliteRetailCatalogRepository(databaseFile),inventory=new SqliteRetailInventoryRepository(databaseFile),audit=new SqliteAuditRepository(databaseFile),context={actorType:'user' as const,actorUserId:'admin-1',requestId:'sale-api'}
+  const store=await access.createLocation({code:'SALE-A',name:'Sale A',type:'store',status:'active'},context),other=await access.createLocation({code:'SALE-B',name:'Sale B',type:'store',status:'active'},context),inactive=await access.createLocation({code:'SALE-I',name:'Sale I',type:'store',status:'inactive'},context),unconfigured=await access.createLocation({code:'SALE-C',name:'Sale C',type:'store',status:'active'},context)
+  const product=await catalog.createProduct({sourceId:'SALE-1',name:'Sale product'},context),unpriced=await catalog.createProduct({sourceId:'SALE-2',name:'Unpriced'},context)
+  await access.configureCurrency(store.id,'USD',2,context);await catalog.setPrice(product.id,store.id,10,context);await catalog.setPrice(product.id,unconfigured.id,10,context);await inventory.recordMovement({productId:product.id,locationId:store.id,quantityDelta:10,type:'opening',sourceType:'test',sourceId:'sale-api',sourceLineId:'opening'},context);await inventory.recordMovement({productId:product.id,locationId:unconfigured.id,quantityDelta:1,type:'opening',sourceType:'test',sourceId:'sale-api',sourceLineId:'unconfigured'},context);await access.grant('admin-1',store.id,context);await access.grant('manager-1',store.id,context);await access.grant('manager-1',inactive.id,context);await access.grant('manager-1',unconfigured.id,context)
+  process.env.DATABASE_FILE=databaseFile;const app=buildApp();const base=`/api/v1/retail/locations/${store.id}`;const sale={clientOperationId:'sale-api-1',saleId:'sale-api-1',lines:[{id:'sale-api-line',productId:product.id,quantity:1,unitPriceMinor:999}],allocations:[{id:'sale-api-payment',method:'cash',amountMinor:10,ordinal:0}],currencyCode:'XXX',currencyExponent:9}
+  try { await app.ready()
+    equal((await app.inject({method:'POST',url:`${base}/sales/complete`,payload:sale})).statusCode,401)
+    equal((await request(app,sessions['operator-1']!,{method:'POST',url:`${base}/sales/complete`,payload:sale})).statusCode,403)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${other.id}/sales/complete`,payload:sale})).statusCode,403)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${inactive.id}/sales/complete`,payload:sale})).statusCode,403)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{}})).statusCode,400)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-invalid-quantity',saleId:'sale-api-invalid-quantity',lines:[{id:'sale-api-invalid-line',productId:product.id,quantity:0}]}})).statusCode,400)
+    const created=await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:sale});equal(created.statusCode,201);const completed=created.json() as {sale:{id:string;currency_code:string;currency_exponent:number};items:Array<{unit_price_minor:number}>};equal(completed.sale.id,sale.saleId);equal(completed.sale.currency_code,'USD');equal(completed.sale.currency_exponent,2);equal(completed.items[0]?.unit_price_minor,10)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:sale})).statusCode,200)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,saleId:'sale-api-conflict'}})).statusCode,409)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-stock',saleId:'sale-api-stock',lines:[{id:'stock',productId:product.id,quantity:99}],allocations:[{id:'stock-pay',method:'cash',amountMinor:990,ordinal:0}]}})).statusCode,409)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-price',saleId:'sale-api-price',lines:[{id:'price',productId:unpriced.id,quantity:1}],allocations:[{id:'price-pay',method:'cash',amountMinor:1,ordinal:0}]}})).statusCode,409)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${unconfigured.id}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-currency',saleId:'sale-api-currency'}})).statusCode,409)
+    const priceUrl=`${base}/products/${product.id}/price`;equal((await app.inject({method:'PUT',url:priceUrl,payload:{unitPriceMinor:25}})).statusCode,401);equal((await request(app,sessions['operator-1']!,{method:'PUT',url:priceUrl,payload:{unitPriceMinor:25}})).statusCode,403);equal((await request(app,sessions['manager-1']!,{method:'PUT',url:`/api/v1/retail/locations/${other.id}/products/${product.id}/price`,payload:{unitPriceMinor:25}})).statusCode,403);equal((await request(app,sessions['manager-1']!,{method:'PUT',url:`/api/v1/retail/locations/${inactive.id}/products/${product.id}/price`,payload:{unitPriceMinor:25}})).statusCode,403);equal((await request(app,sessions['manager-1']!,{method:'PUT',url:priceUrl,payload:{unitPriceMinor:0}})).statusCode,409);equal((await request(app,sessions['manager-1']!,{method:'PUT',url:priceUrl,payload:{unitPriceMinor:-1}})).statusCode,409);equal((await request(app,sessions['manager-1']!,{method:'PUT',url:priceUrl,payload:{unitPriceMinor:Number.MAX_SAFE_INTEGER+1}})).statusCode,400);equal((await request(app,sessions['manager-1']!,{method:'PUT',url:priceUrl,payload:{unitPriceMinor:25}})).statusCode,200);equal(await catalog.findPrice(product.id,store.id),25);equal((await request(app,sessions['manager-1']!,{method:'GET',url:priceUrl})).statusCode,200);equal((await request(app,sessions['operator-1']!,{method:'GET',url:priceUrl})).statusCode,403);equal((await audit.findAll()).some(event=>event.action==='retail.product_price_set'),true)
+    const currencyUrl=`${base}`;equal((await app.inject({method:'PATCH',url:currencyUrl,payload:{currencyCode:'EUR',currencyExponent:0}})).statusCode,401);equal((await request(app,sessions['manager-1']!,{method:'PATCH',url:currencyUrl,payload:{currencyCode:'EUR',currencyExponent:0}})).statusCode,403);equal((await request(app,sessions['admin-2']!,{method:'PATCH',url:currencyUrl,payload:{currencyCode:'EUR',currencyExponent:0}})).statusCode,403);equal((await request(app,sessions['admin-1']!,{method:'PATCH',url:`/api/v1/retail/locations/${inactive.id}`,payload:{currencyCode:'EUR',currencyExponent:0}})).statusCode,403);for(const payload of [{currencyCode:'usd',currencyExponent:0},{currencyCode:'US',currencyExponent:0},{currencyCode:'УСД',currencyExponent:0},{currencyCode:'USD',currencyExponent:-1},{currencyCode:'USD',currencyExponent:10},{currencyCode:'USD',currencyExponent:1.5},{currencyCode:'USD',currencyExponent:Number.MAX_SAFE_INTEGER+1}])equal((await request(app,sessions['admin-1']!,{method:'PATCH',url:currencyUrl,payload})).statusCode,400);equal((await request(app,sessions['admin-1']!,{method:'PATCH',url:currencyUrl,payload:{currencyCode:'EUR',currencyExponent:0}})).statusCode,200);equal((await access.findLocation(store.id))?.currencyCode,'EUR');equal((await audit.findAll()).some(event=>event.action==='retail.location_updated'),true)
+  } finally { audit.close();await app.close();inventory.close();catalog.close();access.close();if(previousDatabaseFile===undefined)delete process.env.DATABASE_FILE;else process.env.DATABASE_FILE=previousDatabaseFile;rmSync(directory,{recursive:true,force:true}) }
 })
 
 interface UserFixture {
@@ -107,7 +139,7 @@ function request(
   app: FastifyInstance,
   session: string,
   options: {
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     url: string
     payload?: unknown
   },

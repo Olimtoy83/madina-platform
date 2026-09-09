@@ -144,6 +144,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '034_retail_inventory_reconciliation_v1',
       '035_retail_goods_receipts_v1',
       '036_retail_transfers_v1',
+      '037_retail_sales_payment_completion_v1',
     ].join(','))
   })
 })

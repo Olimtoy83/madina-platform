@@ -25,6 +25,7 @@ import {
   SqliteRetailReconciliationRepository,
   SqliteRetailGoodsReceiptRepository,
   SqliteRetailTransferRepository,
+  SqliteRetailSaleRepository,
   initializeDatabase,
 } from '@madina/database'
 import type { FastifyInstance } from 'fastify'
@@ -100,6 +101,7 @@ export async function apiV1Routes(
   const retailReconciliationRepository = new SqliteRetailReconciliationRepository(databaseFile)
   const retailGoodsReceiptRepository = new SqliteRetailGoodsReceiptRepository(databaseFile)
   const retailTransferRepository = new SqliteRetailTransferRepository(databaseFile)
+  const retailSaleRepository = new SqliteRetailSaleRepository(databaseFile)
   const vehicleService = new VehicleService(vehicleRepository)
 
   app.addHook('onClose', async () => {
@@ -116,6 +118,7 @@ export async function apiV1Routes(
     retailReconciliationRepository.close()
     retailGoodsReceiptRepository.close()
     retailTransferRepository.close()
+    retailSaleRepository.close()
   })
 
   app.get(
@@ -175,6 +178,7 @@ export async function apiV1Routes(
     retailReconciliationRepository,
     retailGoodsReceiptRepository,
     retailTransferRepository,
+    retailSaleRepository,
   })
 
   app.register(koreaAutoRoutes, {

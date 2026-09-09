@@ -1,4 +1,4 @@
-import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailReconciliationRepository, SqliteRetailTransferRepository } from '@madina/database'
+import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailReconciliationRepository, SqliteRetailTransferRepository, SqliteRetailSaleRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
 import type { FastifyPluginAsync } from 'fastify'
@@ -12,6 +12,7 @@ interface RetailRoutesOptions {
   retailReconciliationRepository?: SqliteRetailReconciliationRepository
   retailGoodsReceiptRepository?: SqliteRetailGoodsReceiptRepository
   retailTransferRepository?: SqliteRetailTransferRepository
+  retailSaleRepository?: SqliteRetailSaleRepository
 }
 
 function sendRetailPermissionError(reply: { code(statusCode: number): { send(payload: unknown): void } }): void {
@@ -30,13 +31,14 @@ function hasRetailPermission(
 }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
-  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository) return
+  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository || !options.retailSaleRepository) return
   const retailAccessRepository = options.retailAccessRepository
   const retailCatalogRepository = options.retailCatalogRepository
   const retailInventoryRepository = options.retailInventoryRepository
   const retailReconciliationRepository = options.retailReconciliationRepository
   const retailGoodsReceiptRepository = options.retailGoodsReceiptRepository
   const retailTransferRepository = options.retailTransferRepository
+  const retailSaleRepository = options.retailSaleRepository
 
   app.get('/locations', { preHandler: requireAuthentication(app) }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
@@ -195,6 +197,15 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
     reply.code(201)
     return { location }
   })
+
+  app.patch('/locations/:locationId', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:locations:manage', r => (r.params as {locationId?:string}).locationId), requireTrustedOrigin()] }, async (request, reply) => {
+    const body=request.body as {currencyCode?:string;currencyExponent?:number}
+    if(!body||typeof body.currencyCode!=='string'||!Number.isSafeInteger(body.currencyExponent))return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Location currency configuration is invalid.'})
+    try{return{location:await retailAccessRepository.configureCurrency((request.params as {locationId:string}).locationId,body.currencyCode,body.currencyExponent!,getAuthenticatedCommandContext(request))}}catch(error){return reply.code(400).send({statusCode:400,error:'Bad Request',message:error instanceof Error?error.message:'Retail Location error.'})}
+  })
+  app.put('/locations/:locationId/products/:productId/price', { preHandler: [requireRetailLocationAccess(app, retailAccessRepository, 'retail:prices:manage', r => (r.params as {locationId?:string}).locationId), requireTrustedOrigin()] }, async (request,reply)=>{const body=request.body as {unitPriceMinor?:number};if(!body||!Number.isSafeInteger(body.unitPriceMinor))return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Product price is invalid.'});try{return{price:await retailCatalogRepository.setPrice((request.params as {productId:string}).productId,(request.params as {locationId:string}).locationId,body.unitPriceMinor!,getAuthenticatedCommandContext(request))}}catch(error){return reply.code(409).send({statusCode:409,error:'Conflict',message:error instanceof Error?error.message:'Retail Product price conflict.'})}})
+  app.get('/locations/:locationId/products/:productId/price', { preHandler: requireRetailLocationAccess(app,retailAccessRepository,'retail:prices:read',r=>(r.params as {locationId?:string}).locationId) }, async(request,reply)=>{const p=await retailCatalogRepository.findPrice((request.params as {productId:string}).productId,(request.params as {locationId:string}).locationId);if(p===undefined)return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail Product price not found.'});return{unitPriceMinor:p}})
+  app.post('/locations/:locationId/sales/complete',{preHandler:[requireRetailLocationAccess(app,retailAccessRepository,'retail:sales:manage',r=>(r.params as {locationId?:string}).locationId),requireTrustedOrigin()]},async(request,reply)=>{const body=request.body as {clientOperationId?:string;saleId?:string;lines?:unknown;allocations?:unknown};if(!body||typeof body.clientOperationId!=='string'||typeof body.saleId!=='string'||!Array.isArray(body.lines)||!Array.isArray(body.allocations))return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Sale input is invalid.'});try{const {replayed,...result}=await retailSaleRepository.complete((request.params as {locationId:string}).locationId,{clientOperationId:body.clientOperationId,saleId:body.saleId,lines:body.lines as never,allocations:body.allocations as never},getAuthenticatedCommandContext(request));reply.code(replayed?200:201);return result}catch(error){const message=error instanceof Error?error.message:'Retail Sale conflict.';const validationMessages=['Retail Sale clientOperationId is required.','Retail Sale saleId is required.','Retail Sale lines and allocations are required.','Retail Sale line id is required.','Retail Sale productId is required.','Retail Sale quantity is invalid.','Retail Sale duplicate line.','Retail Sale allocation id is required.','Retail Sale allocation is invalid.','Retail Sale allocation amount is invalid.','Retail Sale allocation ordinal is invalid.','Retail Sale allocations must equal payable total.','Retail Sale money overflow.'];if(validationMessages.includes(message))return reply.code(400).send({statusCode:400,error:'Bad Request',message});return reply.code(409).send({statusCode:409,error:'Conflict',message})}})
 
   app.post('/locations/:locationId/grants', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)

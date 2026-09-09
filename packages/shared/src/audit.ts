@@ -61,6 +61,7 @@ export type AuditAction =
   | 'retail.location_revoked'
   | 'retail.product_created'
   | 'retail.product_updated'
+  | 'retail.product_price_set'
   | 'retail.product_barcode_added'
   | 'retail.products_imported'
   | 'retail.inventory_movement_recorded'
@@ -71,6 +72,7 @@ export type AuditAction =
   | 'retail.goods_receipt_updated'
   | 'retail.goods_receipt_completed'
   | 'retail.transfer_created' | 'retail.transfer_updated' | 'retail.transfer_dispatched' | 'retail.transfer_received'
+  | 'retail.sale_completed'
 
 export type JsonValue =
   | null
