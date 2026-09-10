@@ -1,7 +1,22 @@
-﻿import { useCallback, useEffect, useState } from 'react'
-import type { RetailLocation } from '@madina/retail'
-import { getRetailLocations } from '../../shared/api/retailApi'
+﻿import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import type { RetailLocation, RetailProduct } from '@madina/retail'
+import {
+  getRetailLocations,
+  getRetailProductByBarcode,
+  getRetailProducts,
+} from '../../shared/api/retailApi'
+import { HttpError } from '../../shared/api/httpClient'
+import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
 import './RetailPos.css'
+
+type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
+type BarcodeLookupState = 'idle' | 'loading' | 'found' | 'not-found' | 'unavailable' | 'error'
+
+function getLookupErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : 'Не удалось выполнить поиск товара. Повторите попытку.'
+}
 
 export function RetailPos() {
   const [locations, setLocations] = useState<RetailLocation[]>([])
@@ -9,11 +24,39 @@ export function RetailPos() {
   const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>(
     'loading',
   )
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchResults, setSearchResults] = useState<RetailProduct[]>([])
+  const [searchState, setSearchState] = useState<ProductSearchState>('idle')
+  const [searchHasInactiveProducts, setSearchHasInactiveProducts] = useState(false)
+  const [searchError, setSearchError] = useState<string>()
+  const [barcode, setBarcode] = useState('')
+  const [barcodeProduct, setBarcodeProduct] = useState<RetailProduct>()
+  const [barcodeState, setBarcodeState] = useState<BarcodeLookupState>('idle')
+  const [barcodeError, setBarcodeError] = useState<string>()
+  const [selectedProduct, setSelectedProduct] = useState<RetailProduct>()
+  const searchRequestGeneration = useRef(0)
+  const barcodeRequestGeneration = useRef(0)
+
+  const resetProductLookup = useCallback(() => {
+    searchRequestGeneration.current += 1
+    barcodeRequestGeneration.current += 1
+    setSearchTerm('')
+    setSearchResults([])
+    setSearchState('idle')
+    setSearchHasInactiveProducts(false)
+    setSearchError(undefined)
+    setBarcode('')
+    setBarcodeProduct(undefined)
+    setBarcodeState('idle')
+    setBarcodeError(undefined)
+    setSelectedProduct(undefined)
+  }, [])
 
   const loadLocations = useCallback(async () => {
     setLoadState('loading')
     setLocations([])
     setSelectedLocationId(undefined)
+    resetProductLookup()
 
     try {
       const retailLocations = await getRetailLocations()
@@ -24,7 +67,7 @@ export function RetailPos() {
     } catch {
       setLoadState('error')
     }
-  }, [])
+  }, [resetProductLookup])
 
   useEffect(() => {
     void loadLocations()
@@ -33,6 +76,81 @@ export function RetailPos() {
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
   )
+
+  async function searchProducts(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const term = searchTerm.trim()
+    const generation = searchRequestGeneration.current + 1
+    searchRequestGeneration.current = generation
+
+    if (!term) {
+      setSearchResults([])
+      setSearchState('idle')
+      setSearchHasInactiveProducts(false)
+      setSearchError(undefined)
+      return
+    }
+
+    setSearchResults([])
+    setSearchState('loading')
+    setSearchHasInactiveProducts(false)
+    setSearchError(undefined)
+
+    try {
+      const products = await getRetailProducts(term)
+      if (searchRequestGeneration.current !== generation) return
+      const activeProducts = products.filter((product) => product.status === 'active')
+      setSearchResults(activeProducts)
+      setSearchHasInactiveProducts(products.length > activeProducts.length)
+      setSearchState(activeProducts.length > 0 ? 'ready' : 'empty')
+    } catch (error) {
+      if (searchRequestGeneration.current !== generation) return
+      setSearchError(getLookupErrorMessage(error))
+      setSearchState('error')
+    }
+  }
+
+  async function lookupBarcode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const value = barcode.trim()
+    const generation = barcodeRequestGeneration.current + 1
+    barcodeRequestGeneration.current = generation
+
+    if (!value) {
+      setBarcodeProduct(undefined)
+      setBarcodeState('idle')
+      setBarcodeError(undefined)
+      return
+    }
+
+    setBarcodeProduct(undefined)
+    setBarcodeState('loading')
+    setBarcodeError(undefined)
+
+    try {
+      const product = await getRetailProductByBarcode(value)
+      if (barcodeRequestGeneration.current !== generation) return
+      if (!product) {
+        setBarcodeState('not-found')
+        return
+      }
+      setBarcodeProduct(product)
+      setBarcodeState(product.status === 'active' ? 'found' : 'unavailable')
+    } catch (error) {
+      if (barcodeRequestGeneration.current !== generation) return
+      if (error instanceof HttpError && error.status === 404) {
+        setBarcodeState('not-found')
+        return
+      }
+      setBarcodeError(getLookupErrorMessage(error))
+      setBarcodeState('error')
+    }
+  }
+
+  function selectLocation(locationId: string) {
+    setSelectedLocationId(locationId || undefined)
+    resetProductLookup()
+  }
 
   return (
     <main className="retail-pos">
@@ -70,7 +188,7 @@ export function RetailPos() {
           <select
             id="retail-pos-location"
             value={selectedLocationId ?? ''}
-            onChange={(event) => setSelectedLocationId(event.target.value || undefined)}
+            onChange={(event) => selectLocation(event.target.value)}
           >
             <option value="">Выберите торговую точку</option>
             {locations.map((location) => (
@@ -84,6 +202,140 @@ export function RetailPos() {
             <p className="retail-pos__selected" aria-live="polite">
               Выбрана торговая точка: {selectedLocation.name} ({selectedLocation.code})
             </p>
+          )}
+        </section>
+      )}
+
+      {!selectedLocation && loadState === 'ready' && locations.length > 0 && (
+        <EmptyState
+          title="Сначала выберите торговую точку"
+          description="Поиск товаров станет доступен после явного выбора торговой точки."
+        />
+      )}
+
+      {selectedLocation && (
+        <section className="retail-pos__lookup" aria-label="Поиск товара">
+          <Card>
+            <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
+              <label htmlFor="retail-pos-product-search">Поиск товара</label>
+              <div className="retail-pos__lookup-controls">
+                <Input
+                  id="retail-pos-product-search"
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Название или код товара"
+                  aria-label="Поиск товара по названию или коду"
+                />
+                <Button type="submit" disabled={searchState === 'loading'}>
+                  Найти
+                </Button>
+              </div>
+            </form>
+
+            {searchState === 'loading' && (
+              <p className="retail-pos__lookup-status" aria-live="polite">
+                <Spinner size="sm" label="Поиск товаров" /> Поиск товаров…
+              </p>
+            )}
+            {searchState === 'error' && searchError && (
+              <Alert variant="danger" title="Не удалось найти товары">
+                {searchError}
+              </Alert>
+            )}
+            {searchState === 'empty' && (
+              <EmptyState
+                title="Активные товары не найдены"
+                description="Измените запрос и повторите поиск."
+              />
+            )}
+            {searchHasInactiveProducts && (
+              <Alert variant="warning" title="Недоступные товары">
+                Неактивные товары не могут быть выбраны для розничной продажи.
+              </Alert>
+            )}
+            {searchState === 'ready' && (
+              <ul className="retail-pos__product-list">
+                {searchResults.map((product) => (
+                  <li key={product.id}>
+                    <div>
+                      <strong>{product.name}</strong>
+                      <span>{product.sourceId} · {product.baseUnit}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setSelectedProduct(product)}
+                    >
+                      Выбрать
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card>
+            <form className="retail-pos__lookup-form" onSubmit={lookupBarcode}>
+              <label htmlFor="retail-pos-barcode">Штрихкод</label>
+              <div className="retail-pos__lookup-controls">
+                <Input
+                  id="retail-pos-barcode"
+                  value={barcode}
+                  onChange={(event) => setBarcode(event.target.value)}
+                  placeholder="Введите или отсканируйте штрихкод"
+                  aria-label="Поиск товара по штрихкоду"
+                />
+                <Button type="submit" disabled={barcodeState === 'loading'}>
+                  Найти
+                </Button>
+              </div>
+            </form>
+
+            {barcodeState === 'loading' && (
+              <p className="retail-pos__lookup-status" aria-live="polite">
+                <Spinner size="sm" label="Поиск по штрихкоду" /> Поиск товара…
+              </p>
+            )}
+            {barcodeState === 'not-found' && (
+              <EmptyState
+                title="Товар по штрихкоду не найден"
+                description="Проверьте штрихкод и повторите поиск."
+              />
+            )}
+            {barcodeState === 'error' && barcodeError && (
+              <Alert variant="danger" title="Не удалось найти товар">
+                {barcodeError}
+              </Alert>
+            )}
+            {barcodeState === 'unavailable' && barcodeProduct && (
+              <Alert variant="warning" title="Товар недоступен">
+                {barcodeProduct.name} — неактивный товар и не может быть выбран.
+              </Alert>
+            )}
+            {barcodeState === 'found' && barcodeProduct && (
+              <div className="retail-pos__barcode-result">
+                <div>
+                  <strong>{barcodeProduct.name}</strong>
+                  <span>{barcodeProduct.sourceId} · {barcodeProduct.baseUnit}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setSelectedProduct(barcodeProduct)}
+                >
+                  Выбрать
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {selectedProduct && (
+            <Card variant="soft" className="retail-pos__selected-product">
+              <h2>Выбранный товар</h2>
+              <p>{selectedProduct.name}</p>
+              <span>{selectedProduct.sourceId} · {selectedProduct.baseUnit}</span>
+            </Card>
           )}
         </section>
       )}

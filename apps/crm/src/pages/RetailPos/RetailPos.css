@@ -32,3 +32,70 @@
 .retail-pos__state button {
   font: inherit;
 }
+
+.retail-pos__lookup {
+  display: grid;
+  gap: 16px;
+}
+
+.retail-pos__lookup-form {
+  display: grid;
+  gap: 8px;
+}
+
+.retail-pos__lookup-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.retail-pos__lookup-controls .mb-input {
+  flex: 1 1 240px;
+}
+
+.retail-pos__lookup-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.retail-pos__product-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.retail-pos__product-list li,
+.retail-pos__barcode-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.retail-pos__product-list strong,
+.retail-pos__product-list span,
+.retail-pos__barcode-result strong,
+.retail-pos__barcode-result span,
+.retail-pos__selected-product span {
+  display: block;
+}
+
+.retail-pos__product-list span,
+.retail-pos__barcode-result span,
+.retail-pos__selected-product span {
+  color: var(--mb-color-text-secondary);
+}
+
+.retail-pos__selected-product h2,
+.retail-pos__selected-product p {
+  margin: 0;
+}
+
+.retail-pos__selected-product {
+  display: grid;
+  gap: 4px;
+}

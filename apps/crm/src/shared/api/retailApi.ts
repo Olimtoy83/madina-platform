@@ -1,7 +1,9 @@
-import type { RetailLocation } from '@madina/retail'
+import type { RetailProductResponse } from '@madina/api'
+import type { RetailLocation, RetailProduct } from '@madina/retail'
 import { requestJson } from './httpClient'
 
 const retailLocationsUrl = '/api/v1/retail/locations'
+const retailProductsUrl = '/api/v1/retail/products'
 
 interface RetailLocationResponse extends Omit<
   RetailLocation,
@@ -15,12 +17,42 @@ interface RetailLocationsListResponse {
   locations: RetailLocationResponse[]
 }
 
+interface RetailProductsListResponse {
+  products: RetailProductResponse[]
+}
+
 export async function getRetailLocations(): Promise<RetailLocation[]> {
   const response = await requestJson<RetailLocationsListResponse>(
     retailLocationsUrl,
   )
 
   return response.locations.map(toRetailLocation)
+}
+
+export async function getRetailProducts(
+  search: string,
+): Promise<RetailProduct[]> {
+  const term = search.trim()
+  if (!term) return []
+
+  const response = await requestJson<RetailProductsListResponse>(
+    `${retailProductsUrl}?search=${encodeURIComponent(term)}`,
+  )
+
+  return response.products.map(toRetailProduct)
+}
+
+export async function getRetailProductByBarcode(
+  barcode: string,
+): Promise<RetailProduct | undefined> {
+  const value = barcode.trim()
+  if (!value) return undefined
+
+  const response = await requestJson<{ product: RetailProductResponse }>(
+    `${retailProductsUrl}/by-barcode/${encodeURIComponent(value)}`,
+  )
+
+  return toRetailProduct(response.product)
 }
 
 function toRetailLocation(
@@ -30,5 +62,15 @@ function toRetailLocation(
     ...location,
     createdAt: new Date(location.createdAt),
     updatedAt: new Date(location.updatedAt),
+  }
+}
+
+function toRetailProduct(
+  product: RetailProductResponse,
+): RetailProduct {
+  return {
+    ...product,
+    createdAt: new Date(product.createdAt),
+    updatedAt: new Date(product.updatedAt),
   }
 }
