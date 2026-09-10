@@ -1,0 +1,16 @@
+﻿.retail-pos {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.retail-pos__header h1,
+.retail-pos__header p {
+  margin: 0;
+}
+
+.retail-pos__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

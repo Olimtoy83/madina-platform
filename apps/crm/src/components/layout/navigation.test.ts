@@ -24,6 +24,37 @@ describe('CRM navigation', () => {
     ])
   })
 
+  it('shows Retail POS only to roles with retail sales capability', () => {
+    const adminItems = getVisibleNavigationItems({
+      id: 'user-admin',
+      username: 'admin',
+      role: 'admin',
+    })
+
+    const managerItems = getVisibleNavigationItems({
+      id: 'user-manager',
+      username: 'manager',
+      role: 'manager',
+    })
+
+    const operatorItems = getVisibleNavigationItems({
+      id: 'user-operator',
+      username: 'operator',
+      role: 'operator',
+    })
+
+    const viewerItems = getVisibleNavigationItems({
+      id: 'user-viewer',
+      username: 'viewer',
+      role: 'viewer',
+    })
+
+    expect(adminItems.some((item) => item.path === '/retail/pos')).toBe(true)
+    expect(managerItems.some((item) => item.path === '/retail/pos')).toBe(true)
+    expect(operatorItems.some((item) => item.path === '/retail/pos')).toBe(false)
+    expect(viewerItems.some((item) => item.path === '/retail/pos')).toBe(false)
+  })
+
   it('does not render navigation before authentication is established', () => {
     expect(getVisibleNavigationItems(null)).toEqual([])
   })

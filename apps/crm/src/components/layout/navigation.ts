@@ -1,12 +1,27 @@
 import type { Permission } from '@madina/auth/rbac'
 import type { AuthUserResponse } from '@madina/api'
+import type { RetailCapability } from '@madina/retail'
 import { can } from '../../shared/auth/permissions'
+import { canRetail } from '../../shared/auth/retailPermissions'
 
-export interface NavigationItem {
+interface BaseNavigationItem {
   label: string
   path: string
-  permission: Permission
 }
+
+interface CrmNavigationItem extends BaseNavigationItem {
+  permission: Permission
+  retailCapability?: never
+}
+
+interface RetailNavigationItem extends BaseNavigationItem {
+  permission?: never
+  retailCapability: RetailCapability
+}
+
+export type NavigationItem =
+  | CrmNavigationItem
+  | RetailNavigationItem
 
 export const navigationItems: readonly NavigationItem[] = [
   { label: 'Главная', path: '/', permission: 'reports:read' },
@@ -20,10 +35,21 @@ export const navigationItems: readonly NavigationItem[] = [
   { label: 'Учёт', path: '/accounting', permission: 'reports:read' },
   { label: 'Задачи', path: '/tasks', permission: 'tasks:read' },
   { label: 'Статистика', path: '/statistics', permission: 'reports:read' },
+  {
+    label: 'Розничная касса',
+    path: '/retail/pos',
+    retailCapability: 'retail:sales:manage',
+  },
 ]
 
 export function getVisibleNavigationItems(
   user: AuthUserResponse | null,
 ): readonly NavigationItem[] {
-  return navigationItems.filter((item) => can(user, item.permission))
+  return navigationItems.filter((item) => {
+    if (item.retailCapability !== undefined) {
+      return canRetail(user, item.retailCapability)
+    }
+
+    return can(user, item.permission)
+  })
 }

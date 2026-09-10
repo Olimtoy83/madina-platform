@@ -26,6 +26,9 @@ importers:
       '@madina/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@madina/retail':
+        specifier: workspace:*
+        version: link:../../packages/retail
       '@madina/ui':
         specifier: workspace:*
         version: link:../../packages/ui
