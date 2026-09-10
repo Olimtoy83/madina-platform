@@ -14,3 +14,21 @@
   flex-direction: column;
   gap: 4px;
 }
+
+.retail-pos__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.retail-pos__state p,
+.retail-pos__status,
+.retail-pos__selected {
+  margin: 0;
+}
+
+.retail-pos__state select,
+.retail-pos__state button {
+  font: inherit;
+}
