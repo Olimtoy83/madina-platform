@@ -21,6 +21,10 @@ interface RetailProductsListResponse {
   products: RetailProductResponse[]
 }
 
+interface RetailProductPriceResponse {
+  unitPriceMinor: number
+}
+
 export async function getRetailLocations(): Promise<RetailLocation[]> {
   const response = await requestJson<RetailLocationsListResponse>(
     retailLocationsUrl,
@@ -53,6 +57,17 @@ export async function getRetailProductByBarcode(
   )
 
   return toRetailProduct(response.product)
+}
+
+export async function getRetailProductPrice(
+  locationId: string,
+  productId: string,
+): Promise<number> {
+  const response = await requestJson<RetailProductPriceResponse>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/products/${encodeURIComponent(productId)}/price`,
+  )
+
+  return response.unitPriceMinor
 }
 
 function toRetailLocation(

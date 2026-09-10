@@ -3,6 +3,7 @@ import type { RetailLocation, RetailProduct } from '@madina/retail'
 import {
   getRetailLocations,
   getRetailProductByBarcode,
+  getRetailProductPrice,
   getRetailProducts,
 } from '../../shared/api/retailApi'
 import { HttpError } from '../../shared/api/httpClient'
@@ -11,11 +12,41 @@ import './RetailPos.css'
 
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
 type BarcodeLookupState = 'idle' | 'loading' | 'found' | 'not-found' | 'unavailable' | 'error'
+type PriceState = 'idle' | 'loading' | 'ready' | 'missing' | 'currency-unavailable' | 'error'
+
+type CurrencyConfiguredLocation = RetailLocation & {
+  currencyCode: string
+  currencyExponent: number
+}
 
 function getLookupErrorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : 'Не удалось выполнить поиск товара. Повторите попытку.'
+}
+
+function hasCurrencyConfiguration(
+  location: RetailLocation,
+): location is CurrencyConfiguredLocation {
+  return typeof location.currencyCode === 'string'
+    && /^[A-Z]{3}$/.test(location.currencyCode)
+    && typeof location.currencyExponent === 'number'
+    && Number.isSafeInteger(location.currencyExponent)
+    && location.currencyExponent >= 0
+    && location.currencyExponent <= 9
+}
+
+function formatUnitPrice(
+  unitPriceMinor: number,
+  currencyCode: string,
+  currencyExponent: number,
+): string {
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: currencyCode,
+    minimumFractionDigits: currencyExponent,
+    maximumFractionDigits: currencyExponent,
+  }).format(unitPriceMinor / 10 ** currencyExponent)
 }
 
 export function RetailPos() {
@@ -34,8 +65,19 @@ export function RetailPos() {
   const [barcodeState, setBarcodeState] = useState<BarcodeLookupState>('idle')
   const [barcodeError, setBarcodeError] = useState<string>()
   const [selectedProduct, setSelectedProduct] = useState<RetailProduct>()
+  const [priceState, setPriceState] = useState<PriceState>('idle')
+  const [unitPriceMinor, setUnitPriceMinor] = useState<number>()
+  const [priceError, setPriceError] = useState<string>()
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
+  const priceRequestGeneration = useRef(0)
+
+  const resetPriceReadiness = useCallback(() => {
+    priceRequestGeneration.current += 1
+    setPriceState('idle')
+    setUnitPriceMinor(undefined)
+    setPriceError(undefined)
+  }, [])
 
   const resetProductLookup = useCallback(() => {
     searchRequestGeneration.current += 1
@@ -50,7 +92,8 @@ export function RetailPos() {
     setBarcodeState('idle')
     setBarcodeError(undefined)
     setSelectedProduct(undefined)
-  }, [])
+    resetPriceReadiness()
+  }, [resetPriceReadiness])
 
   const loadLocations = useCallback(async () => {
     setLoadState('loading')
@@ -76,6 +119,41 @@ export function RetailPos() {
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
   )
+
+  useEffect(() => {
+    const generation = priceRequestGeneration.current + 1
+    priceRequestGeneration.current = generation
+    setUnitPriceMinor(undefined)
+    setPriceError(undefined)
+
+    if (!selectedLocation || !selectedProduct || selectedProduct.status !== 'active') {
+      setPriceState('idle')
+      return
+    }
+
+    if (!hasCurrencyConfiguration(selectedLocation)) {
+      setPriceState('currency-unavailable')
+      return
+    }
+
+    setPriceState('loading')
+
+    void getRetailProductPrice(selectedLocation.id, selectedProduct.id)
+      .then((price) => {
+        if (priceRequestGeneration.current !== generation) return
+        setUnitPriceMinor(price)
+        setPriceState('ready')
+      })
+      .catch((error: unknown) => {
+        if (priceRequestGeneration.current !== generation) return
+        if (error instanceof HttpError && error.status === 404) {
+          setPriceState('missing')
+          return
+        }
+        setPriceError(getLookupErrorMessage(error))
+        setPriceState('error')
+      })
+  }, [selectedLocation, selectedProduct])
 
   async function searchProducts(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -150,6 +228,11 @@ export function RetailPos() {
   function selectLocation(locationId: string) {
     setSelectedLocationId(locationId || undefined)
     resetProductLookup()
+  }
+
+  function selectProduct(product: RetailProduct) {
+    resetPriceReadiness()
+    setSelectedProduct(product)
   }
 
   return (
@@ -265,7 +348,7 @@ export function RetailPos() {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => setSelectedProduct(product)}
+                      onClick={() => selectProduct(product)}
                     >
                       Выбрать
                     </Button>
@@ -322,7 +405,7 @@ export function RetailPos() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => setSelectedProduct(barcodeProduct)}
+                  onClick={() => selectProduct(barcodeProduct)}
                 >
                   Выбрать
                 </Button>
@@ -335,6 +418,38 @@ export function RetailPos() {
               <h2>Выбранный товар</h2>
               <p>{selectedProduct.name}</p>
               <span>{selectedProduct.sourceId} · {selectedProduct.baseUnit}</span>
+              {priceState === 'currency-unavailable' && (
+                <Alert variant="warning" title="Цена недоступна">
+                  Для выбранной торговой точки не настроена валюта.
+                </Alert>
+              )}
+              {priceState === 'loading' && (
+                <p className="retail-pos__price-status" aria-live="polite">
+                  <Spinner size="sm" label="Загрузка цены" /> Загрузка цены…
+                </p>
+              )}
+              {priceState === 'ready'
+                && unitPriceMinor !== undefined
+                && hasCurrencyConfiguration(selectedLocation) && (
+                <p className="retail-pos__price">
+                  Цена: {formatUnitPrice(
+                    unitPriceMinor,
+                    selectedLocation.currencyCode,
+                    selectedLocation.currencyExponent,
+                  )}
+                </p>
+              )}
+              {priceState === 'missing' && (
+                <EmptyState
+                  title="Цена товара не найдена"
+                  description="Для выбранной торговой точки цена товара не установлена."
+                />
+              )}
+              {priceState === 'error' && priceError && (
+                <Alert variant="danger" title="Не удалось загрузить цену">
+                  {priceError}
+                </Alert>
+              )}
             </Card>
           )}
         </section>

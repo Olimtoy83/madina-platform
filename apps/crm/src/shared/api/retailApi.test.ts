@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getRetailLocations,
   getRetailProductByBarcode,
+  getRetailProductPrice,
   getRetailProducts,
 } from './retailApi'
 import { HttpError } from './httpClient'
@@ -142,6 +143,52 @@ describe('retailApi', () => {
     expect(error).toMatchObject({
       status: 404,
       message: 'Retail Product barcode not found.',
+    })
+  })
+
+  it('uses the encoded location-specific Product price endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({
+      unitPriceMinor: 123456789,
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getRetailProductPrice('location / 1', 'product / 1')).resolves.toBe(
+      123456789,
+    )
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/retail/locations/location%20%2F%201/products/product%20%2F%201/price',
+    ])
+  })
+
+  it('does not mask missing Product price errors from the shared HTTP client', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      message: 'Retail Product price not found.',
+    }, 404)))
+
+    const error = await getRetailProductPrice('location-1', 'product-1').catch(
+      (reason: unknown) => reason,
+    )
+
+    expect(error).toBeInstanceOf(HttpError)
+    expect(error).toMatchObject({
+      status: 404,
+      message: 'Retail Product price not found.',
+    })
+  })
+
+  it('does not mask Product price request errors from the shared HTTP client', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      message: 'Retail Product prices are unavailable.',
+    }, 503)))
+
+    const error = await getRetailProductPrice('location-1', 'product-1').catch(
+      (reason: unknown) => reason,
+    )
+
+    expect(error).toBeInstanceOf(HttpError)
+    expect(error).toMatchObject({
+      status: 503,
+      message: 'Retail Product prices are unavailable.',
     })
   })
 })
