@@ -8,6 +8,14 @@ import {
 } from '../../shared/api/retailApi'
 import { HttpError } from '../../shared/api/httpClient'
 import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
+import {
+  addPosCartLine,
+  clearPosCart,
+  decrementPosCartLine,
+  incrementPosCartLine,
+  removePosCartLine,
+  type PosCartLine,
+} from './retailPosCart'
 import './RetailPos.css'
 
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
@@ -49,6 +57,12 @@ function formatUnitPrice(
   }).format(unitPriceMinor / 10 ** currencyExponent)
 }
 
+function getCartErrorMessage(error: 'invalid-quantity' | 'quantity-overflow'): string {
+  return error === 'quantity-overflow'
+    ? 'Количество товара не может быть больше допустимого значения.'
+    : 'Количество товара должно быть целым положительным числом.'
+}
+
 export function RetailPos() {
   const [locations, setLocations] = useState<RetailLocation[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>()
@@ -68,6 +82,9 @@ export function RetailPos() {
   const [priceState, setPriceState] = useState<PriceState>('idle')
   const [unitPriceMinor, setUnitPriceMinor] = useState<number>()
   const [priceError, setPriceError] = useState<string>()
+  const [cartLines, setCartLines] = useState<PosCartLine[]>([])
+  const [cartError, setCartError] = useState<string>()
+  const [cartNotice, setCartNotice] = useState<string>()
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -100,6 +117,9 @@ export function RetailPos() {
     setLocations([])
     setSelectedLocationId(undefined)
     resetProductLookup()
+    setCartLines(clearPosCart())
+    setCartError(undefined)
+    setCartNotice(undefined)
 
     try {
       const retailLocations = await getRetailLocations()
@@ -119,6 +139,14 @@ export function RetailPos() {
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
   )
+
+  const canAddSelectedProduct = selectedLocation !== undefined
+    && selectedProduct?.status === 'active'
+    && priceState === 'ready'
+    && typeof unitPriceMinor === 'number'
+    && Number.isSafeInteger(unitPriceMinor)
+    && unitPriceMinor > 0
+    && hasCurrencyConfiguration(selectedLocation)
 
   useEffect(() => {
     const generation = priceRequestGeneration.current + 1
@@ -226,13 +254,64 @@ export function RetailPos() {
   }
 
   function selectLocation(locationId: string) {
+    const hadCartLines = cartLines.length > 0
     setSelectedLocationId(locationId || undefined)
     resetProductLookup()
+    setCartLines(clearPosCart())
+    setCartError(undefined)
+    setCartNotice(hadCartLines
+      ? 'Корзина очищена после смены торговой точки.'
+      : undefined)
   }
 
   function selectProduct(product: RetailProduct) {
     resetPriceReadiness()
     setSelectedProduct(product)
+  }
+
+  function addSelectedProductToCart() {
+    if (!selectedLocation
+      || !selectedProduct
+      || selectedProduct.status !== 'active'
+      || priceState !== 'ready'
+      || typeof unitPriceMinor !== 'number'
+      || !Number.isSafeInteger(unitPriceMinor)
+      || unitPriceMinor <= 0
+      || !hasCurrencyConfiguration(selectedLocation)) return
+
+    const result = addPosCartLine(cartLines, {
+      productId: selectedProduct.id,
+      sourceId: selectedProduct.sourceId,
+      name: selectedProduct.name,
+      baseUnit: selectedProduct.baseUnit,
+      unitPriceMinor,
+      currencyCode: selectedLocation.currencyCode,
+      currencyExponent: selectedLocation.currencyExponent,
+    })
+    setCartLines(result.lines)
+    setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
+  }
+
+  function incrementCartLine(productId: string) {
+    const result = incrementPosCartLine(cartLines, productId)
+    setCartLines(result.lines)
+    setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
+  }
+
+  function decrementCartLine(productId: string) {
+    const result = decrementPosCartLine(cartLines, productId)
+    setCartLines(result.lines)
+    setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
+  }
+
+  function removeCartLine(productId: string) {
+    setCartLines(removePosCartLine(cartLines, productId))
+    setCartError(undefined)
+  }
+
+  function clearCart() {
+    setCartLines(clearPosCart())
+    setCartError(undefined)
   }
 
   return (
@@ -287,6 +366,12 @@ export function RetailPos() {
             </p>
           )}
         </section>
+      )}
+
+      {cartNotice && (
+        <Alert variant="info" title="Корзина очищена">
+          {cartNotice}
+        </Alert>
       )}
 
       {!selectedLocation && loadState === 'ready' && locations.length > 0 && (
@@ -439,6 +524,11 @@ export function RetailPos() {
                   )}
                 </p>
               )}
+              {canAddSelectedProduct && (
+                <Button type="button" onClick={addSelectedProductToCart}>
+                  Добавить в корзину
+                </Button>
+              )}
               {priceState === 'missing' && (
                 <EmptyState
                   title="Цена товара не найдена"
@@ -452,6 +542,82 @@ export function RetailPos() {
               )}
             </Card>
           )}
+
+          <Card className="retail-pos__cart">
+            <div className="retail-pos__cart-header">
+              <h2>Корзина</h2>
+              {cartLines.length > 0 && (
+                <Button type="button" variant="secondary" onClick={clearCart}>
+                  Очистить
+                </Button>
+              )}
+            </div>
+
+            {cartError && (
+              <Alert variant="warning" title="Количество не изменено">
+                {cartError}
+              </Alert>
+            )}
+            {cartLines.length === 0 ? (
+              <EmptyState
+                title="Корзина пуста"
+                description="Добавьте товар с готовой текущей ценой."
+              />
+            ) : (
+              <>
+                <ul className="retail-pos__cart-lines">
+                  {cartLines.map((line) => (
+                    <li key={line.productId}>
+                      <div className="retail-pos__cart-line-details">
+                        <strong>{line.name}</strong>
+                        <span>{line.sourceId} · {line.baseUnit}</span>
+                        <span>
+                          Текущая цена: {formatUnitPrice(
+                            line.unitPriceMinor,
+                            line.currencyCode,
+                            line.currencyExponent,
+                          )}
+                        </span>
+                      </div>
+                      <div className="retail-pos__cart-line-actions">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => decrementCartLine(line.productId)}
+                          disabled={line.quantity === 1}
+                          aria-label={`Уменьшить количество ${line.name}`}
+                        >
+                          −
+                        </Button>
+                        <span aria-label={`Количество ${line.name}`}>
+                          {line.quantity}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => incrementCartLine(line.productId)}
+                          aria-label={`Увеличить количество ${line.name}`}
+                        >
+                          +
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          onClick={() => removeCartLine(line.productId)}
+                        >
+                          Удалить
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="retail-pos__cart-note">
+                  Цена в корзине — текущий снимок. Итоговую цену определит сервер
+                  при завершении продажи.
+                </p>
+              </>
+            )}
+          </Card>
         </section>
       )}
     </main>

@@ -111,3 +111,49 @@
   margin: 8px 0 0;
   font-weight: 600;
 }
+
+.retail-pos__cart {
+  display: grid;
+  gap: 12px;
+}
+
+.retail-pos__cart-header,
+.retail-pos__cart-line-actions,
+.retail-pos__cart-lines li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.retail-pos__cart-header,
+.retail-pos__cart-lines li {
+  justify-content: space-between;
+}
+
+.retail-pos__cart-header h2,
+.retail-pos__cart-note {
+  margin: 0;
+}
+
+.retail-pos__cart-lines {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.retail-pos__cart-line-details strong,
+.retail-pos__cart-line-details span {
+  display: block;
+}
+
+.retail-pos__cart-line-details span,
+.retail-pos__cart-note {
+  color: var(--mb-color-text-secondary);
+}
+
+.retail-pos__cart-line-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
