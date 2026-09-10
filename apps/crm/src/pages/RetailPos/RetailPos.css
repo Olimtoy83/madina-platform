@@ -119,14 +119,16 @@
 
 .retail-pos__cart-header,
 .retail-pos__cart-line-actions,
-.retail-pos__cart-lines li {
+.retail-pos__cart-lines li,
+.retail-pos__cart-subtotal {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .retail-pos__cart-header,
-.retail-pos__cart-lines li {
+.retail-pos__cart-lines li,
+.retail-pos__cart-subtotal {
   justify-content: space-between;
 }
 
@@ -156,4 +158,9 @@
 .retail-pos__cart-line-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.retail-pos__cart-subtotal {
+  padding-top: 12px;
+  border-top: 1px solid var(--mb-color-border);
 }

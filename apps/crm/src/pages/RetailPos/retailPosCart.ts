@@ -16,6 +16,17 @@ export type PosCartMutationResult = {
   error?: 'invalid-quantity' | 'quantity-overflow'
 }
 
+export type PosCartTotalsResult =
+  | { status: 'empty' }
+  | {
+      status: 'ready'
+      currencyCode: string
+      currencyExponent: number
+      lineTotals: Array<{ productId: string; lineTotalMinor: number }>
+      subtotalMinor: number
+    }
+  | { status: 'invalid-line' | 'currency-mismatch' | 'money-overflow' }
+
 function isPositiveSafeInteger(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0
 }
@@ -88,4 +99,46 @@ export function removePosCartLine(
 
 export function clearPosCart(): PosCartLine[] {
   return []
+}
+
+export function calculatePosCartTotals(
+  lines: readonly PosCartLine[],
+): PosCartTotalsResult {
+  if (lines.length === 0) return { status: 'empty' }
+
+  const firstLine = lines[0]!
+  let subtotalMinor = 0
+  const lineTotals: Array<{ productId: string; lineTotalMinor: number }> = []
+
+  for (const line of lines) {
+    if (!isPositiveSafeInteger(line.unitPriceMinor)
+      || !isPositiveSafeInteger(line.quantity)) {
+      return { status: 'invalid-line' }
+    }
+    if (line.currencyCode !== firstLine.currencyCode
+      || line.currencyExponent !== firstLine.currencyExponent) {
+      return { status: 'currency-mismatch' }
+    }
+
+    const lineTotalMinor = line.unitPriceMinor * line.quantity
+    if (!Number.isSafeInteger(lineTotalMinor)) {
+      return { status: 'money-overflow' }
+    }
+
+    const nextSubtotalMinor = subtotalMinor + lineTotalMinor
+    if (!Number.isSafeInteger(nextSubtotalMinor)) {
+      return { status: 'money-overflow' }
+    }
+
+    subtotalMinor = nextSubtotalMinor
+    lineTotals.push({ productId: line.productId, lineTotalMinor })
+  }
+
+  return {
+    status: 'ready',
+    currencyCode: firstLine.currencyCode,
+    currencyExponent: firstLine.currencyExponent,
+    lineTotals,
+    subtotalMinor,
+  }
 }

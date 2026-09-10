@@ -10,6 +10,7 @@ import { HttpError } from '../../shared/api/httpClient'
 import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
 import {
   addPosCartLine,
+  calculatePosCartTotals,
   clearPosCart,
   decrementPosCartLine,
   incrementPosCartLine,
@@ -139,6 +140,10 @@ export function RetailPos() {
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
   )
+  const cartTotals = calculatePosCartTotals(cartLines)
+  const cartLineTotals = cartTotals.status === 'ready'
+    ? new Map(cartTotals.lineTotals.map((line) => [line.productId, line.lineTotalMinor]))
+    : undefined
 
   const canAddSelectedProduct = selectedLocation !== undefined
     && selectedProduct?.status === 'active'
@@ -578,6 +583,15 @@ export function RetailPos() {
                             line.currencyExponent,
                           )}
                         </span>
+                        {cartLineTotals?.get(line.productId) !== undefined && (
+                          <span>
+                            Сумма позиции: {formatUnitPrice(
+                              cartLineTotals.get(line.productId)!,
+                              line.currencyCode,
+                              line.currencyExponent,
+                            )}
+                          </span>
+                        )}
                       </div>
                       <div className="retail-pos__cart-line-actions">
                         <Button
@@ -611,9 +625,24 @@ export function RetailPos() {
                     </li>
                   ))}
                 </ul>
+                {cartTotals.status === 'ready' && (
+                  <div className="retail-pos__cart-subtotal">
+                    <span>Итого по корзине:</span>
+                    <strong>{formatUnitPrice(
+                      cartTotals.subtotalMinor,
+                      cartTotals.currencyCode,
+                      cartTotals.currencyExponent,
+                    )}</strong>
+                  </div>
+                )}
+                {cartTotals.status !== 'ready' && cartTotals.status !== 'empty' && (
+                  <Alert variant="warning" title="Сумма корзины недоступна">
+                    Не удалось безопасно рассчитать сумму корзины.
+                  </Alert>
+                )}
                 <p className="retail-pos__cart-note">
-                  Цена в корзине — текущий снимок. Итоговую цену определит сервер
-                  при завершении продажи.
+                  Суммы в корзине — текущий снимок. Итоговые значения продажи
+                  определит сервер при завершении.
                 </p>
               </>
             )}
