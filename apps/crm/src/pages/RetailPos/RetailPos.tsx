@@ -17,6 +17,7 @@ import {
   removePosCartLine,
   type PosCartLine,
 } from './retailPosCart'
+import { createPosCheckoutAttempt, type PosCheckoutAttempt } from './retailPosCheckout'
 import './RetailPos.css'
 
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
@@ -86,6 +87,7 @@ export function RetailPos() {
   const [cartLines, setCartLines] = useState<PosCartLine[]>([])
   const [cartError, setCartError] = useState<string>()
   const [cartNotice, setCartNotice] = useState<string>()
+  const [checkoutAttempt, setCheckoutAttempt] = useState<PosCheckoutAttempt>()
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -121,6 +123,7 @@ export function RetailPos() {
     setCartLines(clearPosCart())
     setCartError(undefined)
     setCartNotice(undefined)
+    setCheckoutAttempt(undefined)
 
     try {
       const retailLocations = await getRetailLocations()
@@ -264,6 +267,7 @@ export function RetailPos() {
     resetProductLookup()
     setCartLines(clearPosCart())
     setCartError(undefined)
+    setCheckoutAttempt(undefined)
     setCartNotice(hadCartLines
       ? 'Корзина очищена после смены торговой точки.'
       : undefined)
@@ -295,28 +299,48 @@ export function RetailPos() {
     })
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
+    if (!result.error) setCheckoutAttempt(undefined)
   }
 
   function incrementCartLine(productId: string) {
     const result = incrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
+    if (!result.error) setCheckoutAttempt(undefined)
   }
 
   function decrementCartLine(productId: string) {
     const result = decrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
+    if (result.lines.some((line, index) => line.quantity !== cartLines[index]?.quantity)) {
+      setCheckoutAttempt(undefined)
+    }
   }
 
   function removeCartLine(productId: string) {
     setCartLines(removePosCartLine(cartLines, productId))
     setCartError(undefined)
+    if (cartLines.some((line) => line.productId === productId)) {
+      setCheckoutAttempt(undefined)
+    }
   }
 
   function clearCart() {
     setCartLines(clearPosCart())
     setCartError(undefined)
+    if (cartLines.length > 0) setCheckoutAttempt(undefined)
+  }
+
+  function prepareCheckoutAttempt() {
+    if (!selectedLocation || cartTotals.status !== 'ready') return
+
+    setCheckoutAttempt(createPosCheckoutAttempt({
+      locationId: selectedLocation.id,
+      cartLines,
+      cartTotals,
+      createId: () => crypto.randomUUID(),
+    }))
   }
 
   return (
@@ -644,6 +668,15 @@ export function RetailPos() {
                   Суммы в корзине — текущий снимок. Итоговые значения продажи
                   определит сервер при завершении.
                 </p>
+                {checkoutAttempt ? (
+                  <Alert variant="info" title="Корзина подготовлена к оплате">
+                    Проверьте корзину перед следующим шагом оформления.
+                  </Alert>
+                ) : cartTotals.status === 'ready' ? (
+                  <Button type="button" onClick={prepareCheckoutAttempt}>
+                    Перейти к оплате
+                  </Button>
+                ) : null}
               </>
             )}
           </Card>
