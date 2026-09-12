@@ -18,6 +18,16 @@ import {
   type PosCartLine,
 } from './retailPosCart'
 import { createPosCheckoutAttempt, type PosCheckoutAttempt } from './retailPosCheckout'
+import {
+  addPosPaymentAllocation,
+  createDefaultPosPaymentAllocations,
+  removePosPaymentAllocation,
+  summarizePosPayments,
+  updatePosPaymentAllocationAmount,
+  updatePosPaymentAllocationMethod,
+  type PosPaymentAllocation,
+  type PosPaymentMethod,
+} from './retailPosPayments'
 import './RetailPos.css'
 
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
@@ -88,6 +98,7 @@ export function RetailPos() {
   const [cartError, setCartError] = useState<string>()
   const [cartNotice, setCartNotice] = useState<string>()
   const [checkoutAttempt, setCheckoutAttempt] = useState<PosCheckoutAttempt>()
+  const [paymentAllocations, setPaymentAllocations] = useState<PosPaymentAllocation[]>()
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -124,6 +135,7 @@ export function RetailPos() {
     setCartError(undefined)
     setCartNotice(undefined)
     setCheckoutAttempt(undefined)
+    setPaymentAllocations(undefined)
 
     try {
       const retailLocations = await getRetailLocations()
@@ -268,6 +280,7 @@ export function RetailPos() {
     setCartLines(clearPosCart())
     setCartError(undefined)
     setCheckoutAttempt(undefined)
+    setPaymentAllocations(undefined)
     setCartNotice(hadCartLines
       ? 'Корзина очищена после смены торговой точки.'
       : undefined)
@@ -299,14 +312,20 @@ export function RetailPos() {
     })
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
-    if (!result.error) setCheckoutAttempt(undefined)
+    if (!result.error) {
+      setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
+    }
   }
 
   function incrementCartLine(productId: string) {
     const result = incrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
-    if (!result.error) setCheckoutAttempt(undefined)
+    if (!result.error) {
+      setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
+    }
   }
 
   function decrementCartLine(productId: string) {
@@ -315,6 +334,7 @@ export function RetailPos() {
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
     if (result.lines.some((line, index) => line.quantity !== cartLines[index]?.quantity)) {
       setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
     }
   }
 
@@ -323,13 +343,17 @@ export function RetailPos() {
     setCartError(undefined)
     if (cartLines.some((line) => line.productId === productId)) {
       setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
     }
   }
 
   function clearCart() {
     setCartLines(clearPosCart())
     setCartError(undefined)
-    if (cartLines.length > 0) setCheckoutAttempt(undefined)
+    if (cartLines.length > 0) {
+      setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
+    }
   }
 
   function prepareCheckoutAttempt() {
@@ -341,7 +365,20 @@ export function RetailPos() {
       cartTotals,
       createId: () => crypto.randomUUID(),
     }))
+    setPaymentAllocations(createDefaultPosPaymentAllocations(() => crypto.randomUUID()))
   }
+
+  const paymentSummary = checkoutAttempt
+    && selectedLocation
+    && hasCurrencyConfiguration(selectedLocation)
+    && cartTotals.status === 'ready'
+    && paymentAllocations
+    ? summarizePosPayments(
+      paymentAllocations,
+      cartTotals.subtotalMinor,
+      selectedLocation.currencyExponent,
+    )
+    : undefined
 
   return (
     <main className="retail-pos">
@@ -680,6 +717,130 @@ export function RetailPos() {
               </>
             )}
           </Card>
+          {checkoutAttempt
+            && paymentAllocations
+            && paymentSummary
+            && selectedLocation
+            && hasCurrencyConfiguration(selectedLocation) && (
+            <Card>
+              <h2>Оплата</h2>
+              <p>
+                Текущая сумма к оплате: {formatUnitPrice(
+                  cartTotals.status === 'ready' ? cartTotals.subtotalMinor : 0,
+                  selectedLocation.currencyCode,
+                  selectedLocation.currencyExponent,
+                )}
+              </p>
+              {paymentAllocations.map((allocation, index) => (
+                <div key={allocation.id}>
+                  <label htmlFor={`retail-pos-payment-method-${index}`}>
+                    Способ оплаты
+                  </label>
+                  <select
+                    id={`retail-pos-payment-method-${index}`}
+                    value={allocation.method}
+                    onChange={(event) => setPaymentAllocations(
+                      updatePosPaymentAllocationMethod(
+                        paymentAllocations,
+                        allocation.id,
+                        event.target.value as PosPaymentMethod,
+                      ),
+                    )}
+                  >
+                    <option value="cash">Наличные</option>
+                    <option value="card">Карта</option>
+                    <option value="transfer">Перевод</option>
+                    <option value="other">Другое</option>
+                  </select>
+                  <label htmlFor={`retail-pos-payment-amount-${index}`}>
+                    Сумма
+                  </label>
+                  <Input
+                    id={`retail-pos-payment-amount-${index}`}
+                    type="text"
+                    inputMode="decimal"
+                    value={allocation.amountText}
+                    onChange={(event) => setPaymentAllocations(
+                      updatePosPaymentAllocationAmount(
+                        paymentAllocations,
+                        allocation.id,
+                        event.target.value,
+                      ),
+                    )}
+                    aria-label={`Сумма оплаты ${index + 1}`}
+                  />
+                  {paymentAllocations.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => setPaymentAllocations(
+                        removePosPaymentAllocation(paymentAllocations, allocation.id),
+                      )}
+                    >
+                      Удалить
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPaymentAllocations(
+                  addPosPaymentAllocation(paymentAllocations, () => crypto.randomUUID()),
+                )}
+              >
+                Добавить оплату
+              </Button>
+              {'allocatedMinor' in paymentSummary && (
+                <p>
+                  Внесено: {formatUnitPrice(
+                    paymentSummary.allocatedMinor,
+                    selectedLocation.currencyCode,
+                    selectedLocation.currencyExponent,
+                  )}
+                </p>
+              )}
+              {paymentSummary.status === 'incomplete' && (
+                <Alert variant="info" title="Введите сумму оплаты">
+                  Заполните сумму для каждой оплаты.
+                </Alert>
+              )}
+              {paymentSummary.status === 'invalid' && (
+                <Alert variant="warning" title="Сумма оплаты недействительна">
+                  Укажите положительную сумму в допустимом формате.
+                </Alert>
+              )}
+              {paymentSummary.status === 'overflow' && (
+                <Alert variant="warning" title="Сумма оплаты слишком велика">
+                  Укажите сумму в допустимом диапазоне.
+                </Alert>
+              )}
+              {paymentSummary.status === 'remaining' && (
+                <p>
+                  Осталось оплатить: {formatUnitPrice(
+                    paymentSummary.differenceMinor,
+                    selectedLocation.currencyCode,
+                    selectedLocation.currencyExponent,
+                  )}
+                </p>
+              )}
+              {paymentSummary.status === 'exact' && (
+                <p>Сумма оплаты совпадает с текущей суммой корзины.</p>
+              )}
+              {paymentSummary.status === 'overpaid' && (
+                <p>
+                  Превышение оплаты: {formatUnitPrice(
+                    paymentSummary.differenceMinor,
+                    selectedLocation.currencyCode,
+                    selectedLocation.currencyExponent,
+                  )}
+                </p>
+              )}
+              <p>
+                Итоговую сумму продажи определит сервер при завершении.
+              </p>
+            </Card>
+          )}
         </section>
       )}
     </main>
