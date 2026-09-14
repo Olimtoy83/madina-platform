@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  completeRetailSale,
   getRetailLocations,
   getRetailProductByBarcode,
   getRetailProductPrice,
   getRetailProducts,
+  type RetailSaleCompletionRequest,
 } from './retailApi'
 import { HttpError } from './httpClient'
 
@@ -19,6 +21,62 @@ afterEach(() => {
 })
 
 describe('retailApi', () => {
+  const completionPayload: RetailSaleCompletionRequest = {
+    clientOperationId: 'operation-1',
+    saleId: 'sale-1',
+    lines: [{ id: 'line-1', productId: 'product-1', quantity: 2 }],
+    allocations: [{
+      id: 'allocation-1', method: 'cash', amountMinor: 2500, ordinal: 0,
+    }],
+  }
+
+  const completionBody = {
+    sale: { id: 'sale-1', subtotal_minor: 2500 },
+    items: [{ id: 'line-1', sale_id: 'sale-1' }],
+    allocations: [{ id: 'allocation-1', sale_id: 'sale-1' }],
+  }
+
+  it.each([201, 200] as const)(
+    'posts the exact completion payload and preserves status %i',
+    async (status) => {
+      const fetchMock = vi.fn().mockResolvedValue(response(completionBody, status))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await expect(completeRetailSale('location / 1', completionPayload)).resolves.toEqual({
+        status,
+        body: completionBody,
+      })
+
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        '/api/v1/retail/locations/location%20%2F%201/sales/complete',
+      ])
+      const options = fetchMock.mock.calls[0]?.[1]
+      expect(options).toMatchObject({
+        method: 'POST',
+        credentials: 'same-origin',
+        body: JSON.stringify(completionPayload),
+      })
+      expect(new Headers(options?.headers).get('Content-Type')).toBe('application/json')
+      expect(JSON.parse(options?.body as string)).toEqual(completionPayload)
+    },
+  )
+
+  it('preserves HttpError for a completion conflict without interpreting it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({
+      message: 'IDEMPOTENCY_CONFLICT',
+    }, 409)))
+
+    const error = await completeRetailSale('location-1', completionPayload)
+      .catch((reason: unknown) => reason)
+
+    expect(error).toBeInstanceOf(HttpError)
+    expect(error).toMatchObject({
+      status: 409,
+      message: 'IDEMPOTENCY_CONFLICT',
+      body: { message: 'IDEMPOTENCY_CONFLICT' },
+    })
+  })
+
   it('loads locations and maps JSON timestamps to canonical retail locations', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({
       locations: [{

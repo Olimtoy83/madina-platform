@@ -1,6 +1,6 @@
 import type { RetailProductResponse } from '@madina/api'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
-import { requestJson } from './httpClient'
+import { requestJson, requestResponse } from './httpClient'
 
 const retailLocationsUrl = '/api/v1/retail/locations'
 const retailProductsUrl = '/api/v1/retail/products'
@@ -23,6 +23,33 @@ interface RetailProductsListResponse {
 
 interface RetailProductPriceResponse {
   unitPriceMinor: number
+}
+
+export interface RetailSaleCompletionRequest {
+  clientOperationId: string
+  saleId: string
+  lines: ReadonlyArray<{
+    id: string
+    productId: string
+    quantity: number
+  }>
+  allocations: ReadonlyArray<{
+    id: string
+    method: 'cash' | 'card' | 'transfer' | 'other'
+    amountMinor: number
+    ordinal: number
+  }>
+}
+
+interface RetailSaleCompletionResponse {
+  sale: unknown
+  items: unknown[]
+  allocations: unknown[]
+}
+
+export interface RetailSaleCompletionResult {
+  status: 200 | 201
+  body: RetailSaleCompletionResponse
 }
 
 export async function getRetailLocations(): Promise<RetailLocation[]> {
@@ -68,6 +95,29 @@ export async function getRetailProductPrice(
   )
 
   return response.unitPriceMinor
+}
+
+export async function completeRetailSale(
+  locationId: string,
+  payload: RetailSaleCompletionRequest,
+): Promise<RetailSaleCompletionResult> {
+  const response = await requestResponse(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/sales/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+
+  if (response.status !== 200 && response.status !== 201) {
+    throw new Error('Unexpected Retail Sale completion response status.')
+  }
+
+  return {
+    status: response.status,
+    body: await response.json() as RetailSaleCompletionResponse,
+  }
 }
 
 function toRetailLocation(
