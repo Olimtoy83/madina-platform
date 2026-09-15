@@ -7,6 +7,7 @@ import {
   getRetailProducts,
 } from '../../shared/api/retailApi'
 import { HttpError } from '../../shared/api/httpClient'
+import { useAuth } from '../../context/useAuth'
 import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
 import {
   addPosCartLine,
@@ -28,6 +29,13 @@ import {
   type PosPaymentAllocation,
   type PosPaymentMethod,
 } from './retailPosPayments'
+import { loadPendingPosSaleSubmission } from './retailPosSubmissionRecovery'
+import {
+  canPreparePosCheckout,
+  createPosRecoveryGateState,
+  type PosRecoveryGateBlockedReason,
+  type PosRecoveryGateState,
+} from './retailPosRecoveryGate'
 import './RetailPos.css'
 
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
@@ -75,7 +83,23 @@ function getCartErrorMessage(error: 'invalid-quantity' | 'quantity-overflow'): s
     : 'Количество товара должно быть целым положительным числом.'
 }
 
+function getRecoveryGateMessage(
+  reason: PosRecoveryGateBlockedReason,
+): string {
+  switch (reason) {
+    case 'pending':
+      return 'Есть незавершённая предыдущая продажа. Создание новой оплаты временно недоступно.'
+    case 'foreign-owner':
+      return 'Есть незавершённые POS-данные другой сессии. Создание новой оплаты временно недоступно.'
+    case 'invalid':
+      return 'Сохранённые данные восстановления нельзя безопасно обработать. Создание новой оплаты временно недоступно.'
+    case 'storage-error':
+      return 'Защищённое локальное хранилище недоступно. Создание новой оплаты временно недоступно.'
+  }
+}
+
 export function RetailPos() {
+  const { user } = useAuth()
   const [locations, setLocations] = useState<RetailLocation[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>()
   const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>(
@@ -99,6 +123,9 @@ export function RetailPos() {
   const [cartNotice, setCartNotice] = useState<string>()
   const [checkoutAttempt, setCheckoutAttempt] = useState<PosCheckoutAttempt>()
   const [paymentAllocations, setPaymentAllocations] = useState<PosPaymentAllocation[]>()
+  const [recoveryGate, setRecoveryGate] = useState<PosRecoveryGateState>({
+    status: 'checking',
+  })
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -151,6 +178,27 @@ export function RetailPos() {
   useEffect(() => {
     void loadLocations()
   }, [loadLocations])
+
+  useEffect(() => {
+    if (!user) {
+      setRecoveryGate({ status: 'checking' })
+      return
+    }
+
+    setRecoveryGate({ status: 'checking' })
+    setRecoveryGate(createPosRecoveryGateState(
+      user.id,
+      loadPendingPosSaleSubmission(user.id),
+    ))
+  }, [user?.id])
+
+  const isCheckoutPreparationAllowed = canPreparePosCheckout(recoveryGate, user?.id)
+
+  useEffect(() => {
+    if (isCheckoutPreparationAllowed) return
+    setCheckoutAttempt(undefined)
+    setPaymentAllocations(undefined)
+  }, [isCheckoutPreparationAllowed])
 
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
@@ -357,7 +405,9 @@ export function RetailPos() {
   }
 
   function prepareCheckoutAttempt() {
-    if (!selectedLocation || cartTotals.status !== 'ready') return
+    if (!isCheckoutPreparationAllowed
+      || !selectedLocation
+      || cartTotals.status !== 'ready') return
 
     setCheckoutAttempt(createPosCheckoutAttempt({
       locationId: selectedLocation.id,
@@ -386,6 +436,18 @@ export function RetailPos() {
         <h1>Розничная касса</h1>
         <p>Retail POS</p>
       </header>
+
+      {recoveryGate.status === 'checking' && (
+        <p className="retail-pos__status" aria-live="polite">
+          Проверяем защищённые данные незавершённой продажи…
+        </p>
+      )}
+
+      {recoveryGate.status === 'blocked' && (
+        <Alert variant="warning" title="Новая оплата временно недоступна">
+          {getRecoveryGateMessage(recoveryGate.reason)}
+        </Alert>
+      )}
 
       {loadState === 'loading' && (
         <p className="retail-pos__status" aria-live="polite">
@@ -705,12 +767,16 @@ export function RetailPos() {
                   Суммы в корзине — текущий снимок. Итоговые значения продажи
                   определит сервер при завершении.
                 </p>
-                {checkoutAttempt ? (
+                {checkoutAttempt && isCheckoutPreparationAllowed ? (
                   <Alert variant="info" title="Корзина подготовлена к оплате">
                     Проверьте корзину перед следующим шагом оформления.
                   </Alert>
                 ) : cartTotals.status === 'ready' ? (
-                  <Button type="button" onClick={prepareCheckoutAttempt}>
+                  <Button
+                    type="button"
+                    onClick={prepareCheckoutAttempt}
+                    disabled={!isCheckoutPreparationAllowed}
+                  >
                     Перейти к оплате
                   </Button>
                 ) : null}
@@ -721,6 +787,7 @@ export function RetailPos() {
             && paymentAllocations
             && paymentSummary
             && selectedLocation
+            && isCheckoutPreparationAllowed
             && hasCurrencyConfiguration(selectedLocation) && (
             <Card>
               <h2>Оплата</h2>
