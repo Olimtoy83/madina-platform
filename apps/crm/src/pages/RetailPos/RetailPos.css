@@ -33,6 +33,12 @@
   font: inherit;
 }
 
+.retail-pos__state select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .retail-pos__lookup {
   display: grid;
   gap: 16px;
@@ -163,4 +169,104 @@
 .retail-pos__cart-subtotal {
   padding-top: 12px;
   border-top: 1px solid var(--mb-color-border);
+}
+.retail-pos__workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+  align-items: start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.retail-pos__lookup,
+.retail-pos__checkout {
+  min-width: 0;
+}
+
+.retail-pos__checkout {
+  display: grid;
+  gap: 16px;
+}
+
+.retail-pos__cart-subtotal {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.retail-pos__payment {
+  display: grid;
+  gap: 12px;
+}
+
+.retail-pos__payment h2,
+.retail-pos__payment p {
+  margin: 0;
+}
+
+.retail-pos__payment-allocation {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--mb-color-border);
+}
+
+.retail-pos__payment-allocation select,
+.retail-pos__payment-allocation .mb-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+
+@media (max-width: 1000px) {
+  .retail-pos__workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .retail-pos__product-list li,
+  .retail-pos__barcode-result,
+  .retail-pos__cart-lines li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .retail-pos__cart-line-actions {
+    justify-content: flex-start;
+  }
+
+  .retail-pos__cart-header,
+  .retail-pos__cart-subtotal {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .retail-pos,
+  .retail-pos__workspace,
+  .retail-pos__lookup,
+  .retail-pos__checkout {
+    min-width: 0;
+  }
+
+  .retail-pos__lookup-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retail-pos__lookup-controls .mb-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .retail-pos__lookup-controls .mb-button,
+  .retail-pos__product-list .mb-button,
+  .retail-pos__barcode-result .mb-button {
+    width: 100%;
+  }
+
+  .retail-pos__cart-header,
+  .retail-pos__cart-subtotal {
+    flex-direction: column;
+  }
 }

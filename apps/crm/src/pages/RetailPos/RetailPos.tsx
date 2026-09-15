@@ -708,7 +708,8 @@ export function RetailPos() {
       )}
 
       {selectedLocation && (
-        <section className="retail-pos__lookup" aria-label="Поиск товара">
+        <section className="retail-pos__workspace" aria-label="Рабочая область кассы">
+          <div className="retail-pos__lookup" aria-label="Поиск товара">
           <Card>
             <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
               <label htmlFor="retail-pos-product-search">Поиск товара</label>
@@ -869,6 +870,8 @@ export function RetailPos() {
             </Card>
           )}
 
+          </div>
+          <div className="retail-pos__checkout">
           <Card className="retail-pos__cart">
             <div className="retail-pos__cart-header">
               <h2>Корзина</h2>
@@ -989,7 +992,7 @@ export function RetailPos() {
             && selectedLocation
             && isCheckoutPreparationAllowed
             && hasCurrencyConfiguration(selectedLocation) && (
-            <Card>
+            <Card className="retail-pos__payment">
               <h2>Оплата</h2>
               <p>
                 Текущая сумма к оплате: {formatUnitPrice(
@@ -999,7 +1002,7 @@ export function RetailPos() {
                 )}
               </p>
               {paymentAllocations.map((allocation, index) => (
-                <div key={allocation.id}>
+                <div key={allocation.id} className="retail-pos__payment-allocation">
                   <label htmlFor={`retail-pos-payment-method-${index}`}>
                     Способ оплаты
                   </label>
@@ -1117,6 +1120,7 @@ export function RetailPos() {
               </p>
             </Card>
           )}
+          </div>
         </section>
       )}
     </main>
