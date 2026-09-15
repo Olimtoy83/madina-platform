@@ -5,10 +5,12 @@ import {
   getRetailProductByBarcode,
   getRetailProductPrice,
   getRetailProducts,
+  completeRetailSale,
 } from '../../shared/api/retailApi'
 import { HttpError } from '../../shared/api/httpClient'
 import { useAuth } from '../../context/useAuth'
 import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
+import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
   addPosCartLine,
   calculatePosCartTotals,
@@ -29,7 +31,13 @@ import {
   type PosPaymentAllocation,
   type PosPaymentMethod,
 } from './retailPosPayments'
-import { loadPendingPosSaleSubmission } from './retailPosSubmissionRecovery'
+import {
+  clearPendingPosSaleSubmission,
+  loadPendingPosSaleSubmission,
+  savePendingPosSaleSubmission,
+} from './retailPosSubmissionRecovery'
+import { createPosCompletionPayload } from './retailPosCompletionPayload'
+import { submitPosSale } from './retailPosSubmissionOrchestration'
 import {
   canPreparePosCheckout,
   createPosRecoveryGateState,
@@ -41,6 +49,7 @@ import './RetailPos.css'
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
 type BarcodeLookupState = 'idle' | 'loading' | 'found' | 'not-found' | 'unavailable' | 'error'
 type PriceState = 'idle' | 'loading' | 'ready' | 'missing' | 'currency-unavailable' | 'error'
+type SubmissionState = 'idle' | 'submitting' | 'assembly-error' | 'blocked' | 'cleanup-failed' | 'succeeded'
 
 type CurrencyConfiguredLocation = RetailLocation & {
   currencyCode: string
@@ -126,9 +135,13 @@ export function RetailPos() {
   const [recoveryGate, setRecoveryGate] = useState<PosRecoveryGateState>({
     status: 'checking',
   })
+  const [submissionState, setSubmissionState] = useState<SubmissionState>('idle')
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
+  const submissionGeneration = useRef(0)
+  const submissionOwnerUserId = useRef<string | undefined>(undefined)
+  const { isPending, run: runPendingCommand } = usePendingCommand()
 
   const resetPriceReadiness = useCallback(() => {
     priceRequestGeneration.current += 1
@@ -190,6 +203,19 @@ export function RetailPos() {
       user.id,
       loadPendingPosSaleSubmission(user.id),
     ))
+  }, [user?.id])
+
+  useEffect(() => {
+    const generation = submissionGeneration.current + 1
+    submissionGeneration.current = generation
+    submissionOwnerUserId.current = user?.id
+
+    return () => {
+      if (submissionGeneration.current === generation) {
+        submissionGeneration.current += 1
+        submissionOwnerUserId.current = undefined
+      }
+    }
   }, [user?.id])
 
   const isCheckoutPreparationAllowed = canPreparePosCheckout(recoveryGate, user?.id)
@@ -322,6 +348,7 @@ export function RetailPos() {
   }
 
   function selectLocation(locationId: string) {
+    if (isSubmitting) return
     const hadCartLines = cartLines.length > 0
     setSelectedLocationId(locationId || undefined)
     resetProductLookup()
@@ -340,6 +367,7 @@ export function RetailPos() {
   }
 
   function addSelectedProductToCart() {
+    if (isSubmitting) return
     if (!selectedLocation
       || !selectedProduct
       || selectedProduct.status !== 'active'
@@ -367,6 +395,7 @@ export function RetailPos() {
   }
 
   function incrementCartLine(productId: string) {
+    if (isSubmitting) return
     const result = incrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
@@ -377,6 +406,7 @@ export function RetailPos() {
   }
 
   function decrementCartLine(productId: string) {
+    if (isSubmitting) return
     const result = decrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
@@ -387,6 +417,7 @@ export function RetailPos() {
   }
 
   function removeCartLine(productId: string) {
+    if (isSubmitting) return
     setCartLines(removePosCartLine(cartLines, productId))
     setCartError(undefined)
     if (cartLines.some((line) => line.productId === productId)) {
@@ -396,6 +427,7 @@ export function RetailPos() {
   }
 
   function clearCart() {
+    if (isSubmitting) return
     setCartLines(clearPosCart())
     setCartError(undefined)
     if (cartLines.length > 0) {
@@ -405,7 +437,8 @@ export function RetailPos() {
   }
 
   function prepareCheckoutAttempt() {
-    if (!isCheckoutPreparationAllowed
+    if (isSubmitting
+      || !isCheckoutPreparationAllowed
       || !selectedLocation
       || cartTotals.status !== 'ready') return
 
@@ -416,6 +449,7 @@ export function RetailPos() {
       createId: () => crypto.randomUUID(),
     }))
     setPaymentAllocations(createDefaultPosPaymentAllocations(() => crypto.randomUUID()))
+    setSubmissionState('idle')
   }
 
   const paymentSummary = checkoutAttempt
@@ -429,6 +463,62 @@ export function RetailPos() {
       selectedLocation.currencyExponent,
     )
     : undefined
+  const submissionKey = checkoutAttempt
+    ? `retail-pos-submission:${checkoutAttempt.clientOperationId}`
+    : undefined
+  const isSubmitting = submissionKey !== undefined && isPending(submissionKey)
+
+  async function submitSale() {
+    if (!user
+      || !checkoutAttempt
+      || !paymentAllocations
+      || !paymentSummary
+      || !selectedLocation
+      || !hasCurrencyConfiguration(selectedLocation)
+      || !isCheckoutPreparationAllowed) return
+
+    const ownerUserId = user.id
+    const generation = submissionGeneration.current
+    const key = `retail-pos-submission:${checkoutAttempt.clientOperationId}`
+    setSubmissionState('submitting')
+    const result = await runPendingCommand(key, () => submitPosSale({
+      ownerUserId,
+      checkoutAttempt,
+      paymentAllocations,
+      paymentSummary,
+      currencyExponent: selectedLocation.currencyExponent,
+    }, {
+      createPayload: createPosCompletionPayload,
+      saveSnapshot: savePendingPosSaleSubmission,
+      complete: completeRetailSale,
+      clearSnapshot: clearPendingPosSaleSubmission,
+      isCurrent: () => submissionGeneration.current === generation
+        && submissionOwnerUserId.current === ownerUserId,
+    }))
+
+    if (!result.started
+      || !result.value
+      || submissionGeneration.current !== generation
+      || submissionOwnerUserId.current !== ownerUserId) return
+
+    const outcome = result.value
+    if (outcome.status === 'succeeded') {
+      setCartLines(clearPosCart())
+      setCartError(undefined)
+      setCartNotice(undefined)
+      setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
+      setSubmissionState('succeeded')
+      return
+    }
+
+    setSubmissionState(outcome.status === 'assembly-error'
+      ? 'assembly-error'
+      : outcome.reason === 'clear-failed' ? 'cleanup-failed' : 'blocked')
+    if (outcome.status === 'blocked') {
+      setRecoveryGate({ status: 'blocked', ownerUserId, reason: 'pending' })
+    }
+  }
 
   return (
     <main className="retail-pos">
@@ -446,6 +536,32 @@ export function RetailPos() {
       {recoveryGate.status === 'blocked' && (
         <Alert variant="warning" title="Новая оплата временно недоступна">
           {getRecoveryGateMessage(recoveryGate.reason)}
+        </Alert>
+      )}
+
+      {submissionState === 'submitting' && (
+        <Alert variant="info" title="Завершаем продажу">
+          Отправляем сохранённую продажу. Не закрывайте страницу.
+        </Alert>
+      )}
+      {submissionState === 'assembly-error' && (
+        <Alert variant="warning" title="Продажа не подготовлена">
+          Не удалось безопасно подготовить продажу. Проверьте корзину и оплату.
+        </Alert>
+      )}
+      {submissionState === 'blocked' && (
+        <Alert variant="warning" title="Создание новой оплаты временно недоступно">
+          Сохранённые данные восстановления удерживают создание новой оплаты.
+        </Alert>
+      )}
+      {submissionState === 'cleanup-failed' && (
+        <Alert variant="warning" title="Требуется безопасная проверка">
+          Продажа подтверждена сервером, но локальную запись восстановления нельзя безопасно очистить. Создание новой оплаты временно недоступно.
+        </Alert>
+      )}
+      {submissionState === 'succeeded' && (
+        <Alert variant="info" title="Продажа завершена">
+          Продажа подтверждена сервером.
         </Alert>
       )}
 
@@ -479,6 +595,7 @@ export function RetailPos() {
             id="retail-pos-location"
             value={selectedLocationId ?? ''}
             onChange={(event) => selectLocation(event.target.value)}
+            disabled={isSubmitting}
           >
             <option value="">Выберите торговую точку</option>
             {locations.map((location) => (
@@ -653,7 +770,7 @@ export function RetailPos() {
                 </p>
               )}
               {canAddSelectedProduct && (
-                <Button type="button" onClick={addSelectedProductToCart}>
+                <Button type="button" onClick={addSelectedProductToCart} disabled={isSubmitting}>
                   Добавить в корзину
                 </Button>
               )}
@@ -675,7 +792,7 @@ export function RetailPos() {
             <div className="retail-pos__cart-header">
               <h2>Корзина</h2>
               {cartLines.length > 0 && (
-                <Button type="button" variant="secondary" onClick={clearCart}>
+                <Button type="button" variant="secondary" onClick={clearCart} disabled={isSubmitting}>
                   Очистить
                 </Button>
               )}
@@ -721,7 +838,7 @@ export function RetailPos() {
                           type="button"
                           variant="secondary"
                           onClick={() => decrementCartLine(line.productId)}
-                          disabled={line.quantity === 1}
+                          disabled={isSubmitting || line.quantity === 1}
                           aria-label={`Уменьшить количество ${line.name}`}
                         >
                           −
@@ -733,6 +850,7 @@ export function RetailPos() {
                           type="button"
                           variant="secondary"
                           onClick={() => incrementCartLine(line.productId)}
+                          disabled={isSubmitting}
                           aria-label={`Увеличить количество ${line.name}`}
                         >
                           +
@@ -741,6 +859,7 @@ export function RetailPos() {
                           type="button"
                           variant="danger"
                           onClick={() => removeCartLine(line.productId)}
+                          disabled={isSubmitting}
                         >
                           Удалить
                         </Button>
@@ -775,7 +894,7 @@ export function RetailPos() {
                   <Button
                     type="button"
                     onClick={prepareCheckoutAttempt}
-                    disabled={!isCheckoutPreparationAllowed}
+                    disabled={isSubmitting || !isCheckoutPreparationAllowed}
                   >
                     Перейти к оплате
                   </Button>
@@ -813,6 +932,7 @@ export function RetailPos() {
                         event.target.value as PosPaymentMethod,
                       ),
                     )}
+                    disabled={isSubmitting}
                   >
                     <option value="cash">Наличные</option>
                     <option value="card">Карта</option>
@@ -834,6 +954,7 @@ export function RetailPos() {
                         event.target.value,
                       ),
                     )}
+                    disabled={isSubmitting}
                     aria-label={`Сумма оплаты ${index + 1}`}
                   />
                   {paymentAllocations.length > 1 && (
@@ -843,6 +964,7 @@ export function RetailPos() {
                       onClick={() => setPaymentAllocations(
                         removePosPaymentAllocation(paymentAllocations, allocation.id),
                       )}
+                      disabled={isSubmitting}
                     >
                       Удалить
                     </Button>
@@ -855,6 +977,7 @@ export function RetailPos() {
                 onClick={() => setPaymentAllocations(
                   addPosPaymentAllocation(paymentAllocations, () => crypto.randomUUID()),
                 )}
+                disabled={isSubmitting}
               >
                 Добавить оплату
               </Button>
@@ -892,7 +1015,12 @@ export function RetailPos() {
                 </p>
               )}
               {paymentSummary.status === 'exact' && (
-                <p>Сумма оплаты совпадает с текущей суммой корзины.</p>
+                <>
+                  <p>Сумма оплаты совпадает с текущей суммой корзины.</p>
+                  <Button type="button" onClick={() => void submitSale()} disabled={isSubmitting}>
+                    {isSubmitting ? 'Завершаем продажу…' : 'Завершить продажу'}
+                  </Button>
+                </>
               )}
               {paymentSummary.status === 'overpaid' && (
                 <p>
