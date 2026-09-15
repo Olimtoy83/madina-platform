@@ -35,9 +35,10 @@ import {
   clearPendingPosSaleSubmission,
   loadPendingPosSaleSubmission,
   savePendingPosSaleSubmission,
+  type PendingPosSaleSubmission,
 } from './retailPosSubmissionRecovery'
 import { createPosCompletionPayload } from './retailPosCompletionPayload'
-import { submitPosSale } from './retailPosSubmissionOrchestration'
+import { retryPendingPosSale, submitPosSale } from './retailPosSubmissionOrchestration'
 import {
   canPreparePosCheckout,
   createPosRecoveryGateState,
@@ -50,6 +51,7 @@ type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
 type BarcodeLookupState = 'idle' | 'loading' | 'found' | 'not-found' | 'unavailable' | 'error'
 type PriceState = 'idle' | 'loading' | 'ready' | 'missing' | 'currency-unavailable' | 'error'
 type SubmissionState = 'idle' | 'submitting' | 'assembly-error' | 'blocked' | 'cleanup-failed' | 'succeeded'
+type RecoveryRetryState = 'idle' | 'retrying' | 'failed' | 'cleanup-failed' | 'succeeded'
 
 type CurrencyConfiguredLocation = RetailLocation & {
   currencyCode: string
@@ -135,7 +137,9 @@ export function RetailPos() {
   const [recoveryGate, setRecoveryGate] = useState<PosRecoveryGateState>({
     status: 'checking',
   })
+  const [pendingRecoverySnapshot, setPendingRecoverySnapshot] = useState<Readonly<PendingPosSaleSubmission>>()
   const [submissionState, setSubmissionState] = useState<SubmissionState>('idle')
+  const [recoveryRetryState, setRecoveryRetryState] = useState<RecoveryRetryState>('idle')
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -195,14 +199,15 @@ export function RetailPos() {
   useEffect(() => {
     if (!user) {
       setRecoveryGate({ status: 'checking' })
+      setPendingRecoverySnapshot(undefined)
       return
     }
 
+    const recovery = loadPendingPosSaleSubmission(user.id)
     setRecoveryGate({ status: 'checking' })
-    setRecoveryGate(createPosRecoveryGateState(
-      user.id,
-      loadPendingPosSaleSubmission(user.id),
-    ))
+    setPendingRecoverySnapshot(recovery.status === 'pending' ? recovery.snapshot : undefined)
+    setRecoveryRetryState('idle')
+    setRecoveryGate(createPosRecoveryGateState(user.id, recovery))
   }, [user?.id])
 
   useEffect(() => {
@@ -520,6 +525,42 @@ export function RetailPos() {
     }
   }
 
+  async function retryPendingSale() {
+    if (!user
+      || !pendingRecoverySnapshot
+      || pendingRecoverySnapshot.ownerUserId !== user.id
+      || recoveryGate.status !== 'blocked'
+      || recoveryGate.reason !== 'pending') return
+
+    const ownerUserId = user.id
+    const generation = submissionGeneration.current
+    const snapshot = pendingRecoverySnapshot
+    const key = `retail-pos-recovery:${snapshot.payload.clientOperationId}`
+    setRecoveryRetryState('retrying')
+    const result = await runPendingCommand(key, () => retryPendingPosSale(snapshot, {
+      complete: completeRetailSale,
+      clearSnapshot: clearPendingPosSaleSubmission,
+      isCurrent: () => submissionGeneration.current === generation
+        && submissionOwnerUserId.current === ownerUserId,
+    }))
+
+    if (!result.started
+      || !result.value
+      || submissionGeneration.current !== generation
+      || submissionOwnerUserId.current !== ownerUserId) return
+
+    if (result.value.status === 'succeeded') {
+      setPendingRecoverySnapshot(undefined)
+      setRecoveryGate({ status: 'clear', ownerUserId })
+      setRecoveryRetryState('succeeded')
+      return
+    }
+
+    setRecoveryRetryState(result.value.reason === 'clear-failed'
+      ? 'cleanup-failed'
+      : 'failed')
+  }
+
   return (
     <main className="retail-pos">
       <header className="retail-pos__header">
@@ -536,6 +577,46 @@ export function RetailPos() {
       {recoveryGate.status === 'blocked' && (
         <Alert variant="warning" title="Новая оплата временно недоступна">
           {getRecoveryGateMessage(recoveryGate.reason)}
+        </Alert>
+      )}
+
+      {recoveryGate.status === 'blocked'
+        && recoveryGate.reason === 'pending'
+        && pendingRecoverySnapshot
+        && user?.id === pendingRecoverySnapshot.ownerUserId && (
+        <Card>
+          <h2>Незавершённая продажа</h2>
+          <p>Можно повторить завершение сохранённой продажи без изменения её данных.</p>
+          <Button
+            type="button"
+            onClick={() => void retryPendingSale()}
+            disabled={recoveryRetryState === 'retrying'}
+          >
+            {recoveryRetryState === 'retrying'
+              ? 'Повторяем завершение продажи…'
+              : 'Повторить завершение продажи'}
+          </Button>
+        </Card>
+      )}
+
+      {recoveryRetryState === 'retrying' && (
+        <Alert variant="info" title="Повторяем завершение продажи">
+          Отправляем сохранённую продажу. Не закрывайте страницу.
+        </Alert>
+      )}
+      {recoveryRetryState === 'failed' && (
+        <Alert variant="warning" title="Продажа ожидает безопасной проверки">
+          Статус завершения продажи не подтверждён. Новая оплата временно недоступна.
+        </Alert>
+      )}
+      {recoveryRetryState === 'cleanup-failed' && (
+        <Alert variant="warning" title="Требуется безопасная проверка">
+          Продажа подтверждена сервером, но локальную запись восстановления нельзя безопасно очистить. Создание новой оплаты временно недоступно.
+        </Alert>
+      )}
+      {recoveryRetryState === 'succeeded' && (
+        <Alert variant="info" title="Незавершённая продажа восстановлена">
+          Продажа подтверждена сервером. Можно начать новую продажу.
         </Alert>
       )}
 

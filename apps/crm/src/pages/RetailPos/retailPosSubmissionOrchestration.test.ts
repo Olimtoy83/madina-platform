@@ -3,7 +3,12 @@ import { createPendingCommandGuard } from '../../shared/usePendingCommand'
 import type { PosCheckoutAttempt } from './retailPosCheckout'
 import { summarizePosPayments, type PosPaymentAllocation } from './retailPosPayments'
 import type { PendingPosSaleSubmission, PosCompletionPayload } from './retailPosSubmissionRecovery'
-import { submitPosSale, type PosSaleSubmissionDependencies } from './retailPosSubmissionOrchestration'
+import {
+  retryPendingPosSale,
+  submitPosSale,
+  type PosPendingSaleRetryDependencies,
+  type PosSaleSubmissionDependencies,
+} from './retailPosSubmissionOrchestration'
 
 function completionResult(status: 200 | 201) {
   return { status, body: { sale: {}, items: [], allocations: [] } }
@@ -60,6 +65,24 @@ function submit(dependencies: PosSaleSubmissionDependencies) {
     paymentSummary: summarizePosPayments(paymentAllocations, 1000, 2),
     currencyExponent: 2,
   }, dependencies)
+}
+
+function createRetryDependencies(
+  overrides: Partial<PosPendingSaleRetryDependencies> = {},
+): PosPendingSaleRetryDependencies {
+  return {
+    complete: vi.fn(async () => completionResult(201)),
+    clearSnapshot: vi.fn(() => ({ status: 'cleared' as const })),
+    isCurrent: vi.fn(() => true),
+    ...overrides,
+  }
+}
+
+function retry(
+  dependencies: PosPendingSaleRetryDependencies,
+  snapshot = createSnapshot(),
+) {
+  return retryPendingPosSale(snapshot, dependencies)
 }
 
 describe('retail POS submission orchestration', () => {
@@ -228,5 +251,97 @@ describe('retail POS submission orchestration', () => {
     })
     await expect(submit(dependencies)).resolves.toEqual({ status: 'blocked', reason: 'save-storage-error' })
     expect(dependencies.complete).not.toHaveBeenCalled()
+  })
+
+  it('retries an existing snapshot directly with its exact location and payload', async () => {
+    const snapshot = createSnapshot()
+    const dependencies = createRetryDependencies({
+      complete: vi.fn(async (locationId, savedPayload) => {
+        expect(locationId).toBe(snapshot.locationId)
+        expect(savedPayload).toBe(snapshot.payload)
+        return completionResult(201)
+      }),
+    })
+    await expect(retry(dependencies, snapshot)).resolves.toEqual({ status: 'succeeded', completionStatus: 201 })
+    expect(dependencies.clearSnapshot).toHaveBeenCalledWith(
+      snapshot.ownerUserId,
+      snapshot.payload.clientOperationId,
+    )
+  })
+
+  it('accepts an exact replay 200 when retrying an existing snapshot', async () => {
+    const dependencies = createRetryDependencies({
+      complete: vi.fn(async () => completionResult(200)),
+    })
+    await expect(retry(dependencies)).resolves.toEqual({ status: 'succeeded', completionStatus: 200 })
+    expect(dependencies.clearSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not POST a retry when the owner or lifecycle is stale before transport', async () => {
+    const dependencies = createRetryDependencies({ isCurrent: vi.fn(() => false) })
+    await expect(retry(dependencies)).resolves.toEqual({ status: 'blocked', reason: 'stale' })
+    expect(dependencies.complete).not.toHaveBeenCalled()
+    expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
+  })
+
+  it.each(['network', 'HTTP 400', 'HTTP 401', 'HTTP 403', 'HTTP 404', 'HTTP 409', 'HTTP 500'])('does not clear an unresolved retry result: %s', async (message) => {
+    const dependencies = createRetryDependencies({
+      complete: vi.fn(async () => { throw new Error(message) }),
+    })
+    await expect(retry(dependencies)).resolves.toEqual({ status: 'blocked', reason: 'request-failed' })
+    expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('does not clear a retry completion after owner change or unmount', async () => {
+    let current = true
+    let resolveCompletion!: () => void
+    const completion = new Promise<void>((resolve) => { resolveCompletion = resolve })
+    const dependencies = createRetryDependencies({
+      isCurrent: vi.fn(() => current),
+      complete: vi.fn(async () => {
+        await completion
+        return completionResult(201)
+      }),
+    })
+    const result = retry(dependencies)
+    current = false
+    resolveCompletion()
+    await expect(result).resolves.toEqual({ status: 'blocked', reason: 'stale' })
+    expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('retains the snapshot after cleanup failure and does not issue a second retry POST', async () => {
+    const dependencies = createRetryDependencies({
+      clearSnapshot: vi.fn(() => ({ status: 'storage-error' as const })),
+    })
+    await expect(retry(dependencies)).resolves.toEqual({ status: 'blocked', reason: 'clear-failed' })
+    expect(dependencies.complete).toHaveBeenCalledTimes(1)
+    expect(dependencies.clearSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  it('prevents a second explicit retry while the shared command guard is pending', async () => {
+    let resolveCompletion!: () => void
+    const completion = new Promise<void>((resolve) => { resolveCompletion = resolve })
+    const dependencies = createRetryDependencies({
+      complete: vi.fn(async () => {
+        await completion
+        return completionResult(201)
+      }),
+    })
+    const guard = createPendingCommandGuard()
+    const key = 'retail-pos-recovery:operation-1'
+    const first = guard.begin(key) ? retry(dependencies).finally(() => guard.finish(key)) : undefined
+    const second = guard.begin(key) ? retry(dependencies).finally(() => guard.finish(key)) : undefined
+
+    expect(second).toBeUndefined()
+    resolveCompletion()
+    await first
+    expect(dependencies.complete).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not perform recovery transport until the retry function is explicitly invoked', () => {
+    const dependencies = createRetryDependencies()
+    expect(dependencies.complete).not.toHaveBeenCalled()
+    expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
   })
 })

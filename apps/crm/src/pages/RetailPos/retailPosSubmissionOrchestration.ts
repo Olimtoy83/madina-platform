@@ -35,6 +35,15 @@ export type PosSaleSubmissionOutcome =
   | { status: 'blocked'; reason: 'save-already-pending' | 'save-invalid' | 'save-storage-error' | 'request-failed' | 'clear-failed' | 'stale' }
   | { status: 'succeeded'; completionStatus: 200 | 201 }
 
+export type PosPendingSaleRetryDependencies = Pick<
+  PosSaleSubmissionDependencies,
+  'complete' | 'clearSnapshot' | 'isCurrent'
+>
+
+export type PosPendingSaleRetryOutcome =
+  | { status: 'blocked'; reason: 'request-failed' | 'clear-failed' | 'stale' }
+  | { status: 'succeeded'; completionStatus: 200 | 201 }
+
 function toSaveFailureOutcome(
   result: Exclude<SavePendingPosSaleSubmissionResult, { status: 'saved' }>,
 ): PosSaleSubmissionOutcome {
@@ -83,6 +92,43 @@ export async function submitPosSale(
   if (saved.status !== 'saved') return toSaveFailureOutcome(saved)
 
   const snapshot = saved.snapshot
+  if (!dependencies.isCurrent()) return { status: 'blocked', reason: 'stale' }
+
+  let completion: RetailSaleCompletionResult
+  try {
+    completion = await dependencies.complete(snapshot.locationId, snapshot.payload)
+  } catch {
+    return { status: 'blocked', reason: 'request-failed' }
+  }
+
+  if (completion.status !== 200 && completion.status !== 201) {
+    return { status: 'blocked', reason: 'request-failed' }
+  }
+  if (!dependencies.isCurrent()) return { status: 'blocked', reason: 'stale' }
+
+  try {
+    const cleared = dependencies.clearSnapshot(
+      snapshot.ownerUserId,
+      snapshot.payload.clientOperationId,
+    )
+    if (cleared.status !== 'cleared') {
+      return { status: 'blocked', reason: 'clear-failed' }
+    }
+  } catch {
+    return { status: 'blocked', reason: 'clear-failed' }
+  }
+
+  return { status: 'succeeded', completionStatus: completion.status }
+}
+
+/**
+ * Retries only an already persisted immutable recovery snapshot. It never
+ * rebuilds the payload or writes recovery storage before transport.
+ */
+export async function retryPendingPosSale(
+  snapshot: Readonly<PendingPosSaleSubmission>,
+  dependencies: PosPendingSaleRetryDependencies,
+): Promise<PosPendingSaleRetryOutcome> {
   if (!dependencies.isCurrent()) return { status: 'blocked', reason: 'stale' }
 
   let completion: RetailSaleCompletionResult
