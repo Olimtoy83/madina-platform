@@ -136,4 +136,257 @@ const retailSalesPaymentCompletion = createSqlMigration('037_retail_sales_paymen
   CREATE TRIGGER retail_payment_allocations_no_delete BEFORE DELETE ON retail_payment_allocations BEGIN SELECT RAISE(ABORT,'Completed Retail Payment Allocations are immutable.'); END;
 `)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion] as const
+const retailSaleDiscounts = createSqlMigration('038_retail_sale_discounts_v1', `
+  PRAGMA defer_foreign_keys = ON;
+
+  CREATE TABLE retail_sale_items_038_backup (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price_minor INTEGER NOT NULL,
+    line_total_minor INTEGER NOT NULL
+  );
+
+  INSERT INTO retail_sale_items_038_backup (
+    id, sale_id, product_id, quantity, unit_price_minor, line_total_minor
+  )
+  SELECT
+    id, sale_id, product_id, quantity, unit_price_minor, line_total_minor
+  FROM retail_sale_items;
+
+  CREATE TABLE retail_payment_allocations_038_backup (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT NOT NULL,
+    method TEXT NOT NULL,
+    amount_minor INTEGER NOT NULL,
+    ordinal INTEGER NOT NULL
+  );
+
+  INSERT INTO retail_payment_allocations_038_backup (
+    id, sale_id, method, amount_minor, ordinal
+  )
+  SELECT
+    id, sale_id, method, amount_minor, ordinal
+  FROM retail_payment_allocations;
+
+  CREATE TABLE retail_operation_receipts_038_backup (
+    operation_kind TEXT NOT NULL,
+    client_operation_id TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    payload_hash TEXT NOT NULL,
+    sale_id TEXT NOT NULL,
+    accepted_at TEXT NOT NULL,
+    PRIMARY KEY(operation_kind, client_operation_id)
+  );
+
+  INSERT INTO retail_operation_receipts_038_backup (
+    operation_kind,
+    client_operation_id,
+    schema_version,
+    payload_hash,
+    sale_id,
+    accepted_at
+  )
+  SELECT
+    operation_kind,
+    client_operation_id,
+    schema_version,
+    payload_hash,
+    sale_id,
+    accepted_at
+  FROM retail_operation_receipts;
+
+  DROP TABLE retail_sale_items;
+  DROP TABLE retail_payment_allocations;
+  DROP TABLE retail_operation_receipts;
+
+  CREATE TABLE retail_sales_038 (
+    id TEXT PRIMARY KEY,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    status TEXT NOT NULL CHECK(status='completed'),
+    currency_code TEXT NOT NULL CHECK(
+      typeof(currency_code)='text'
+      AND length(currency_code)=3
+      AND currency_code GLOB '[A-Z][A-Z][A-Z]'
+    ),
+    currency_exponent INTEGER NOT NULL CHECK(
+      typeof(currency_exponent)='integer'
+      AND currency_exponent BETWEEN 0 AND 9
+    ),
+    subtotal_minor INTEGER NOT NULL CHECK(
+      typeof(subtotal_minor)='integer'
+      AND subtotal_minor>0
+    ),
+    payable_total_minor INTEGER NOT NULL CHECK(
+      typeof(payable_total_minor)='integer'
+      AND payable_total_minor>0
+      AND payable_total_minor<=subtotal_minor
+    ),
+    created_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL
+  );
+
+  INSERT INTO retail_sales_038 (
+    id,
+    location_id,
+    status,
+    currency_code,
+    currency_exponent,
+    subtotal_minor,
+    payable_total_minor,
+    created_at,
+    completed_at
+  )
+  SELECT
+    id,
+    location_id,
+    status,
+    currency_code,
+    currency_exponent,
+    subtotal_minor,
+    payable_total_minor,
+    created_at,
+    completed_at
+  FROM retail_sales;
+
+  DROP TABLE retail_sales;
+  ALTER TABLE retail_sales_038 RENAME TO retail_sales;
+
+  CREATE TABLE retail_sale_items (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT NOT NULL REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK(typeof(quantity)='integer' AND quantity>0),
+    unit_price_minor INTEGER NOT NULL CHECK(
+      typeof(unit_price_minor)='integer' AND unit_price_minor>0
+    ),
+    line_total_minor INTEGER NOT NULL CHECK(
+      typeof(line_total_minor)='integer' AND line_total_minor>0
+    ),
+    UNIQUE(sale_id,product_id)
+  );
+
+  INSERT INTO retail_sale_items (
+    id, sale_id, product_id, quantity, unit_price_minor, line_total_minor
+  )
+  SELECT
+    id, sale_id, product_id, quantity, unit_price_minor, line_total_minor
+  FROM retail_sale_items_038_backup;
+
+  CREATE TABLE retail_payment_allocations (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT NOT NULL REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    method TEXT NOT NULL CHECK(method IN ('cash','card','transfer','other')),
+    amount_minor INTEGER NOT NULL CHECK(
+      typeof(amount_minor)='integer' AND amount_minor>0
+    ),
+    ordinal INTEGER NOT NULL CHECK(
+      typeof(ordinal)='integer' AND ordinal>=0
+    ),
+    UNIQUE(sale_id,ordinal)
+  );
+
+  INSERT INTO retail_payment_allocations (
+    id, sale_id, method, amount_minor, ordinal
+  )
+  SELECT
+    id, sale_id, method, amount_minor, ordinal
+  FROM retail_payment_allocations_038_backup;
+
+  CREATE TABLE retail_operation_receipts (
+    operation_kind TEXT NOT NULL,
+    client_operation_id TEXT NOT NULL,
+    schema_version INTEGER NOT NULL CHECK(
+      typeof(schema_version)='integer' AND schema_version>0
+    ),
+    payload_hash TEXT NOT NULL,
+    sale_id TEXT NOT NULL REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    accepted_at TEXT NOT NULL,
+    PRIMARY KEY(operation_kind,client_operation_id)
+  );
+
+  INSERT INTO retail_operation_receipts (
+    operation_kind,
+    client_operation_id,
+    schema_version,
+    payload_hash,
+    sale_id,
+    accepted_at
+  )
+  SELECT
+    operation_kind,
+    client_operation_id,
+    schema_version,
+    payload_hash,
+    sale_id,
+    accepted_at
+  FROM retail_operation_receipts_038_backup;
+
+  DROP TABLE retail_sale_items_038_backup;
+  DROP TABLE retail_payment_allocations_038_backup;
+  DROP TABLE retail_operation_receipts_038_backup;
+
+  CREATE INDEX retail_sales_location_completed_idx
+    ON retail_sales(location_id,completed_at,id);
+
+  CREATE TRIGGER retail_sales_no_update
+    BEFORE UPDATE ON retail_sales
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Sale is immutable.');
+    END;
+
+  CREATE TRIGGER retail_sales_no_delete
+    BEFORE DELETE ON retail_sales
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Sale is immutable.');
+    END;
+
+  CREATE TRIGGER retail_sale_items_no_update
+    BEFORE UPDATE ON retail_sale_items
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Sale Items are immutable.');
+    END;
+
+  CREATE TRIGGER retail_sale_items_no_delete
+    BEFORE DELETE ON retail_sale_items
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Sale Items are immutable.');
+    END;
+
+  CREATE TRIGGER retail_payment_allocations_no_update
+    BEFORE UPDATE ON retail_payment_allocations
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Payment Allocations are immutable.');
+    END;
+
+  CREATE TRIGGER retail_payment_allocations_no_delete
+    BEFORE DELETE ON retail_payment_allocations
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Payment Allocations are immutable.');
+    END;
+
+  CREATE TABLE retail_sale_item_discounts (
+    sale_item_id TEXT PRIMARY KEY
+      REFERENCES retail_sale_items(id) ON DELETE RESTRICT,
+    amount_minor INTEGER NOT NULL CHECK(
+      typeof(amount_minor)='integer' AND amount_minor>0
+    ),
+    authorized_by TEXT NOT NULL
+      REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TRIGGER retail_sale_item_discounts_no_update
+    BEFORE UPDATE ON retail_sale_item_discounts
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Sale Item Discounts are immutable.');
+    END;
+
+  CREATE TRIGGER retail_sale_item_discounts_no_delete
+    BEFORE DELETE ON retail_sale_item_discounts
+    BEGIN
+      SELECT RAISE(ABORT,'Completed Retail Sale Item Discounts are immutable.');
+    END;
+`)
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts] as const
