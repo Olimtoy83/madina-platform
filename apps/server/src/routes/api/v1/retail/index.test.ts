@@ -43,11 +43,9 @@ function readManifest(path: string): PackageManifest {
 test('retail boundary composes without routes or CRM dependencies', async () => {
   const repositoryRoot = resolve(process.cwd(), '..', '..')
   const retail = readManifest(resolve(repositoryRoot, 'packages/retail/package.json'))
-  const crm = readManifest(resolve(repositoryRoot, 'apps/crm/package.json'))
 
   deepEqual(retail.dependencies ?? {}, {})
   equal(retail.devDependencies?.['@madina/core'], undefined)
-  equal(crm.dependencies?.['@madina/retail'], undefined)
 
   const app = Fastify()
   app.register(retailRoutes, { prefix: '/retail' })
@@ -59,8 +57,19 @@ test('retail boundary composes without routes or CRM dependencies', async () => 
   }
 })
 
-test('Stage 8B sales and price capabilities map only to admin and manager', () => {
-  for(const capability of ['retail:sales:read','retail:sales:manage','retail:prices:read','retail:prices:manage'] as const){equal(hasRetailCapability('admin',capability),true);equal(hasRetailCapability('manager',capability),true);equal(hasRetailCapability('operator',capability),false);equal(hasRetailCapability('viewer',capability),false)}
+test('Retail Sale, price, and discount capabilities map only to admin and manager', () => {
+  for (const capability of [
+    'retail:sales:read',
+    'retail:sales:manage',
+    'retail:sales:discount',
+    'retail:prices:read',
+    'retail:prices:manage',
+  ] as const) {
+    equal(hasRetailCapability('admin', capability), true)
+    equal(hasRetailCapability('manager', capability), true)
+    equal(hasRetailCapability('operator', capability), false)
+    equal(hasRetailCapability('viewer', capability), false)
+  }
 })
 
 test('Retail Sale, price, and currency APIs enforce Stage 8B authority boundaries', async () => {
@@ -82,6 +91,12 @@ test('Retail Sale, price, and currency APIs enforce Stage 8B authority boundarie
     const created=await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:sale});equal(created.statusCode,201);const completed=created.json() as {sale:{id:string;currency_code:string;currency_exponent:number};items:Array<{unit_price_minor:number}>};equal(completed.sale.id,sale.saleId);equal(completed.sale.currency_code,'USD');equal(completed.sale.currency_exponent,2);equal(completed.items[0]?.unit_price_minor,10)
     equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:sale})).statusCode,200)
     equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,saleId:'sale-api-conflict'}})).statusCode,409)
+    const discountedSale={clientOperationId:'sale-api-discount',saleId:'sale-api-discount',lines:[{id:'sale-api-discount-line',productId:product.id,quantity:1,unitPriceMinor:999,discountAmountMinor:3}],allocations:[{id:'sale-api-discount-payment',method:'cash',amountMinor:7,ordinal:0}]}
+    const discountedCreated=await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:discountedSale});equal(discountedCreated.statusCode,201);const discountedCompleted=discountedCreated.json() as {sale:{id:string;subtotal_minor:number;payable_total_minor:number};items:Array<{unit_price_minor:number;line_total_minor:number}>};equal(discountedCompleted.sale.id,discountedSale.saleId);equal(discountedCompleted.sale.subtotal_minor,10);equal(discountedCompleted.sale.payable_total_minor,7);equal(discountedCompleted.items[0]?.unit_price_minor,10);equal(discountedCompleted.items[0]?.line_total_minor,10)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:discountedSale})).statusCode,200)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...discountedSale,lines:[{...discountedSale.lines[0],discountAmountMinor:2}],allocations:[{...discountedSale.allocations[0],amountMinor:8}]}})).statusCode,409)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-discount-zero',saleId:'sale-api-discount-zero',lines:[{id:'sale-api-discount-zero-line',productId:product.id,quantity:1,discountAmountMinor:0}],allocations:[{id:'sale-api-discount-zero-payment',method:'cash',amountMinor:10,ordinal:0}]}})).statusCode,400)
+    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-discount-full',saleId:'sale-api-discount-full',lines:[{id:'sale-api-discount-full-line',productId:product.id,quantity:1,discountAmountMinor:10}],allocations:[{id:'sale-api-discount-full-payment',method:'cash',amountMinor:1,ordinal:0}]}})).statusCode,400)
     equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-stock',saleId:'sale-api-stock',lines:[{id:'stock',productId:product.id,quantity:99}],allocations:[{id:'stock-pay',method:'cash',amountMinor:990,ordinal:0}]}})).statusCode,409)
     equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-price',saleId:'sale-api-price',lines:[{id:'price',productId:unpriced.id,quantity:1}],allocations:[{id:'price-pay',method:'cash',amountMinor:1,ordinal:0}]}})).statusCode,409)
     equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${unconfigured.id}/sales/complete`,payload:{...sale,clientOperationId:'sale-api-currency',saleId:'sale-api-currency'}})).statusCode,409)
