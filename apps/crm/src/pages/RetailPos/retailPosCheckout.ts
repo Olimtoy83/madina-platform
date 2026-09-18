@@ -8,6 +8,7 @@ export interface PosCheckoutAttempt {
     id: string
     productId: string
     quantity: number
+    discountAmountMinor?: number
   }>
 }
 
@@ -49,6 +50,12 @@ export function createPosCheckoutAttempt(
   if (input.cartLines.some((line) => !line.productId || !isPositiveSafeInteger(line.quantity))) {
     throw new Error('Cart lines must contain a Product and a positive quantity.')
   }
+  if (input.cartLines.some(
+    (line) => line.discountAmountMinor !== undefined
+      && !isPositiveSafeInteger(line.discountAmountMinor),
+  )) {
+    throw new Error('Cart line discount must be a positive safe integer.')
+  }
 
   const usedIds = new Set<string>()
   const saleId = createUniqueId(input.createId, usedIds)
@@ -62,6 +69,9 @@ export function createPosCheckoutAttempt(
       id: createUniqueId(input.createId, usedIds),
       productId: line.productId,
       quantity: line.quantity,
+      ...(line.discountAmountMinor === undefined
+        ? {}
+        : { discountAmountMinor: line.discountAmountMinor }),
     })),
   }
 }

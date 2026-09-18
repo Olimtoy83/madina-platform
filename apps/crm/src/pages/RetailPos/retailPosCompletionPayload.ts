@@ -37,6 +37,8 @@ function assertCheckoutAttempt(attempt: PosCheckoutAttempt): void {
     if (!isNonEmptyString(line.id)
       || !isNonEmptyString(line.productId)
       || !isPositiveSafeInteger(line.quantity)
+      || (line.discountAmountMinor !== undefined
+        && !isPositiveSafeInteger(line.discountAmountMinor))
       || lineIds.has(line.id)
       || productIds.has(line.productId)) {
       throw new Error('Prepared checkout lines are invalid.')
@@ -92,6 +94,9 @@ export function createPosCompletionPayload(
       id: line.id,
       productId: line.productId,
       quantity: line.quantity,
+      ...(line.discountAmountMinor === undefined
+        ? {}
+        : { discountAmountMinor: line.discountAmountMinor }),
     })),
     allocations,
   }

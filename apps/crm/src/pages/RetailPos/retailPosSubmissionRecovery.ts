@@ -16,6 +16,7 @@ export interface PosCompletionPayload {
     id: string
     productId: string
     quantity: number
+    discountAmountMinor?: number
   }>
   allocations: ReadonlyArray<{
     id: string
@@ -104,10 +105,13 @@ function isPendingPosSaleSubmission(value: unknown): value is PendingPosSaleSubm
   const productIds = new Set<string>()
   for (const line of value.payload.lines) {
     if (!isRecord(line)
-      || !hasOnlyKeys(line, ['id', 'productId', 'quantity'])
+      || !Object.keys(line).every((key) => ['id', 'productId', 'quantity', 'discountAmountMinor'].includes(key))
+      || !['id', 'productId', 'quantity'].every((key) => key in line)
       || !isNonEmptyString(line.id)
       || !isNonEmptyString(line.productId)
       || !isPositiveSafeInteger(line.quantity)
+      || (line.discountAmountMinor !== undefined
+        && !isPositiveSafeInteger(line.discountAmountMinor))
       || lineIds.has(line.id)
       || productIds.has(line.productId)) {
       return false
@@ -144,6 +148,9 @@ function freezeSnapshot(
     id: line.id,
     productId: line.productId,
     quantity: line.quantity,
+    ...(line.discountAmountMinor === undefined
+      ? {}
+      : { discountAmountMinor: line.discountAmountMinor }),
   })))
   const allocations = Object.freeze(snapshot.payload.allocations.map((allocation) => Object.freeze({
     id: allocation.id,

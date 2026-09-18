@@ -166,4 +166,108 @@ describe('retail POS completion payload', () => {
       snapshot: { payload },
     })
   })
+
+  describe('authorized item discount payload', () => {
+    it('copies the exact prepared item discount without adding client price fields', () => {
+      const discountedAttempt: PosCheckoutAttempt = {
+        ...checkoutAttempt,
+        lines: [
+          { ...checkoutAttempt.lines[0]!, discountAmountMinor: 300 },
+          { ...checkoutAttempt.lines[1]! },
+        ],
+      }
+      const allocations = [
+        { id: 'payment-1', method: 'cash' as const, amountText: '22.00' },
+      ]
+
+      const payload = createPosCompletionPayload({
+        checkoutAttempt: discountedAttempt,
+        paymentAllocations: allocations,
+        paymentSummary: exactSummary(allocations, 2200),
+        currencyExponent: 2,
+      })
+
+      expect(payload.lines).toEqual([
+        {
+          id: 'line-1',
+          productId: 'product-1',
+          quantity: 2,
+          discountAmountMinor: 300,
+        },
+        {
+          id: 'line-2',
+          productId: 'product-2',
+          quantity: 3,
+        },
+      ])
+      expect(Object.keys(payload.lines[0]!).sort()).toEqual([
+        'discountAmountMinor',
+        'id',
+        'productId',
+        'quantity',
+      ])
+      expect(Object.prototype.hasOwnProperty.call(
+        payload.lines[1],
+        'discountAmountMinor',
+      )).toBe(false)
+    })
+
+    it('round-trips the exact item discount through version 1 recovery', () => {
+      const discountedAttempt: PosCheckoutAttempt = {
+        ...checkoutAttempt,
+        lines: [
+          { ...checkoutAttempt.lines[0]!, discountAmountMinor: 300 },
+          { ...checkoutAttempt.lines[1]! },
+        ],
+      }
+      const allocations = [
+        { id: 'payment-1', method: 'cash' as const, amountText: '22.00' },
+      ]
+      const payload = createPosCompletionPayload({
+        checkoutAttempt: discountedAttempt,
+        paymentAllocations: allocations,
+        paymentSummary: exactSummary(allocations, 2200),
+        currencyExponent: 2,
+      })
+      const storage = new StorageDouble()
+
+      expect(savePendingPosSaleSubmission({
+        schemaVersion: 1,
+        ownerUserId: 'user-1',
+        locationId: discountedAttempt.locationId,
+        payload,
+      }, storage).status).toBe('saved')
+
+      const loaded = loadPendingPosSaleSubmission('user-1', storage)
+      expect(loaded.status).toBe('pending')
+      if (loaded.status !== 'pending') return
+
+      expect(loaded.snapshot.schemaVersion).toBe(1)
+      expect(loaded.snapshot.payload).toEqual(payload)
+      expect(loaded.snapshot.payload.lines[0]!.discountAmountMinor).toBe(300)
+      expect(Object.isFrozen(loaded.snapshot.payload.lines[0]!)).toBe(true)
+    })
+
+    it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid prepared item discount %s',
+      (discountAmountMinor) => {
+        const allocations = [
+          { id: 'payment-1', method: 'cash' as const, amountText: '25.00' },
+        ]
+
+        expect(() => createPosCompletionPayload({
+          checkoutAttempt: {
+            ...checkoutAttempt,
+            lines: [{
+              ...checkoutAttempt.lines[0]!,
+              discountAmountMinor,
+            }],
+          },
+          paymentAllocations: allocations,
+          paymentSummary: exactSummary(allocations),
+          currencyExponent: 2,
+        })).toThrow('Prepared checkout lines are invalid.')
+      },
+    )
+  })
 })

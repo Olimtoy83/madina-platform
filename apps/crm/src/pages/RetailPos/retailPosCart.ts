@@ -7,9 +7,10 @@ export interface PosCartLine {
   unitPriceMinor: number
   currencyCode: string
   currencyExponent: number
+  discountAmountMinor?: number
 }
 
-export type PosCartLineSnapshot = Omit<PosCartLine, 'quantity'>
+export type PosCartLineSnapshot = Omit<PosCartLine, 'quantity' | 'discountAmountMinor'>
 
 export type PosCartMutationResult = {
   lines: PosCartLine[]
@@ -24,6 +25,8 @@ export type PosCartTotalsResult =
       currencyExponent: number
       lineTotals: Array<{ productId: string; lineTotalMinor: number }>
       subtotalMinor: number
+      discountTotalMinor: number
+      payableTotalMinor: number
     }
   | { status: 'invalid-line' | 'currency-mismatch' | 'money-overflow' }
 
@@ -50,7 +53,13 @@ export function addPosCartLine(
 
   return {
     lines: lines.map((line, lineIndex) => lineIndex === index
-      ? { ...snapshot, quantity: current.quantity + 1 }
+      ? {
+          ...snapshot,
+          quantity: current.quantity + 1,
+          ...(current.discountAmountMinor === undefined
+            ? {}
+            : { discountAmountMinor: current.discountAmountMinor }),
+        }
       : line),
   }
 }
@@ -108,6 +117,7 @@ export function calculatePosCartTotals(
 
   const firstLine = lines[0]!
   let subtotalMinor = 0
+  let discountTotalMinor = 0
   const lineTotals: Array<{ productId: string; lineTotalMinor: number }> = []
 
   for (const line of lines) {
@@ -125,13 +135,28 @@ export function calculatePosCartTotals(
       return { status: 'money-overflow' }
     }
 
+    const discountAmountMinor = line.discountAmountMinor ?? 0
+    if (line.discountAmountMinor !== undefined
+      && (!isPositiveSafeInteger(line.discountAmountMinor)
+        || line.discountAmountMinor >= lineTotalMinor)) {
+      return { status: 'invalid-line' }
+    }
+
     const nextSubtotalMinor = subtotalMinor + lineTotalMinor
-    if (!Number.isSafeInteger(nextSubtotalMinor)) {
+    const nextDiscountTotalMinor = discountTotalMinor + discountAmountMinor
+    if (!Number.isSafeInteger(nextSubtotalMinor)
+      || !Number.isSafeInteger(nextDiscountTotalMinor)) {
       return { status: 'money-overflow' }
     }
 
     subtotalMinor = nextSubtotalMinor
+    discountTotalMinor = nextDiscountTotalMinor
     lineTotals.push({ productId: line.productId, lineTotalMinor })
+  }
+
+  const payableTotalMinor = subtotalMinor - discountTotalMinor
+  if (!Number.isSafeInteger(payableTotalMinor) || payableTotalMinor <= 0) {
+    return { status: 'money-overflow' }
   }
 
   return {
@@ -140,5 +165,7 @@ export function calculatePosCartTotals(
     currencyExponent: firstLine.currencyExponent,
     lineTotals,
     subtotalMinor,
+    discountTotalMinor,
+    payableTotalMinor,
   }
 }

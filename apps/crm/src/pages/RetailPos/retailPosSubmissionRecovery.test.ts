@@ -198,4 +198,80 @@ describe('retail POS submission recovery', () => {
       .toEqual({ status: 'invalid' })
     expect(storage.values.has(POS_PENDING_SALE_STORAGE_KEY)).toBe(true)
   })
+
+it('preserves an optional item discount in the version 1 recovery snapshot', () => {
+  const storage = new StorageDouble()
+  const snapshot = createSnapshot()
+  snapshot.payload.lines[0]!.discountAmountMinor = 300
+
+  expect(savePendingPosSaleSubmission(snapshot, storage).status).toBe('saved')
+
+  const loaded = loadPendingPosSaleSubmission('user-1', storage)
+  expect(loaded.status).toBe('pending')
+  if (loaded.status !== 'pending') return
+
+  expect(loaded.snapshot.schemaVersion).toBe(1)
+  expect(loaded.snapshot.payload.lines[0]).toEqual({
+    id: 'line-1',
+    productId: 'product-1',
+    quantity: 2,
+    discountAmountMinor: 300,
+  })
+
+  snapshot.payload.lines[0]!.discountAmountMinor = 100
+  expect(loaded.snapshot.payload.lines[0]!.discountAmountMinor).toBe(300)
+  expect(Object.isFrozen(loaded.snapshot.payload.lines[0]!)).toBe(true)
+})
+
+it('keeps an existing version 1 recovery snapshot without a discount valid', () => {
+  const storage = new StorageDouble()
+  storeRaw(storage, createSnapshot())
+
+  const loaded = loadPendingPosSaleSubmission('user-1', storage)
+  expect(loaded.status).toBe('pending')
+  if (loaded.status !== 'pending') return
+
+  expect(loaded.snapshot.schemaVersion).toBe(1)
+  expect(loaded.snapshot.payload.lines[0]).toEqual({
+    id: 'line-1',
+    productId: 'product-1',
+    quantity: 2,
+  })
+  expect(Object.prototype.hasOwnProperty.call(
+    loaded.snapshot.payload.lines[0],
+    'discountAmountMinor',
+  )).toBe(false)
+})
+
+it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+  'loads invalid item discount %s as invalid',
+  (discountAmountMinor) => {
+    const storage = new StorageDouble()
+    const snapshot = createSnapshot()
+    snapshot.payload.lines[0]!.discountAmountMinor = discountAmountMinor
+    storeRaw(storage, snapshot)
+
+    expect(loadPendingPosSaleSubmission('user-1', storage))
+      .toEqual({ status: 'invalid' })
+  },
+)
+
+it('rejects an unknown additional Sale line field', () => {
+  const storage = new StorageDouble()
+  const snapshot = createSnapshot()
+
+  storeRaw(storage, {
+    ...snapshot,
+    payload: {
+      ...snapshot.payload,
+      lines: [{
+        ...snapshot.payload.lines[0]!,
+        unexpectedField: 'not-approved',
+      }],
+    },
+  })
+
+  expect(loadPendingPosSaleSubmission('user-1', storage))
+    .toEqual({ status: 'invalid' })
+})
 })

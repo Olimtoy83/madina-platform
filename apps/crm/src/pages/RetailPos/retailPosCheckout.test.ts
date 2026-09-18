@@ -31,6 +31,8 @@ const readyCartTotals = {
   currencyExponent: 2,
   lineTotals: [],
   subtotalMinor: 3325,
+  discountTotalMinor: 0,
+  payableTotalMinor: 3325,
 }
 
 function sequentialIds(...ids: string[]): () => string {
@@ -122,5 +124,85 @@ describe('retail POS checkout attempt', () => {
       cartTotals: readyCartTotals,
       createId: () => 'duplicate-id',
     })).toThrow('Checkout attempt ID must be unique.')
+  })
+
+  describe('authorized item discount snapshot', () => {
+    it('copies an authorized item discount into the checkout attempt', () => {
+      const discountedLines: PosCartLine[] = [
+        { ...cartLines[0]!, discountAmountMinor: 300 },
+        { ...cartLines[1]! },
+      ]
+
+      const attempt = createPosCheckoutAttempt({
+        locationId: 'location-1',
+        cartLines: discountedLines,
+        cartTotals: {
+          ...readyCartTotals,
+          discountTotalMinor: 300,
+          payableTotalMinor: 3025,
+        },
+        createId: sequentialIds('sale-1', 'operation-1', 'line-1', 'line-2'),
+      })
+
+      expect(attempt.lines).toEqual([
+        {
+          id: 'line-1',
+          productId: 'product-1',
+          quantity: 2,
+          discountAmountMinor: 300,
+        },
+        {
+          id: 'line-2',
+          productId: 'product-2',
+          quantity: 3,
+        },
+      ])
+      expect(Object.prototype.hasOwnProperty.call(
+        attempt.lines[1],
+        'discountAmountMinor',
+      )).toBe(false)
+    })
+
+    it('keeps the discount snapshot when the source cart is later changed', () => {
+      const sourceLines: PosCartLine[] = [
+        { ...cartLines[0]!, discountAmountMinor: 300 },
+        { ...cartLines[1]! },
+      ]
+
+      const attempt = createPosCheckoutAttempt({
+        locationId: 'location-1',
+        cartLines: sourceLines,
+        cartTotals: {
+          ...readyCartTotals,
+          discountTotalMinor: 300,
+          payableTotalMinor: 3025,
+        },
+        createId: sequentialIds('sale-1', 'operation-1', 'line-1', 'line-2'),
+      })
+
+      sourceLines[0]!.discountAmountMinor = 100
+
+      expect(attempt.lines[0]).toEqual({
+        id: 'line-1',
+        productId: 'product-1',
+        quantity: 2,
+        discountAmountMinor: 300,
+      })
+    })
+
+    it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid discount amount %s even when totals claim readiness',
+      (discountAmountMinor) => {
+        expect(() => createPosCheckoutAttempt({
+          locationId: 'location-1',
+          cartLines: [{
+            ...cartLines[0]!,
+            discountAmountMinor,
+          }],
+          cartTotals: readyCartTotals,
+          createId: sequentialIds('sale-1'),
+        })).toThrow('Cart line discount must be a positive safe integer.')
+      },
+    )
   })
 })

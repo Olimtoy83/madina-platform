@@ -119,6 +119,8 @@ describe('retail POS cart', () => {
       currencyExponent: 2,
       lineTotals: [{ productId: plate.productId, lineTotalMinor: 2500 }],
       subtotalMinor: 2500,
+      discountTotalMinor: 0,
+      payableTotalMinor: 2500,
     })
   })
 
@@ -135,6 +137,8 @@ describe('retail POS cart', () => {
         { productId: cup.productId, lineTotalMinor: 825 },
       ],
       subtotalMinor: 3325,
+      discountTotalMinor: 0,
+      payableTotalMinor: 3325,
     })
   })
 
@@ -174,5 +178,87 @@ describe('retail POS cart', () => {
       { ...plate, quantity: 1 },
       { ...cup, quantity: 1, currencyExponent: 0 },
     ])).toEqual({ status: 'currency-mismatch' })
+  })
+
+  describe('authorized item discount totals', () => {
+    it('keeps gross subtotal and calculates discount and payable totals', () => {
+      expect(calculatePosCartTotals([
+        { ...plate, quantity: 2, discountAmountMinor: 300 },
+        { ...cup, quantity: 3, unitPriceMinor: 275 },
+      ])).toEqual({
+        status: 'ready',
+        currencyCode: 'SAR',
+        currencyExponent: 2,
+        lineTotals: [
+          { productId: plate.productId, lineTotalMinor: 2500 },
+          { productId: cup.productId, lineTotalMinor: 825 },
+        ],
+        subtotalMinor: 3325,
+        discountTotalMinor: 300,
+        payableTotalMinor: 3025,
+      })
+    })
+
+    it('reports zero discount while preserving undiscounted cart lines', () => {
+      const lines = [{ ...plate, quantity: 2 }]
+
+      expect(calculatePosCartTotals(lines)).toMatchObject({
+        status: 'ready',
+        subtotalMinor: 2500,
+        discountTotalMinor: 0,
+        payableTotalMinor: 2500,
+      })
+      expect(Object.prototype.hasOwnProperty.call(lines[0], 'discountAmountMinor')).toBe(false)
+    })
+
+    it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid discount amount %s',
+      (discountAmountMinor) => {
+        expect(calculatePosCartTotals([
+          { ...plate, quantity: 2, discountAmountMinor },
+        ])).toEqual({ status: 'invalid-line' })
+      },
+    )
+
+    it('rejects a discount equal to or greater than the gross line total', () => {
+      expect(calculatePosCartTotals([
+        { ...plate, quantity: 2, discountAmountMinor: 2500 },
+      ])).toEqual({ status: 'invalid-line' })
+
+      expect(calculatePosCartTotals([
+        { ...plate, quantity: 2, discountAmountMinor: 2501 },
+      ])).toEqual({ status: 'invalid-line' })
+    })
+
+    it('preserves an existing discount when the same Product is added again', () => {
+      const discounted: PosCartLine[] = [{
+        ...plate,
+        quantity: 1,
+        discountAmountMinor: 100,
+      }]
+
+      expect(addPosCartLine(discounted, {
+        ...plate,
+        unitPriceMinor: 1500,
+      }).lines).toEqual([{
+        ...plate,
+        quantity: 2,
+        unitPriceMinor: 1500,
+        discountAmountMinor: 100,
+      }])
+    })
+
+    it('preserves an existing discount when quantity is incremented or decremented', () => {
+      const discounted: PosCartLine[] = [{
+        ...plate,
+        quantity: 2,
+        discountAmountMinor: 100,
+      }]
+
+      expect(incrementPosCartLine(discounted, plate.productId).lines[0]?.discountAmountMinor)
+        .toBe(100)
+      expect(decrementPosCartLine(discounted, plate.productId).lines[0]?.discountAmountMinor)
+        .toBe(100)
+    })
   })
 })
