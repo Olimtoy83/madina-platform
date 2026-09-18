@@ -161,15 +161,38 @@
   color: var(--mb-color-text-secondary);
 }
 
+.retail-pos__discount-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.retail-pos__discount-controls>* {
+  min-width: 0;
+}
+
 .retail-pos__cart-line-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .retail-pos__cart-subtotal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px 12px;
   padding-top: 12px;
   border-top: 1px solid var(--mb-color-border);
 }
+
+.retail-pos__cart-subtotal strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .retail-pos__workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
@@ -224,6 +247,7 @@
 }
 
 @media (max-width: 700px) {
+
   .retail-pos__product-list li,
   .retail-pos__barcode-result,
   .retail-pos__cart-lines li {
@@ -242,6 +266,7 @@
 }
 
 @media (max-width: 480px) {
+
   .retail-pos,
   .retail-pos__workspace,
   .retail-pos__lookup,

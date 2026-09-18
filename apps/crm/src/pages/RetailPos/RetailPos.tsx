@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
 import {
   getRetailLocations,
@@ -9,6 +9,7 @@ import {
 } from '../../shared/api/retailApi'
 import { HttpError } from '../../shared/api/httpClient'
 import { useAuth } from '../../context/useAuth'
+import { canRetail } from '../../shared/auth/retailPermissions'
 import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
 import { usePendingCommand } from '../../shared/usePendingCommand'
 import {
@@ -18,6 +19,9 @@ import {
   decrementPosCartLine,
   incrementPosCartLine,
   removePosCartLine,
+  setPosCartLineDiscount,
+  setPosCartLinePercentDiscount,
+  parsePosCartDiscountPercentBasisPoints,
   type PosCartLine,
 } from './retailPosCart'
 import { createPosCheckoutAttempt, type PosCheckoutAttempt } from './retailPosCheckout'
@@ -25,6 +29,7 @@ import {
   addPosPaymentAllocation,
   createDefaultPosPaymentAllocations,
   removePosPaymentAllocation,
+  parsePosPaymentAmount,
   summarizePosPayments,
   updatePosPaymentAllocationAmount,
   updatePosPaymentAllocationMethod,
@@ -52,6 +57,7 @@ type BarcodeLookupState = 'idle' | 'loading' | 'found' | 'not-found' | 'unavaila
 type PriceState = 'idle' | 'loading' | 'ready' | 'missing' | 'currency-unavailable' | 'error'
 type SubmissionState = 'idle' | 'submitting' | 'assembly-error' | 'blocked' | 'cleanup-failed' | 'succeeded'
 type RecoveryRetryState = 'idle' | 'retrying' | 'failed' | 'cleanup-failed' | 'succeeded'
+type DiscountMode = 'amount' | 'percent'
 
 type CurrencyConfiguredLocation = RetailLocation & {
   currencyCode: string
@@ -88,10 +94,27 @@ function formatUnitPrice(
   }).format(unitPriceMinor / 10 ** currencyExponent)
 }
 
-function getCartErrorMessage(error: 'invalid-quantity' | 'quantity-overflow'): string {
-  return error === 'quantity-overflow'
-    ? 'Количество товара не может быть больше допустимого значения.'
-    : 'Количество товара должно быть целым положительным числом.'
+function getCartErrorMessage(
+  error: 'invalid-quantity' | 'quantity-overflow' | 'invalid-discount' | 'money-overflow',
+): string {
+  switch (error) {
+    case 'quantity-overflow':
+      return 'Количество товара не может быть больше допустимого значения.'
+    case 'invalid-discount':
+      return 'Скидку для позиции нельзя безопасно пересчитать.'
+    case 'money-overflow':
+      return 'Сумму позиции нельзя безопасно рассчитать.'
+    case 'invalid-quantity':
+      return 'Количество товара должно быть целым положительным числом.'
+  }
+}
+
+function formatDiscountPercent(basisPoints: number): string {
+  const whole = Math.floor(basisPoints / 100)
+  const fraction = basisPoints % 100
+  return fraction === 0
+    ? String(whole)
+    : `${whole}.${String(fraction).padStart(2, '0').replace(/0$/, '')}`
 }
 
 function getRecoveryGateMessage(
@@ -111,6 +134,7 @@ function getRecoveryGateMessage(
 
 export function RetailPos() {
   const { user } = useAuth()
+  const canApplyDiscount = canRetail(user, 'retail:sales:discount')
   const [locations, setLocations] = useState<RetailLocation[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>()
   const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>(
@@ -132,6 +156,8 @@ export function RetailPos() {
   const [cartLines, setCartLines] = useState<PosCartLine[]>([])
   const [cartError, setCartError] = useState<string>()
   const [cartNotice, setCartNotice] = useState<string>()
+  const [discountInputs, setDiscountInputs] = useState<Record<string, string>>({})
+  const [discountModes, setDiscountModes] = useState<Record<string, DiscountMode>>({})
   const [checkoutAttempt, setCheckoutAttempt] = useState<PosCheckoutAttempt>()
   const [paymentAllocations, setPaymentAllocations] = useState<PosPaymentAllocation[]>()
   const [recoveryGate, setRecoveryGate] = useState<PosRecoveryGateState>({
@@ -176,6 +202,8 @@ export function RetailPos() {
     setSelectedLocationId(undefined)
     resetProductLookup()
     setCartLines(clearPosCart())
+    setDiscountInputs({})
+    setDiscountModes({})
     setCartError(undefined)
     setCartNotice(undefined)
     setCheckoutAttempt(undefined)
@@ -358,6 +386,8 @@ export function RetailPos() {
     setSelectedLocationId(locationId || undefined)
     resetProductLookup()
     setCartLines(clearPosCart())
+    setDiscountInputs({})
+    setDiscountModes({})
     setCartError(undefined)
     setCheckoutAttempt(undefined)
     setPaymentAllocations(undefined)
@@ -421,9 +451,112 @@ export function RetailPos() {
     }
   }
 
+  function updateDiscountInput(productId: string, value: string) {
+    if (isSubmitting || !canApplyDiscount) return
+
+    setDiscountInputs((current) => ({
+      ...current,
+      [productId]: value,
+    }))
+  }
+
+  function updateDiscountMode(productId: string, mode: DiscountMode) {
+    if (isSubmitting || !canApplyDiscount) return
+    setDiscountModes((current) => ({ ...current, [productId]: mode }))
+  }
+
+  function applyCartLineDiscount(line: PosCartLine) {
+    if (isSubmitting || !canApplyDiscount) return
+
+    const input = discountInputs[line.productId] ?? ''
+    const mode = discountModes[line.productId]
+      ?? (line.discountPercentBasisPoints === undefined ? 'amount' : 'percent')
+    const result = mode === 'amount'
+      ? (() => {
+        const parsed = parsePosPaymentAmount(input, line.currencyExponent)
+        if (parsed.status !== 'ready' || parsed.amountMinor <= 0) {
+          setCartError(parsed.status === 'overflow'
+            ? 'Сумма скидки слишком большая.'
+            : 'Введите корректную положительную сумму скидки.')
+          return undefined
+        }
+        return setPosCartLineDiscount(cartLines, line.productId, parsed.amountMinor)
+      })()
+      : (() => {
+        const parsed = parsePosCartDiscountPercentBasisPoints(input)
+        if (parsed.status !== 'ready') {
+          setCartError('Введите процент скидки от 0,01% до 99,99%.')
+          return undefined
+        }
+        return setPosCartLinePercentDiscount(
+          cartLines,
+          line.productId,
+          parsed.basisPoints,
+        )
+      })()
+
+    if (!result) return
+
+    if (result.error) {
+      setCartError(
+        result.error === 'discount-too-large'
+          ? 'Скидка должна быть меньше полной суммы позиции.'
+          : result.error === 'discount-rounds-to-zero'
+            ? 'Процент скидки слишком мал для суммы этой позиции.'
+            : result.error === 'invalid-percent'
+              ? 'Введите процент скидки от 0,01% до 99,99%.'
+              : result.error === 'money-overflow'
+                ? 'Сумму позиции нельзя безопасно рассчитать.'
+                : 'Не удалось применить скидку.',
+      )
+      return
+    }
+
+    setCartLines(result.lines)
+    setCartError(undefined)
+    setCheckoutAttempt(undefined)
+    setPaymentAllocations(undefined)
+  }
+
+  function removeCartLineDiscount(productId: string) {
+    if (isSubmitting || !canApplyDiscount) return
+
+    const result = setPosCartLineDiscount(
+      cartLines,
+      productId,
+      undefined,
+    )
+
+    if (result.error) {
+      setCartError('Не удалось удалить скидку.')
+      return
+    }
+
+    setCartLines(result.lines)
+    setDiscountInputs((current) => {
+      const { [productId]: _removed, ...rest } = current
+      return rest
+    })
+    setDiscountModes((current) => {
+      const { [productId]: _removed, ...rest } = current
+      return rest
+    })
+    setCartError(undefined)
+    setCheckoutAttempt(undefined)
+    setPaymentAllocations(undefined)
+  }
+
   function removeCartLine(productId: string) {
     if (isSubmitting) return
     setCartLines(removePosCartLine(cartLines, productId))
+    setDiscountInputs((current) => {
+      const { [productId]: _removed, ...rest } = current
+      return rest
+    })
+    setDiscountModes((current) => {
+      const { [productId]: _removed, ...rest } = current
+      return rest
+    })
     setCartError(undefined)
     if (cartLines.some((line) => line.productId === productId)) {
       setCheckoutAttempt(undefined)
@@ -434,6 +567,8 @@ export function RetailPos() {
   function clearCart() {
     if (isSubmitting) return
     setCartLines(clearPosCart())
+    setDiscountInputs({})
+    setDiscountModes({})
     setCartError(undefined)
     if (cartLines.length > 0) {
       setCheckoutAttempt(undefined)
@@ -464,7 +599,7 @@ export function RetailPos() {
     && paymentAllocations
     ? summarizePosPayments(
       paymentAllocations,
-      cartTotals.subtotalMinor,
+      cartTotals.payableTotalMinor,
       selectedLocation.currencyExponent,
     )
     : undefined
@@ -509,6 +644,8 @@ export function RetailPos() {
     const outcome = result.value
     if (outcome.status === 'succeeded') {
       setCartLines(clearPosCart())
+      setDiscountInputs({})
+      setDiscountModes({})
       setCartError(undefined)
       setCartNotice(undefined)
       setCheckoutAttempt(undefined)
@@ -584,20 +721,20 @@ export function RetailPos() {
         && recoveryGate.reason === 'pending'
         && pendingRecoverySnapshot
         && user?.id === pendingRecoverySnapshot.ownerUserId && (
-        <Card>
-          <h2>Незавершённая продажа</h2>
-          <p>Можно повторить завершение сохранённой продажи без изменения её данных.</p>
-          <Button
-            type="button"
-            onClick={() => void retryPendingSale()}
-            disabled={recoveryRetryState === 'retrying'}
-          >
-            {recoveryRetryState === 'retrying'
-              ? 'Повторяем завершение продажи…'
-              : 'Повторить завершение продажи'}
-          </Button>
-        </Card>
-      )}
+          <Card>
+            <h2>Незавершённая продажа</h2>
+            <p>Можно повторить завершение сохранённой продажи без изменения её данных.</p>
+            <Button
+              type="button"
+              onClick={() => void retryPendingSale()}
+              disabled={recoveryRetryState === 'retrying'}
+            >
+              {recoveryRetryState === 'retrying'
+                ? 'Повторяем завершение продажи…'
+                : 'Повторить завершение продажи'}
+            </Button>
+          </Card>
+        )}
 
       {recoveryRetryState === 'retrying' && (
         <Alert variant="info" title="Повторяем завершение продажи">
@@ -710,416 +847,503 @@ export function RetailPos() {
       {selectedLocation && (
         <section className="retail-pos__workspace" aria-label="Рабочая область кассы">
           <div className="retail-pos__lookup" aria-label="Поиск товара">
-          <Card>
-            <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
-              <label htmlFor="retail-pos-product-search">Поиск товара</label>
-              <div className="retail-pos__lookup-controls">
-                <Input
-                  id="retail-pos-product-search"
-                  type="search"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Название или код товара"
-                  aria-label="Поиск товара по названию или коду"
-                />
-                <Button type="submit" disabled={searchState === 'loading'}>
-                  Найти
-                </Button>
-              </div>
-            </form>
-
-            {searchState === 'loading' && (
-              <p className="retail-pos__lookup-status" aria-live="polite">
-                <Spinner size="sm" label="Поиск товаров" /> Поиск товаров…
-              </p>
-            )}
-            {searchState === 'error' && searchError && (
-              <Alert variant="danger" title="Не удалось найти товары">
-                {searchError}
-              </Alert>
-            )}
-            {searchState === 'empty' && (
-              <EmptyState
-                title="Активные товары не найдены"
-                description="Измените запрос и повторите поиск."
-              />
-            )}
-            {searchHasInactiveProducts && (
-              <Alert variant="warning" title="Недоступные товары">
-                Неактивные товары не могут быть выбраны для розничной продажи.
-              </Alert>
-            )}
-            {searchState === 'ready' && (
-              <ul className="retail-pos__product-list">
-                {searchResults.map((product) => (
-                  <li key={product.id}>
-                    <div>
-                      <strong>{product.name}</strong>
-                      <span>{product.sourceId} · {product.baseUnit}</span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => selectProduct(product)}
-                    >
-                      Выбрать
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-
-          <Card>
-            <form className="retail-pos__lookup-form" onSubmit={lookupBarcode}>
-              <label htmlFor="retail-pos-barcode">Штрихкод</label>
-              <div className="retail-pos__lookup-controls">
-                <Input
-                  id="retail-pos-barcode"
-                  value={barcode}
-                  onChange={(event) => setBarcode(event.target.value)}
-                  placeholder="Введите или отсканируйте штрихкод"
-                  aria-label="Поиск товара по штрихкоду"
-                />
-                <Button type="submit" disabled={barcodeState === 'loading'}>
-                  Найти
-                </Button>
-              </div>
-            </form>
-
-            {barcodeState === 'loading' && (
-              <p className="retail-pos__lookup-status" aria-live="polite">
-                <Spinner size="sm" label="Поиск по штрихкоду" /> Поиск товара…
-              </p>
-            )}
-            {barcodeState === 'not-found' && (
-              <EmptyState
-                title="Товар по штрихкоду не найден"
-                description="Проверьте штрихкод и повторите поиск."
-              />
-            )}
-            {barcodeState === 'error' && barcodeError && (
-              <Alert variant="danger" title="Не удалось найти товар">
-                {barcodeError}
-              </Alert>
-            )}
-            {barcodeState === 'unavailable' && barcodeProduct && (
-              <Alert variant="warning" title="Товар недоступен">
-                {barcodeProduct.name} — неактивный товар и не может быть выбран.
-              </Alert>
-            )}
-            {barcodeState === 'found' && barcodeProduct && (
-              <div className="retail-pos__barcode-result">
-                <div>
-                  <strong>{barcodeProduct.name}</strong>
-                  <span>{barcodeProduct.sourceId} · {barcodeProduct.baseUnit}</span>
+            <Card>
+              <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
+                <label htmlFor="retail-pos-product-search">Поиск товара</label>
+                <div className="retail-pos__lookup-controls">
+                  <Input
+                    id="retail-pos-product-search"
+                    type="search"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Название или код товара"
+                    aria-label="Поиск товара по названию или коду"
+                  />
+                  <Button type="submit" disabled={searchState === 'loading'}>
+                    Найти
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => selectProduct(barcodeProduct)}
-                >
-                  Выбрать
-                </Button>
-              </div>
-            )}
-          </Card>
+              </form>
 
-          {selectedProduct && (
-            <Card variant="soft" className="retail-pos__selected-product">
-              <h2>Выбранный товар</h2>
-              <p>{selectedProduct.name}</p>
-              <span>{selectedProduct.sourceId} · {selectedProduct.baseUnit}</span>
-              {priceState === 'currency-unavailable' && (
-                <Alert variant="warning" title="Цена недоступна">
-                  Для выбранной торговой точки не настроена валюта.
+              {searchState === 'loading' && (
+                <p className="retail-pos__lookup-status" aria-live="polite">
+                  <Spinner size="sm" label="Поиск товаров" /> Поиск товаров…
+                </p>
+              )}
+              {searchState === 'error' && searchError && (
+                <Alert variant="danger" title="Не удалось найти товары">
+                  {searchError}
                 </Alert>
               )}
-              {priceState === 'loading' && (
-                <p className="retail-pos__price-status" aria-live="polite">
-                  <Spinner size="sm" label="Загрузка цены" /> Загрузка цены…
-                </p>
-              )}
-              {priceState === 'ready'
-                && unitPriceMinor !== undefined
-                && hasCurrencyConfiguration(selectedLocation) && (
-                <p className="retail-pos__price">
-                  Цена: {formatUnitPrice(
-                    unitPriceMinor,
-                    selectedLocation.currencyCode,
-                    selectedLocation.currencyExponent,
-                  )}
-                </p>
-              )}
-              {canAddSelectedProduct && (
-                <Button type="button" onClick={addSelectedProductToCart} disabled={isSubmitting}>
-                  Добавить в корзину
-                </Button>
-              )}
-              {priceState === 'missing' && (
+              {searchState === 'empty' && (
                 <EmptyState
-                  title="Цена товара не найдена"
-                  description="Для выбранной торговой точки цена товара не установлена."
+                  title="Активные товары не найдены"
+                  description="Измените запрос и повторите поиск."
                 />
               )}
-              {priceState === 'error' && priceError && (
-                <Alert variant="danger" title="Не удалось загрузить цену">
-                  {priceError}
+              {searchHasInactiveProducts && (
+                <Alert variant="warning" title="Недоступные товары">
+                  Неактивные товары не могут быть выбраны для розничной продажи.
                 </Alert>
+              )}
+              {searchState === 'ready' && (
+                <ul className="retail-pos__product-list">
+                  {searchResults.map((product) => (
+                    <li key={product.id}>
+                      <div>
+                        <strong>{product.name}</strong>
+                        <span>{product.sourceId} · {product.baseUnit}</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => selectProduct(product)}
+                      >
+                        Выбрать
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </Card>
-          )}
+
+            <Card>
+              <form className="retail-pos__lookup-form" onSubmit={lookupBarcode}>
+                <label htmlFor="retail-pos-barcode">Штрихкод</label>
+                <div className="retail-pos__lookup-controls">
+                  <Input
+                    id="retail-pos-barcode"
+                    value={barcode}
+                    onChange={(event) => setBarcode(event.target.value)}
+                    placeholder="Введите или отсканируйте штрихкод"
+                    aria-label="Поиск товара по штрихкоду"
+                  />
+                  <Button type="submit" disabled={barcodeState === 'loading'}>
+                    Найти
+                  </Button>
+                </div>
+              </form>
+
+              {barcodeState === 'loading' && (
+                <p className="retail-pos__lookup-status" aria-live="polite">
+                  <Spinner size="sm" label="Поиск по штрихкоду" /> Поиск товара…
+                </p>
+              )}
+              {barcodeState === 'not-found' && (
+                <EmptyState
+                  title="Товар по штрихкоду не найден"
+                  description="Проверьте штрихкод и повторите поиск."
+                />
+              )}
+              {barcodeState === 'error' && barcodeError && (
+                <Alert variant="danger" title="Не удалось найти товар">
+                  {barcodeError}
+                </Alert>
+              )}
+              {barcodeState === 'unavailable' && barcodeProduct && (
+                <Alert variant="warning" title="Товар недоступен">
+                  {barcodeProduct.name} — неактивный товар и не может быть выбран.
+                </Alert>
+              )}
+              {barcodeState === 'found' && barcodeProduct && (
+                <div className="retail-pos__barcode-result">
+                  <div>
+                    <strong>{barcodeProduct.name}</strong>
+                    <span>{barcodeProduct.sourceId} · {barcodeProduct.baseUnit}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => selectProduct(barcodeProduct)}
+                  >
+                    Выбрать
+                  </Button>
+                </div>
+              )}
+            </Card>
+
+            {selectedProduct && (
+              <Card variant="soft" className="retail-pos__selected-product">
+                <h2>Выбранный товар</h2>
+                <p>{selectedProduct.name}</p>
+                <span>{selectedProduct.sourceId} · {selectedProduct.baseUnit}</span>
+                {priceState === 'currency-unavailable' && (
+                  <Alert variant="warning" title="Цена недоступна">
+                    Для выбранной торговой точки не настроена валюта.
+                  </Alert>
+                )}
+                {priceState === 'loading' && (
+                  <p className="retail-pos__price-status" aria-live="polite">
+                    <Spinner size="sm" label="Загрузка цены" /> Загрузка цены…
+                  </p>
+                )}
+                {priceState === 'ready'
+                  && unitPriceMinor !== undefined
+                  && hasCurrencyConfiguration(selectedLocation) && (
+                    <p className="retail-pos__price">
+                      Цена: {formatUnitPrice(
+                        unitPriceMinor,
+                        selectedLocation.currencyCode,
+                        selectedLocation.currencyExponent,
+                      )}
+                    </p>
+                  )}
+                {canAddSelectedProduct && (
+                  <Button type="button" onClick={addSelectedProductToCart} disabled={isSubmitting}>
+                    Добавить в корзину
+                  </Button>
+                )}
+                {priceState === 'missing' && (
+                  <EmptyState
+                    title="Цена товара не найдена"
+                    description="Для выбранной торговой точки цена товара не установлена."
+                  />
+                )}
+                {priceState === 'error' && priceError && (
+                  <Alert variant="danger" title="Не удалось загрузить цену">
+                    {priceError}
+                  </Alert>
+                )}
+              </Card>
+            )}
 
           </div>
           <div className="retail-pos__checkout">
-          <Card className="retail-pos__cart">
-            <div className="retail-pos__cart-header">
-              <h2>Корзина</h2>
-              {cartLines.length > 0 && (
-                <Button type="button" variant="secondary" onClick={clearCart} disabled={isSubmitting}>
-                  Очистить
-                </Button>
-              )}
-            </div>
+            <Card className="retail-pos__cart">
+              <div className="retail-pos__cart-header">
+                <h2>Корзина</h2>
+                {cartLines.length > 0 && (
+                  <Button type="button" variant="secondary" onClick={clearCart} disabled={isSubmitting}>
+                    Очистить
+                  </Button>
+                )}
+              </div>
 
-            {cartError && (
-              <Alert variant="warning" title="Количество не изменено">
-                {cartError}
-              </Alert>
-            )}
-            {cartLines.length === 0 ? (
-              <EmptyState
-                title="Корзина пуста"
-                description="Добавьте товар с готовой текущей ценой."
-              />
-            ) : (
-              <>
-                <ul className="retail-pos__cart-lines">
-                  {cartLines.map((line) => (
-                    <li key={line.productId}>
-                      <div className="retail-pos__cart-line-details">
-                        <strong>{line.name}</strong>
-                        <span>{line.sourceId} · {line.baseUnit}</span>
-                        <span>
-                          Текущая цена: {formatUnitPrice(
-                            line.unitPriceMinor,
-                            line.currencyCode,
-                            line.currencyExponent,
-                          )}
-                        </span>
-                        {cartLineTotals?.get(line.productId) !== undefined && (
+              {cartError && (
+                <Alert variant="warning" title="Корзина не изменена">
+                  {cartError}
+                </Alert>
+              )}
+              {cartLines.length === 0 ? (
+                <EmptyState
+                  title="Корзина пуста"
+                  description="Добавьте товар с готовой текущей ценой."
+                />
+              ) : (
+                <>
+                  <ul className="retail-pos__cart-lines">
+                    {cartLines.map((line) => (
+                      <li key={line.productId}>
+                        <div className="retail-pos__cart-line-details">
+                          <strong>{line.name}</strong>
+                          <span>{line.sourceId} · {line.baseUnit}</span>
                           <span>
-                            Сумма позиции: {formatUnitPrice(
-                              cartLineTotals.get(line.productId)!,
+                            Текущая цена: {formatUnitPrice(
+                              line.unitPriceMinor,
                               line.currencyCode,
                               line.currencyExponent,
                             )}
                           </span>
+
+                          {cartLineTotals?.get(line.productId) !== undefined && (
+                            <span>
+                              Сумма позиции: {formatUnitPrice(
+                                cartLineTotals.get(line.productId)!,
+                                line.currencyCode,
+                                line.currencyExponent,
+                              )}
+                            </span>
+                          )}
+
+                          {line.discountAmountMinor !== undefined && (
+                            <span>
+                              {line.discountPercentBasisPoints === undefined
+                                ? 'Скидка: '
+                                : `Скидка: ${formatDiscountPercent(line.discountPercentBasisPoints)}% (`}
+                              −{formatUnitPrice(
+                                line.discountAmountMinor,
+                                line.currencyCode,
+                                line.currencyExponent,
+                              )}{line.discountPercentBasisPoints === undefined ? '' : ')'}
+                            </span>
+                          )}
+
+                          {canApplyDiscount && (
+                            <div className="retail-pos__discount-controls">
+                              <select
+                                value={discountModes[line.productId]
+                                  ?? (line.discountPercentBasisPoints === undefined ? 'amount' : 'percent')}
+                                onChange={(event) => updateDiscountMode(
+                                  line.productId,
+                                  event.target.value as DiscountMode,
+                                )}
+                                aria-label={`Режим скидки для ${line.name}`}
+                                disabled={isSubmitting}
+                              >
+                                <option value="amount">Сумма</option>
+                                <option value="percent">%</option>
+                              </select>
+                              <Input
+                                value={discountInputs[line.productId] ?? ''}
+                                onChange={(event) => updateDiscountInput(
+                                  line.productId,
+                                  event.target.value,
+                                )}
+                                placeholder={(discountModes[line.productId]
+                                  ?? (line.discountPercentBasisPoints === undefined ? 'amount' : 'percent')) === 'amount'
+                                  ? 'Сумма скидки'
+                                  : 'Процент скидки'}
+                                aria-label={(discountModes[line.productId]
+                                  ?? (line.discountPercentBasisPoints === undefined ? 'amount' : 'percent')) === 'amount'
+                                  ? `Сумма скидки для ${line.name}`
+                                  : `Процент скидки для ${line.name}`}
+                                disabled={isSubmitting}
+                              />
+
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => applyCartLineDiscount(line)}
+                                disabled={isSubmitting}
+                              >
+                                {line.discountAmountMinor === undefined
+                                  ? 'Применить скидку'
+                                  : 'Изменить скидку'}
+                              </Button>
+
+                              {line.discountAmountMinor !== undefined && (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  onClick={() => removeCartLineDiscount(line.productId)}
+                                  disabled={isSubmitting}
+                                >
+                                  Убрать скидку
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="retail-pos__cart-line-actions">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => decrementCartLine(line.productId)}
+                            disabled={isSubmitting || line.quantity === 1}
+                            aria-label={`Уменьшить количество ${line.name}`}
+                          >
+                            −
+                          </Button>
+                          <span aria-label={`Количество ${line.name}`}>
+                            {line.quantity}
+                          </span>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() => incrementCartLine(line.productId)}
+                            disabled={isSubmitting}
+                            aria-label={`Увеличить количество ${line.name}`}
+                          >
+                            +
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="danger"
+                            onClick={() => removeCartLine(line.productId)}
+                            disabled={isSubmitting}
+                          >
+                            Удалить
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {cartTotals.status === 'ready' && (
+                    <div className="retail-pos__cart-subtotal">
+                      <span>Сумма без скидки:</span>
+                      <strong>{formatUnitPrice(
+                        cartTotals.subtotalMinor,
+                        cartTotals.currencyCode,
+                        cartTotals.currencyExponent,
+                      )}</strong>
+
+                      <span>Скидка:</span>
+                      <strong>
+                        {cartTotals.discountTotalMinor > 0 ? '−' : ''}
+                        {formatUnitPrice(
+                          cartTotals.discountTotalMinor,
+                          cartTotals.currencyCode,
+                          cartTotals.currencyExponent,
                         )}
-                      </div>
-                      <div className="retail-pos__cart-line-actions">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => decrementCartLine(line.productId)}
-                          disabled={isSubmitting || line.quantity === 1}
-                          aria-label={`Уменьшить количество ${line.name}`}
-                        >
-                          −
-                        </Button>
-                        <span aria-label={`Количество ${line.name}`}>
-                          {line.quantity}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => incrementCartLine(line.productId)}
-                          disabled={isSubmitting}
-                          aria-label={`Увеличить количество ${line.name}`}
-                        >
-                          +
-                        </Button>
+                      </strong>
+
+                      <span>К оплате:</span>
+                      <strong>{formatUnitPrice(
+                        cartTotals.payableTotalMinor,
+                        cartTotals.currencyCode,
+                        cartTotals.currencyExponent,
+                      )}</strong>
+                    </div>
+                  )}
+                  {cartTotals.status !== 'ready' && cartTotals.status !== 'empty' && (
+                    <Alert variant="warning" title="Сумма корзины недоступна">
+                      Не удалось безопасно рассчитать сумму корзины.
+                    </Alert>
+                  )}
+                  <p className="retail-pos__cart-note">
+                    Суммы в корзине — текущий снимок. Итоговые значения продажи
+                    определит сервер при завершении.
+                  </p>
+                  {checkoutAttempt && isCheckoutPreparationAllowed ? (
+                    <Alert variant="info" title="Корзина подготовлена к оплате">
+                      Проверьте корзину перед следующим шагом оформления.
+                    </Alert>
+                  ) : cartTotals.status === 'ready' ? (
+                    <Button
+                      type="button"
+                      onClick={prepareCheckoutAttempt}
+                      disabled={isSubmitting || !isCheckoutPreparationAllowed}
+                    >
+                      Перейти к оплате
+                    </Button>
+                  ) : null}
+                </>
+              )}
+            </Card>
+            {checkoutAttempt
+              && paymentAllocations
+              && paymentSummary
+              && selectedLocation
+              && isCheckoutPreparationAllowed
+              && hasCurrencyConfiguration(selectedLocation) && (
+                <Card className="retail-pos__payment">
+                  <h2>Оплата</h2>
+                  <p>
+                    Текущая сумма к оплате: {formatUnitPrice(
+                      cartTotals.status === 'ready' ? cartTotals.payableTotalMinor : 0,
+                      selectedLocation.currencyCode,
+                      selectedLocation.currencyExponent,
+                    )}
+                  </p>
+                  {paymentAllocations.map((allocation, index) => (
+                    <div key={allocation.id} className="retail-pos__payment-allocation">
+                      <label htmlFor={`retail-pos-payment-method-${index}`}>
+                        Способ оплаты
+                      </label>
+                      <select
+                        id={`retail-pos-payment-method-${index}`}
+                        value={allocation.method}
+                        onChange={(event) => setPaymentAllocations(
+                          updatePosPaymentAllocationMethod(
+                            paymentAllocations,
+                            allocation.id,
+                            event.target.value as PosPaymentMethod,
+                          ),
+                        )}
+                        disabled={isSubmitting}
+                      >
+                        <option value="cash">Наличные</option>
+                        <option value="card">Карта</option>
+                        <option value="transfer">Перевод</option>
+                        <option value="other">Другое</option>
+                      </select>
+                      <label htmlFor={`retail-pos-payment-amount-${index}`}>
+                        Сумма
+                      </label>
+                      <Input
+                        id={`retail-pos-payment-amount-${index}`}
+                        type="text"
+                        inputMode="decimal"
+                        value={allocation.amountText}
+                        onChange={(event) => setPaymentAllocations(
+                          updatePosPaymentAllocationAmount(
+                            paymentAllocations,
+                            allocation.id,
+                            event.target.value,
+                          ),
+                        )}
+                        disabled={isSubmitting}
+                        aria-label={`Сумма оплаты ${index + 1}`}
+                      />
+                      {paymentAllocations.length > 1 && (
                         <Button
                           type="button"
                           variant="danger"
-                          onClick={() => removeCartLine(line.productId)}
+                          onClick={() => setPaymentAllocations(
+                            removePosPaymentAllocation(paymentAllocations, allocation.id),
+                          )}
                           disabled={isSubmitting}
                         >
                           Удалить
                         </Button>
-                      </div>
-                    </li>
+                      )}
+                    </div>
                   ))}
-                </ul>
-                {cartTotals.status === 'ready' && (
-                  <div className="retail-pos__cart-subtotal">
-                    <span>Итого по корзине:</span>
-                    <strong>{formatUnitPrice(
-                      cartTotals.subtotalMinor,
-                      cartTotals.currencyCode,
-                      cartTotals.currencyExponent,
-                    )}</strong>
-                  </div>
-                )}
-                {cartTotals.status !== 'ready' && cartTotals.status !== 'empty' && (
-                  <Alert variant="warning" title="Сумма корзины недоступна">
-                    Не удалось безопасно рассчитать сумму корзины.
-                  </Alert>
-                )}
-                <p className="retail-pos__cart-note">
-                  Суммы в корзине — текущий снимок. Итоговые значения продажи
-                  определит сервер при завершении.
-                </p>
-                {checkoutAttempt && isCheckoutPreparationAllowed ? (
-                  <Alert variant="info" title="Корзина подготовлена к оплате">
-                    Проверьте корзину перед следующим шагом оформления.
-                  </Alert>
-                ) : cartTotals.status === 'ready' ? (
                   <Button
                     type="button"
-                    onClick={prepareCheckoutAttempt}
-                    disabled={isSubmitting || !isCheckoutPreparationAllowed}
+                    variant="secondary"
+                    onClick={() => setPaymentAllocations(
+                      addPosPaymentAllocation(paymentAllocations, () => crypto.randomUUID()),
+                    )}
+                    disabled={isSubmitting}
                   >
-                    Перейти к оплате
+                    Добавить оплату
                   </Button>
-                ) : null}
-              </>
-            )}
-          </Card>
-          {checkoutAttempt
-            && paymentAllocations
-            && paymentSummary
-            && selectedLocation
-            && isCheckoutPreparationAllowed
-            && hasCurrencyConfiguration(selectedLocation) && (
-            <Card className="retail-pos__payment">
-              <h2>Оплата</h2>
-              <p>
-                Текущая сумма к оплате: {formatUnitPrice(
-                  cartTotals.status === 'ready' ? cartTotals.subtotalMinor : 0,
-                  selectedLocation.currencyCode,
-                  selectedLocation.currencyExponent,
-                )}
-              </p>
-              {paymentAllocations.map((allocation, index) => (
-                <div key={allocation.id} className="retail-pos__payment-allocation">
-                  <label htmlFor={`retail-pos-payment-method-${index}`}>
-                    Способ оплаты
-                  </label>
-                  <select
-                    id={`retail-pos-payment-method-${index}`}
-                    value={allocation.method}
-                    onChange={(event) => setPaymentAllocations(
-                      updatePosPaymentAllocationMethod(
-                        paymentAllocations,
-                        allocation.id,
-                        event.target.value as PosPaymentMethod,
-                      ),
-                    )}
-                    disabled={isSubmitting}
-                  >
-                    <option value="cash">Наличные</option>
-                    <option value="card">Карта</option>
-                    <option value="transfer">Перевод</option>
-                    <option value="other">Другое</option>
-                  </select>
-                  <label htmlFor={`retail-pos-payment-amount-${index}`}>
-                    Сумма
-                  </label>
-                  <Input
-                    id={`retail-pos-payment-amount-${index}`}
-                    type="text"
-                    inputMode="decimal"
-                    value={allocation.amountText}
-                    onChange={(event) => setPaymentAllocations(
-                      updatePosPaymentAllocationAmount(
-                        paymentAllocations,
-                        allocation.id,
-                        event.target.value,
-                      ),
-                    )}
-                    disabled={isSubmitting}
-                    aria-label={`Сумма оплаты ${index + 1}`}
-                  />
-                  {paymentAllocations.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={() => setPaymentAllocations(
-                        removePosPaymentAllocation(paymentAllocations, allocation.id),
+                  {'allocatedMinor' in paymentSummary && (
+                    <p>
+                      Внесено: {formatUnitPrice(
+                        paymentSummary.allocatedMinor,
+                        selectedLocation.currencyCode,
+                        selectedLocation.currencyExponent,
                       )}
-                      disabled={isSubmitting}
-                    >
-                      Удалить
-                    </Button>
+                    </p>
                   )}
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setPaymentAllocations(
-                  addPosPaymentAllocation(paymentAllocations, () => crypto.randomUUID()),
-                )}
-                disabled={isSubmitting}
-              >
-                Добавить оплату
-              </Button>
-              {'allocatedMinor' in paymentSummary && (
-                <p>
-                  Внесено: {formatUnitPrice(
-                    paymentSummary.allocatedMinor,
-                    selectedLocation.currencyCode,
-                    selectedLocation.currencyExponent,
+                  {paymentSummary.status === 'incomplete' && (
+                    <Alert variant="info" title="Введите сумму оплаты">
+                      Заполните сумму для каждой оплаты.
+                    </Alert>
                   )}
-                </p>
-              )}
-              {paymentSummary.status === 'incomplete' && (
-                <Alert variant="info" title="Введите сумму оплаты">
-                  Заполните сумму для каждой оплаты.
-                </Alert>
-              )}
-              {paymentSummary.status === 'invalid' && (
-                <Alert variant="warning" title="Сумма оплаты недействительна">
-                  Укажите положительную сумму в допустимом формате.
-                </Alert>
-              )}
-              {paymentSummary.status === 'overflow' && (
-                <Alert variant="warning" title="Сумма оплаты слишком велика">
-                  Укажите сумму в допустимом диапазоне.
-                </Alert>
-              )}
-              {paymentSummary.status === 'remaining' && (
-                <p>
-                  Осталось оплатить: {formatUnitPrice(
-                    paymentSummary.differenceMinor,
-                    selectedLocation.currencyCode,
-                    selectedLocation.currencyExponent,
+                  {paymentSummary.status === 'invalid' && (
+                    <Alert variant="warning" title="Сумма оплаты недействительна">
+                      Укажите положительную сумму в допустимом формате.
+                    </Alert>
                   )}
-                </p>
-              )}
-              {paymentSummary.status === 'exact' && (
-                <>
-                  <p>Сумма оплаты совпадает с текущей суммой корзины.</p>
-                  <Button type="button" onClick={() => void submitSale()} disabled={isSubmitting}>
-                    {isSubmitting ? 'Завершаем продажу…' : 'Завершить продажу'}
-                  </Button>
-                </>
-              )}
-              {paymentSummary.status === 'overpaid' && (
-                <p>
-                  Превышение оплаты: {formatUnitPrice(
-                    paymentSummary.differenceMinor,
-                    selectedLocation.currencyCode,
-                    selectedLocation.currencyExponent,
+                  {paymentSummary.status === 'overflow' && (
+                    <Alert variant="warning" title="Сумма оплаты слишком велика">
+                      Укажите сумму в допустимом диапазоне.
+                    </Alert>
                   )}
-                </p>
+                  {paymentSummary.status === 'remaining' && (
+                    <p>
+                      Осталось оплатить: {formatUnitPrice(
+                        paymentSummary.differenceMinor,
+                        selectedLocation.currencyCode,
+                        selectedLocation.currencyExponent,
+                      )}
+                    </p>
+                  )}
+                  {paymentSummary.status === 'exact' && (
+                    <>
+                      <p>Сумма оплаты совпадает с текущей суммой корзины.</p>
+                      <Button type="button" onClick={() => void submitSale()} disabled={isSubmitting}>
+                        {isSubmitting ? 'Завершаем продажу…' : 'Завершить продажу'}
+                      </Button>
+                    </>
+                  )}
+                  {paymentSummary.status === 'overpaid' && (
+                    <p>
+                      Превышение оплаты: {formatUnitPrice(
+                        paymentSummary.differenceMinor,
+                        selectedLocation.currencyCode,
+                        selectedLocation.currencyExponent,
+                      )}
+                    </p>
+                  )}
+                  <p>
+                    Итоговую сумму продажи определит сервер при завершении.
+                  </p>
+                </Card>
               )}
-              <p>
-                Итоговую сумму продажи определит сервер при завершении.
-              </p>
-            </Card>
-          )}
           </div>
         </section>
       )}

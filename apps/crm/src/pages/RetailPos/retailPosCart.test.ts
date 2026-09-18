@@ -6,9 +6,14 @@ import {
   decrementPosCartLine,
   incrementPosCartLine,
   removePosCartLine,
+  setPosCartLineDiscount,
+  setPosCartLinePercentDiscount,
+  parsePosCartDiscountPercentBasisPoints,
   type PosCartLine,
   type PosCartLineSnapshot,
 } from './retailPosCart'
+
+
 
 const plate: PosCartLineSnapshot = {
   productId: 'product-1',
@@ -259,6 +264,279 @@ describe('retail POS cart', () => {
         .toBe(100)
       expect(decrementPosCartLine(discounted, plate.productId).lines[0]?.discountAmountMinor)
         .toBe(100)
+    })
+    it('sets, changes, and explicitly removes an item discount', () => {
+      const lines: PosCartLine[] = [{
+        ...plate,
+        quantity: 2,
+      }]
+
+      const applied = setPosCartLineDiscount(
+        lines,
+        plate.productId,
+        300,
+      )
+
+      expect(applied).toEqual({
+        lines: [{
+          ...plate,
+          quantity: 2,
+          discountAmountMinor: 300,
+        }],
+      })
+
+      expect(Object.prototype.hasOwnProperty.call(
+        lines[0],
+        'discountAmountMinor',
+      )).toBe(false)
+
+      const changed = setPosCartLineDiscount(
+        applied.lines,
+        plate.productId,
+        500,
+      )
+
+      expect(changed.lines[0]?.discountAmountMinor).toBe(500)
+
+      const removed = setPosCartLineDiscount(
+        changed.lines,
+        plate.productId,
+        undefined,
+      )
+
+      expect(removed).toEqual({
+        lines: [{
+          ...plate,
+          quantity: 2,
+        }],
+      })
+
+      expect(Object.prototype.hasOwnProperty.call(
+        removed.lines[0],
+        'discountAmountMinor',
+      )).toBe(false)
+    })
+
+    it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects explicit invalid discount mutation %s',
+      (discountAmountMinor) => {
+        const lines: PosCartLine[] = [{
+          ...plate,
+          quantity: 2,
+        }]
+
+        expect(setPosCartLineDiscount(
+          lines,
+          plate.productId,
+          discountAmountMinor,
+        )).toEqual({
+          lines,
+          error: 'invalid-discount',
+        })
+      },
+    )
+
+    it('rejects discount mutation equal to or greater than the gross line total', () => {
+      const lines: PosCartLine[] = [{
+        ...plate,
+        quantity: 2,
+      }]
+
+      expect(setPosCartLineDiscount(
+        lines,
+        plate.productId,
+        2500,
+      )).toEqual({
+        lines,
+        error: 'discount-too-large',
+      })
+
+      expect(setPosCartLineDiscount(
+        lines,
+        plate.productId,
+        2501,
+      )).toEqual({
+        lines,
+        error: 'discount-too-large',
+      })
+    })
+
+    it('rejects discount mutation for an unknown Product', () => {
+      const lines: PosCartLine[] = [{
+        ...plate,
+        quantity: 2,
+      }]
+
+      expect(setPosCartLineDiscount(
+        lines,
+        'missing-product',
+        100,
+      )).toEqual({
+        lines,
+        error: 'line-not-found',
+      })
+    })
+
+    it('fails closed when gross line total overflows during discount mutation', () => {
+      const lines: PosCartLine[] = [{
+        ...plate,
+        unitPriceMinor: Number.MAX_SAFE_INTEGER,
+        quantity: 2,
+      }]
+
+      expect(setPosCartLineDiscount(
+        lines,
+        plate.productId,
+        100,
+      )).toEqual({
+        lines,
+        error: 'money-overflow',
+      })
+    })
+
+    it('applies and changes a percent discount using integer basis points', () => {
+      const lines: PosCartLine[] = [{ ...plate, quantity: 1, unitPriceMinor: 12345 }]
+      const applied = setPosCartLinePercentDiscount(lines, plate.productId, 1000)
+      expect(applied.lines[0]).toMatchObject({
+        discountPercentBasisPoints: 1000,
+        discountAmountMinor: 1235,
+      })
+
+      const changed = setPosCartLinePercentDiscount(applied.lines, plate.productId, 1050)
+      expect(changed.lines[0]).toMatchObject({
+        discountPercentBasisPoints: 1050,
+        discountAmountMinor: 1296,
+      })
+    })
+
+    it('rounds a ten percent discount to the nearest minor unit', () => {
+      expect(setPosCartLinePercentDiscount(
+        [{ ...plate, quantity: 1, unitPriceMinor: 12345 }],
+        plate.productId,
+        1000,
+      ).lines[0]?.discountAmountMinor).toBe(1235)
+    })
+
+    it('parses fractional percentages as basis points without floating point money', () => {
+      expect(parsePosCartDiscountPercentBasisPoints('10.5')).toEqual({
+        status: 'ready', basisPoints: 1050,
+      })
+      expect(parsePosCartDiscountPercentBasisPoints('0,01')).toEqual({
+        status: 'ready', basisPoints: 1,
+      })
+    })
+
+    it.each(['0', '100', '100.01', '-1', '0.001', 'invalid'])(
+      'rejects invalid percentage input %s',
+      (value) => {
+        expect(parsePosCartDiscountPercentBasisPoints(value)).toEqual({ status: 'invalid' })
+      },
+    )
+
+    it.each([0, 10000, 10001, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+      'rejects invalid percentage basis points %s',
+      (basisPoints) => {
+        const lines: PosCartLine[] = [{ ...plate, quantity: 1 }]
+        expect(setPosCartLinePercentDiscount(lines, plate.productId, basisPoints)).toEqual({
+          lines,
+          error: 'invalid-percent',
+        })
+      },
+    )
+
+    it('rejects a percentage discount that rounds to zero', () => {
+      const lines: PosCartLine[] = [{ ...plate, quantity: 1, unitPriceMinor: 1 }]
+      expect(setPosCartLinePercentDiscount(lines, plate.productId, 1)).toEqual({
+        lines,
+        error: 'discount-rounds-to-zero',
+      })
+    })
+
+    it('recalculates a percentage discount as quantity changes or the Product is added again', () => {
+      const discounted = setPosCartLinePercentDiscount(
+        [{ ...plate, quantity: 1, unitPriceMinor: 12345 }],
+        plate.productId,
+        1000,
+      ).lines
+
+      expect(incrementPosCartLine(discounted, plate.productId).lines[0]).toMatchObject({
+        quantity: 2,
+        discountPercentBasisPoints: 1000,
+        discountAmountMinor: 2469,
+      })
+      expect(decrementPosCartLine(
+        incrementPosCartLine(discounted, plate.productId).lines,
+        plate.productId,
+      ).lines[0]).toMatchObject({
+        quantity: 1,
+        discountAmountMinor: 1235,
+      })
+      expect(addPosCartLine(discounted, { ...plate, unitPriceMinor: 12345 }).lines[0]).toMatchObject({
+        quantity: 2,
+        discountPercentBasisPoints: 1000,
+        discountAmountMinor: 2469,
+      })
+    })
+
+    it('keeps a fixed amount discount fixed when quantity changes or the Product is added again', () => {
+      const fixed: PosCartLine[] = [{ ...plate, quantity: 1, discountAmountMinor: 100 }]
+      expect(incrementPosCartLine(fixed, plate.productId).lines[0]?.discountAmountMinor).toBe(100)
+      expect(decrementPosCartLine(fixed, plate.productId).lines[0]?.discountAmountMinor).toBe(100)
+      expect(addPosCartLine(fixed, plate).lines[0]?.discountAmountMinor).toBe(100)
+    })
+
+    it('switches between fixed and percent discounts, and removal clears both fields', () => {
+      const fixed = setPosCartLineDiscount(
+        [{ ...plate, quantity: 1, unitPriceMinor: 12345 }], plate.productId, 100,
+      )
+      const percent = setPosCartLinePercentDiscount(fixed.lines, plate.productId, 1000)
+      expect(percent.lines[0]).toMatchObject({
+        discountAmountMinor: 1235,
+        discountPercentBasisPoints: 1000,
+      })
+
+      const fixedAgain = setPosCartLineDiscount(percent.lines, plate.productId, 200)
+      expect(fixedAgain.lines[0]).toMatchObject({ discountAmountMinor: 200 })
+      expect(Object.prototype.hasOwnProperty.call(
+        fixedAgain.lines[0], 'discountPercentBasisPoints',
+      )).toBe(false)
+
+      const removed = setPosCartLineDiscount(fixedAgain.lines, plate.productId, undefined)
+      expect(Object.prototype.hasOwnProperty.call(removed.lines[0], 'discountAmountMinor')).toBe(false)
+      expect(Object.prototype.hasOwnProperty.call(removed.lines[0], 'discountPercentBasisPoints')).toBe(false)
+    })
+
+    it('uses the recalculated percentage amount in cart totals', () => {
+      expect(calculatePosCartTotals([{
+        ...plate,
+        quantity: 2,
+        unitPriceMinor: 12345,
+        discountPercentBasisPoints: 1000,
+        discountAmountMinor: 2469,
+      }])).toMatchObject({
+        status: 'ready',
+        subtotalMinor: 24690,
+        discountTotalMinor: 2469,
+        payableTotalMinor: 22221,
+      })
+    })
+
+    it('fails closed for percentage calculation overflow and stale percentage amounts', () => {
+      const overflow: PosCartLine[] = [{
+        ...plate,
+        quantity: 2,
+        unitPriceMinor: Number.MAX_SAFE_INTEGER,
+      }]
+      expect(setPosCartLinePercentDiscount(overflow, plate.productId, 1000)).toEqual({
+        lines: overflow,
+        error: 'money-overflow',
+      })
+      expect(calculatePosCartTotals([{
+        ...plate,
+        quantity: 1,
+        discountPercentBasisPoints: 1000,
+        discountAmountMinor: 1,
+      }])).toEqual({ status: 'invalid-line' })
     })
   })
 })
