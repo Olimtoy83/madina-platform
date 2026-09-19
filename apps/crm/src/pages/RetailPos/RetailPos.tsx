@@ -6,6 +6,10 @@ import {
   getRetailProductPrice,
   getRetailProducts,
   completeRetailSale,
+  completeRetailReturn,
+  getRetailCompletedSale,
+  type RetailCompletedSale,
+  type RetailReturnCompletionResult,
 } from '../../shared/api/retailApi'
 import { HttpError } from '../../shared/api/httpClient'
 import { useAuth } from '../../context/useAuth'
@@ -50,6 +54,17 @@ import {
   type PosRecoveryGateBlockedReason,
   type PosRecoveryGateState,
 } from './retailPosRecoveryGate'
+import {
+  clearPendingPosReturnSubmission,
+  loadPendingPosReturnSubmission,
+  savePendingPosReturnSubmission,
+  type PendingPosReturnSubmission,
+} from './retailPosReturnRecovery'
+import {
+  createPosReturnIntent,
+  retryPendingPosReturn,
+  submitPosReturn,
+} from './retailPosReturnSubmission'
 import './RetailPos.css'
 
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
@@ -58,6 +73,8 @@ type PriceState = 'idle' | 'loading' | 'ready' | 'missing' | 'currency-unavailab
 type SubmissionState = 'idle' | 'submitting' | 'assembly-error' | 'blocked' | 'cleanup-failed' | 'succeeded'
 type RecoveryRetryState = 'idle' | 'retrying' | 'failed' | 'cleanup-failed' | 'succeeded'
 type DiscountMode = 'amount' | 'percent'
+type ReturnLookupState = 'idle' | 'loading' | 'loaded' | 'not-found' | 'denied' | 'error'
+type ReturnSubmissionState = 'idle' | 'submitting' | 'unknown-result' | 'rejected' | 'cleanup-failed' | 'succeeded'
 
 type CurrencyConfiguredLocation = RetailLocation & {
   currencyCode: string
@@ -135,6 +152,7 @@ function getRecoveryGateMessage(
 export function RetailPos() {
   const { user } = useAuth()
   const canApplyDiscount = canRetail(user, 'retail:sales:discount')
+  const canReturnSales = canRetail(user, 'retail:sales:return')
   const [locations, setLocations] = useState<RetailLocation[]>([])
   const [selectedLocationId, setSelectedLocationId] = useState<string>()
   const [loadState, setLoadState] = useState<'loading' | 'error' | 'ready'>(
@@ -166,11 +184,22 @@ export function RetailPos() {
   const [pendingRecoverySnapshot, setPendingRecoverySnapshot] = useState<Readonly<PendingPosSaleSubmission>>()
   const [submissionState, setSubmissionState] = useState<SubmissionState>('idle')
   const [recoveryRetryState, setRecoveryRetryState] = useState<RecoveryRetryState>('idle')
+  const [returnSaleId, setReturnSaleId] = useState('')
+  const [returnSale, setReturnSale] = useState<RetailCompletedSale>()
+  const [returnLookupState, setReturnLookupState] = useState<ReturnLookupState>('idle')
+  const [returnLookupError, setReturnLookupError] = useState<string>()
+  const [returnQuantities, setReturnQuantities] = useState<Record<string, string>>({})
+  const [pendingReturnRecovery, setPendingReturnRecovery] = useState<Readonly<PendingPosReturnSubmission>>()
+  const [returnRecoveryBlocked, setReturnRecoveryBlocked] = useState<'foreign-owner' | 'invalid' | 'storage-error'>()
+  const [returnSubmissionState, setReturnSubmissionState] = useState<ReturnSubmissionState>('idle')
+  const [returnSuccess, setReturnSuccess] = useState<RetailReturnCompletionResult>()
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
   const submissionGeneration = useRef(0)
   const submissionOwnerUserId = useRef<string | undefined>(undefined)
+  const returnLookupGeneration = useRef(0)
+  const returnSubmissionGeneration = useRef(0)
   const { isPending, run: runPendingCommand } = usePendingCommand()
 
   const resetPriceReadiness = useCallback(() => {
@@ -196,6 +225,17 @@ export function RetailPos() {
     resetPriceReadiness()
   }, [resetPriceReadiness])
 
+  const resetReturnWorkflow = useCallback(() => {
+    returnLookupGeneration.current += 1
+    setReturnSaleId('')
+    setReturnSale(undefined)
+    setReturnLookupState('idle')
+    setReturnLookupError(undefined)
+    setReturnQuantities({})
+    setReturnSuccess(undefined)
+    setReturnSubmissionState('idle')
+  }, [])
+
   const loadLocations = useCallback(async () => {
     setLoadState('loading')
     setLocations([])
@@ -208,6 +248,7 @@ export function RetailPos() {
     setCartNotice(undefined)
     setCheckoutAttempt(undefined)
     setPaymentAllocations(undefined)
+    resetReturnWorkflow()
 
     try {
       const retailLocations = await getRetailLocations()
@@ -218,7 +259,7 @@ export function RetailPos() {
     } catch {
       setLoadState('error')
     }
-  }, [resetProductLookup])
+  }, [resetProductLookup, resetReturnWorkflow])
 
   useEffect(() => {
     void loadLocations()
@@ -236,6 +277,19 @@ export function RetailPos() {
     setPendingRecoverySnapshot(recovery.status === 'pending' ? recovery.snapshot : undefined)
     setRecoveryRetryState('idle')
     setRecoveryGate(createPosRecoveryGateState(user.id, recovery))
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user) {
+      setPendingReturnRecovery(undefined)
+      setReturnRecoveryBlocked(undefined)
+      return
+    }
+    const recovery = loadPendingPosReturnSubmission(user.id)
+    setPendingReturnRecovery(recovery.status === 'pending' ? recovery.snapshot : undefined)
+    setReturnRecoveryBlocked(recovery.status === 'foreign-owner' || recovery.status === 'invalid' || recovery.status === 'storage-error'
+      ? recovery.status
+      : undefined)
   }, [user?.id])
 
   useEffect(() => {
@@ -381,7 +435,7 @@ export function RetailPos() {
   }
 
   function selectLocation(locationId: string) {
-    if (isSubmitting) return
+    if (isSubmitting || returnSubmissionState === 'submitting') return
     const hadCartLines = cartLines.length > 0
     setSelectedLocationId(locationId || undefined)
     resetProductLookup()
@@ -391,6 +445,7 @@ export function RetailPos() {
     setCartError(undefined)
     setCheckoutAttempt(undefined)
     setPaymentAllocations(undefined)
+    resetReturnWorkflow()
     setCartNotice(hadCartLines
       ? 'Корзина очищена после смены торговой точки.'
       : undefined)
@@ -698,6 +753,136 @@ export function RetailPos() {
       : 'failed')
   }
 
+  const returnItems = returnSale?.items.map((item) => ({
+    ...item,
+    remainingReturnableQuantity: item.quantity - item.already_returned_quantity,
+  })) ?? []
+  const selectedReturnItems = returnItems.flatMap((item) => {
+    const quantity = Number(returnQuantities[item.sale_item_id])
+    return Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= item.remainingReturnableQuantity
+      ? [{ saleItemId: item.sale_item_id, quantity }]
+      : []
+  })
+  const isReturnSubmitting = returnSubmissionState === 'submitting'
+
+  function resetReturnForSaleId(value: string) {
+    returnLookupGeneration.current += 1
+    setReturnSaleId(value)
+    setReturnSale(undefined)
+    setReturnLookupState('idle')
+    setReturnLookupError(undefined)
+    setReturnQuantities({})
+    setReturnSuccess(undefined)
+    setReturnSubmissionState('idle')
+  }
+
+  async function lookupReturnSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedLocation) return
+    const saleId = returnSaleId.trim()
+    const generation = returnLookupGeneration.current + 1
+    returnLookupGeneration.current = generation
+    setReturnSale(undefined)
+    setReturnQuantities({})
+    setReturnSuccess(undefined)
+    setReturnLookupError(undefined)
+    if (!saleId) {
+      setReturnLookupState('idle')
+      return
+    }
+    setReturnLookupState('loading')
+    try {
+      const sale = await getRetailCompletedSale(selectedLocation.id, saleId)
+      if (returnLookupGeneration.current !== generation) return
+      setReturnSale(sale)
+      setReturnLookupState('loaded')
+    } catch (error) {
+      if (returnLookupGeneration.current !== generation) return
+      if (error instanceof HttpError && error.status === 404) setReturnLookupState('not-found')
+      else if (error instanceof HttpError && error.status === 403) setReturnLookupState('denied')
+      else {
+        setReturnLookupError(getLookupErrorMessage(error))
+        setReturnLookupState('error')
+      }
+    }
+  }
+
+  async function refreshReturnSale(locationId: string, saleId: string) {
+    const generation = returnLookupGeneration.current + 1
+    returnLookupGeneration.current = generation
+    try {
+      const sale = await getRetailCompletedSale(locationId, saleId)
+      if (returnLookupGeneration.current === generation) {
+        setReturnSale(sale)
+        setReturnQuantities({})
+        setReturnLookupState('loaded')
+      }
+    } catch {
+      if (returnLookupGeneration.current === generation) setReturnLookupState('error')
+    }
+  }
+
+  async function submitReturn() {
+    if (!user || !selectedLocation || !returnSale || selectedReturnItems.length === 0
+      || pendingReturnRecovery || returnRecoveryBlocked || isReturnSubmitting) return
+    const payload = createPosReturnIntent({
+      locationId: selectedLocation.id,
+      saleId: returnSale.sale.id,
+      items: selectedReturnItems,
+      createId: () => crypto.randomUUID(),
+    })
+    const generation = returnSubmissionGeneration.current + 1
+    returnSubmissionGeneration.current = generation
+    setReturnSubmissionState('submitting')
+    const result = await submitPosReturn({ ownerUserId: user.id, locationId: selectedLocation.id, payload }, {
+      saveSnapshot: savePendingPosReturnSubmission,
+      complete: completeRetailReturn,
+      clearSnapshot: clearPendingPosReturnSubmission,
+      isCurrent: () => returnSubmissionGeneration.current === generation && user.id === submissionOwnerUserId.current,
+    })
+    if (returnSubmissionGeneration.current !== generation) return
+    if (result.status === 'succeeded') {
+      setReturnSuccess(result.completion)
+      setReturnSubmissionState('succeeded')
+      await refreshReturnSale(selectedLocation.id, payload.saleId)
+      return
+    }
+    if (result.status === 'rejected') {
+      setReturnSubmissionState('rejected')
+      await refreshReturnSale(selectedLocation.id, payload.saleId)
+      return
+    }
+    setReturnSubmissionState(result.reason === 'clear-failed' ? 'cleanup-failed' : 'unknown-result')
+    const recovery = loadPendingPosReturnSubmission(user.id)
+    setPendingReturnRecovery(recovery.status === 'pending' ? recovery.snapshot : undefined)
+  }
+
+  async function retryPendingReturn() {
+    if (!user || !pendingReturnRecovery || pendingReturnRecovery.ownerUserId !== user.id || isReturnSubmitting) return
+    const generation = returnSubmissionGeneration.current + 1
+    returnSubmissionGeneration.current = generation
+    setReturnSubmissionState('submitting')
+    const result = await retryPendingPosReturn(pendingReturnRecovery, {
+      complete: completeRetailReturn,
+      clearSnapshot: clearPendingPosReturnSubmission,
+      isCurrent: () => returnSubmissionGeneration.current === generation && user.id === submissionOwnerUserId.current,
+    })
+    if (returnSubmissionGeneration.current !== generation) return
+    if (result.status === 'succeeded') {
+      setPendingReturnRecovery(undefined)
+      setReturnSuccess(result.completion)
+      setReturnSubmissionState('succeeded')
+      if (selectedLocation?.id === pendingReturnRecovery.locationId) await refreshReturnSale(pendingReturnRecovery.locationId, pendingReturnRecovery.payload.saleId)
+      return
+    }
+    if (result.status === 'rejected') {
+      setPendingReturnRecovery(undefined)
+      setReturnSubmissionState('rejected')
+      return
+    }
+    setReturnSubmissionState(result.reason === 'clear-failed' ? 'cleanup-failed' : 'unknown-result')
+  }
+
   return (
     <main className="retail-pos">
       <header className="retail-pos__header">
@@ -847,6 +1032,64 @@ export function RetailPos() {
       {selectedLocation && (
         <section className="retail-pos__workspace" aria-label="Рабочая область кассы">
           <div className="retail-pos__lookup" aria-label="Поиск товара">
+            {canReturnSales && (
+              <Card className="retail-pos__return">
+                <h2>Возврат по завершённой продаже</h2>
+                <p>Возврат использует только сохранённые сервером данные продажи.</p>
+                {pendingReturnRecovery && user?.id === pendingReturnRecovery.ownerUserId && (
+                  <Alert variant="warning" title="Есть незавершённый возврат">
+                    Сначала повторите сохранённый возврат с теми же данными. Новый возврат заблокирован.
+                    <div className="retail-pos__return-actions">
+                      <Button type="button" onClick={() => void retryPendingReturn()} disabled={isReturnSubmitting}>
+                        {isReturnSubmitting ? 'Повторяем возврат…' : 'Повторить возврат'}
+                      </Button>
+                    </div>
+                  </Alert>
+                )}
+                {returnRecoveryBlocked && (
+                  <Alert variant="warning" title="Возврат временно недоступен">
+                    Сохранённые данные возврата нельзя безопасно подтвердить в этой сессии.
+                  </Alert>
+                )}
+                <form className="retail-pos__lookup-form" onSubmit={lookupReturnSale}>
+                  <label htmlFor="retail-pos-return-sale-id">ID завершённой продажи</label>
+                  <div className="retail-pos__lookup-controls">
+                    <Input id="retail-pos-return-sale-id" value={returnSaleId} onChange={(event) => resetReturnForSaleId(event.target.value)} placeholder="Введите ID продажи" disabled={isReturnSubmitting || !!pendingReturnRecovery || !!returnRecoveryBlocked} />
+                    <Button type="submit" disabled={returnLookupState === 'loading' || isReturnSubmitting || !!pendingReturnRecovery || !!returnRecoveryBlocked}>Загрузить продажу</Button>
+                  </div>
+                </form>
+                {returnLookupState === 'loading' && <p className="retail-pos__lookup-status" aria-live="polite"><Spinner size="sm" label="Загрузка продажи" /> Загрузка завершённой продажи…</p>}
+                {returnLookupState === 'not-found' && <EmptyState title="Завершённая продажа не найдена" description="Проверьте ID продажи и выбранную торговую точку." />}
+                {returnLookupState === 'denied' && <Alert variant="danger" title="Нет доступа к продаже">Нет доступа к завершённой продаже для выбранной торговой точки.</Alert>}
+                {returnLookupState === 'error' && returnLookupError && <Alert variant="danger" title="Не удалось загрузить продажу">{returnLookupError}</Alert>}
+                {returnSale && returnLookupState === 'loaded' && (
+                  <div className="retail-pos__return-evidence">
+                    <p><strong>Продажа:</strong> {returnSale.sale.id}</p>
+                    <p><strong>К оплате по сохранённой продаже:</strong> {formatUnitPrice(returnSale.sale.payable_total_minor, returnSale.sale.currency_code, returnSale.sale.currency_exponent)}</p>
+                    {returnItems.length === 0 ? <EmptyState title="В продаже нет позиций для возврата" description="Сервер не вернул доступных позиций." /> : <ul className="retail-pos__return-lines">
+                      {returnItems.map((item) => {
+                        const fullyReturned = item.remainingReturnableQuantity <= 0
+                        return <li key={item.sale_item_id}>
+                          <div><strong>{item.name}</strong><span>{item.source_id}</span><span>Исходное количество: {item.quantity}; уже возвращено: {item.already_returned_quantity}; доступно: {Math.max(0, item.remainingReturnableQuantity)}</span><span>Исходная цена: {formatUnitPrice(item.unit_price_minor, returnSale.sale.currency_code, returnSale.sale.currency_exponent)}; скидка: {formatUnitPrice(item.discount_amount_minor, returnSale.sale.currency_code, returnSale.sale.currency_exponent)}; ранее возвращено: {formatUnitPrice(item.already_refunded_amount_minor, returnSale.sale.currency_code, returnSale.sale.currency_exponent)}</span></div>
+                          <label htmlFor={`retail-pos-return-quantity-${item.sale_item_id}`}>Количество возврата
+                            <Input id={`retail-pos-return-quantity-${item.sale_item_id}`} type="number" min="1" max={Math.max(0, item.remainingReturnableQuantity)} step="1" value={returnQuantities[item.sale_item_id] ?? ''} onChange={(event) => setReturnQuantities((current) => ({ ...current, [item.sale_item_id]: event.target.value }))} disabled={fullyReturned || isReturnSubmitting || !!pendingReturnRecovery} aria-label={`Количество возврата ${item.name}`} />
+                          </label>
+                          {fullyReturned && <span className="retail-pos__return-complete">Полностью возвращено</span>}
+                        </li>
+                      })}
+                    </ul>}
+                    {returnItems.length > 0 && returnItems.every((item) => item.remainingReturnableQuantity <= 0) && <EmptyState title="Все позиции уже возвращены" description="Для этой продажи нет доступного количества для следующего возврата." />}
+                    {returnItems.length > 0 && selectedReturnItems.length === 0 && <Alert variant="info" title="Выберите позиции">Укажите целое количество хотя бы для одной доступной позиции.</Alert>}
+                    {selectedReturnItems.length > 0 && <div className="retail-pos__return-review"><strong>Проверка возврата</strong><span>Продажа: {returnSale.sale.id}; торговая точка: {selectedLocation.name}</span><span>Позиций: {selectedReturnItems.length}; количество: {selectedReturnItems.reduce((total, item) => total + item.quantity, 0)}</span><Button type="button" onClick={() => void submitReturn()} disabled={isReturnSubmitting || !!pendingReturnRecovery || !!returnRecoveryBlocked}>Подтвердить возврат</Button></div>}
+                  </div>
+                )}
+                {returnSubmissionState === 'submitting' && <Alert variant="info" title="Отправляем возврат">Отправляем сохранённый возврат. Не закрывайте страницу.</Alert>}
+                {returnSubmissionState === 'unknown-result' && <Alert variant="warning" title="Результат возврата не подтверждён">Возврат сохранён для точного повторения. Не создавайте новый возврат.</Alert>}
+                {returnSubmissionState === 'rejected' && <Alert variant="warning" title="Возврат отклонён">Сервер отклонил возврат; данные продажи обновлены.</Alert>}
+                {returnSubmissionState === 'cleanup-failed' && <Alert variant="warning" title="Требуется безопасная проверка">Серверный результат получен, но локальную запись нельзя безопасно очистить.</Alert>}
+                {returnSuccess && <Alert variant="info" title="Возврат подтверждён сервером"><p>ID возврата: {returnSuccess.body.saleReturn.id}</p><p>Исходная продажа: {returnSuccess.body.saleReturn.original_sale_id}</p><p>Возвращённые позиции: {returnSuccess.body.items.map((item) => `${item.quantity} / ${formatUnitPrice(item.refunded_amount_minor, returnSale?.sale.currency_code ?? selectedLocation.currencyCode ?? 'USD', returnSale?.sale.currency_exponent ?? selectedLocation.currencyExponent ?? 2)}`).join(', ') || 'нет'}</p><p>Возвратные оплаты: {returnSuccess.body.refundAllocations.map((allocation) => `${allocation.method}: ${formatUnitPrice(allocation.amount_minor, returnSale?.sale.currency_code ?? selectedLocation.currencyCode ?? 'USD', returnSale?.sale.currency_exponent ?? selectedLocation.currencyExponent ?? 2)}`).join(', ') || 'нет'}</p></Alert>}
+              </Card>
+            )}
             <Card>
               <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
                 <label htmlFor="retail-pos-product-search">Поиск товара</label>

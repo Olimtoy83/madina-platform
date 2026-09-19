@@ -47,6 +47,54 @@ interface RetailSaleCompletionResponse {
   allocations: unknown[]
 }
 
+export interface RetailCompletedSale {
+  sale: {
+    id: string
+    location_id: string
+    status: 'completed'
+    currency_code: string
+    currency_exponent: number
+    payable_total_minor: number
+    completed_at: string
+  }
+  items: ReadonlyArray<{
+    sale_item_id: string
+    product_id: string
+    source_id: string
+    name: string
+    quantity: number
+    unit_price_minor: number
+    line_total_minor: number
+    discount_amount_minor: number
+    already_returned_quantity: number
+    already_refunded_amount_minor: number
+  }>
+  paymentAllocations: ReadonlyArray<{
+    id: string
+    method: string
+    amount_minor: number
+    ordinal: number
+    already_refunded_amount_minor: number
+  }>
+}
+
+export interface RetailReturnRequest {
+  clientOperationId: string
+  items: ReadonlyArray<{ saleItemId: string; quantity: number }>
+}
+
+export interface RetailReturnCompletionResponse {
+  saleReturn: { id: string; original_sale_id: string; completed_at: string }
+  items: ReadonlyArray<{ original_sale_item_id: string; quantity: number; refunded_amount_minor: number }>
+  refundAllocations: ReadonlyArray<{ method: string; amount_minor: number; ordinal: number }>
+  movements: ReadonlyArray<unknown>
+}
+
+export interface RetailReturnCompletionResult {
+  status: 200 | 201
+  body: RetailReturnCompletionResponse
+}
+
 export interface RetailSaleCompletionResult {
   status: 200 | 201
   body: RetailSaleCompletionResponse
@@ -118,6 +166,27 @@ export async function completeRetailSale(
     status: response.status,
     body: await response.json() as RetailSaleCompletionResponse,
   }
+}
+
+export function getRetailCompletedSale(locationId: string, saleId: string): Promise<RetailCompletedSale> {
+  return requestJson<RetailCompletedSale>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/sales/${encodeURIComponent(saleId)}`,
+  )
+}
+
+export async function completeRetailReturn(
+  locationId: string,
+  saleId: string,
+  payload: RetailReturnRequest,
+): Promise<RetailReturnCompletionResult> {
+  const response = await requestResponse(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/sales/${encodeURIComponent(saleId)}/returns`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+  )
+  if (response.status !== 200 && response.status !== 201) {
+    throw new Error('Unexpected Retail Return completion response status.')
+  }
+  return { status: response.status, body: await response.json() as RetailReturnCompletionResponse }
 }
 
 function toRetailLocation(

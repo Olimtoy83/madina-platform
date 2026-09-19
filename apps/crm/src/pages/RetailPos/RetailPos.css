@@ -118,6 +118,51 @@
   font-weight: 600;
 }
 
+.retail-pos__return,
+.retail-pos__return-evidence,
+.retail-pos__return-review,
+.retail-pos__return-lines,
+.retail-pos__return-lines li,
+.retail-pos__return-actions {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.retail-pos__return h2,
+.retail-pos__return p,
+.retail-pos__return-evidence p {
+  margin: 0;
+}
+
+.retail-pos__return-lines {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.retail-pos__return-lines li {
+  padding-top: 12px;
+  border-top: 1px solid var(--mb-color-border);
+}
+
+.retail-pos__return-lines span,
+.retail-pos__return-review span,
+.retail-pos__return-complete {
+  display: block;
+  color: var(--mb-color-text-secondary);
+}
+
+.retail-pos__return-lines .mb-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.retail-pos__return-review {
+  padding-top: 12px;
+  border-top: 1px solid var(--mb-color-border);
+}
+
 .retail-pos__cart {
   display: grid;
   gap: 12px;

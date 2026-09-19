@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   completeRetailSale,
+  completeRetailReturn,
+  getRetailCompletedSale,
   getRetailLocations,
   getRetailProductByBarcode,
   getRetailProductPrice,
@@ -75,6 +77,33 @@ describe('retailApi', () => {
       message: 'IDEMPOTENCY_CONFLICT',
       body: { message: 'IDEMPOTENCY_CONFLICT' },
     })
+  })
+
+  it('loads the encoded completed Retail Sale evidence without client-side monetary mapping', async () => {
+    const body = { sale: { id: 'sale-1', location_id: 'location-1', status: 'completed', currency_code: 'USD', currency_exponent: 2, payable_total_minor: 99, completed_at: '2026-09-19T00:00:00.000Z' }, items: [{ sale_item_id: 'item-1', product_id: 'product-1', source_id: 'SKU-1', name: 'Product', quantity: 1, unit_price_minor: 100, line_total_minor: 100, discount_amount_minor: 1, already_returned_quantity: 0, already_refunded_amount_minor: 0 }], paymentAllocations: [] }
+    const fetchMock = vi.fn().mockResolvedValue(response(body))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(getRetailCompletedSale('location / 1', 'sale / 1')).resolves.toEqual(body)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/retail/locations/location%20%2F%201/sales/sale%20%2F%201'])
+  })
+
+  it.each([201, 200] as const)('posts only Return intent and accepts status %i', async (status) => {
+    const payload = { clientOperationId: 'return-operation-1', items: [{ saleItemId: 'item-1', quantity: 1 }] }
+    const body = { saleReturn: { id: 'return-1', original_sale_id: 'sale-1', completed_at: '2026-09-19T00:00:00.000Z' }, items: [], refundAllocations: [], movements: [] }
+    const fetchMock = vi.fn().mockResolvedValue(response(body, status))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(completeRetailReturn('location / 1', 'sale / 1', payload)).resolves.toEqual({ status, body })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/retail/locations/location%20%2F%201/sales/sale%20%2F%201/returns'])
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string)).toEqual(payload)
+    expect(fetchMock.mock.calls[0]?.[1]?.body).not.toContain('amountMinor')
+    expect(fetchMock.mock.calls[0]?.[1]?.body).not.toContain('method')
+  })
+
+  it('preserves Return server errors from the shared HTTP transport', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ message: 'IDEMPOTENCY_CONFLICT' }, 409)))
+    const error = await completeRetailReturn('location-1', 'sale-1', { clientOperationId: 'return-1', items: [{ saleItemId: 'item-1', quantity: 1 }] }).catch((reason: unknown) => reason)
+    expect(error).toBeInstanceOf(HttpError)
+    expect(error).toMatchObject({ status: 409, message: 'IDEMPOTENCY_CONFLICT' })
   })
 
   it('loads locations and maps JSON timestamps to canonical retail locations', async () => {
