@@ -389,4 +389,46 @@ const retailSaleDiscounts = createSqlMigration('038_retail_sale_discounts_v1', `
       SELECT RAISE(ABORT,'Completed Retail Sale Item Discounts are immutable.');
     END;
 `)
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts] as const
+const retailSaleReturns = createSqlMigration('039_retail_sale_returns_v1', `
+  CREATE TABLE retail_sale_returns (
+    id TEXT PRIMARY KEY,
+    original_sale_id TEXT NOT NULL REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    currency_code TEXT NOT NULL,
+    currency_exponent INTEGER NOT NULL CHECK(typeof(currency_exponent)='integer' AND currency_exponent BETWEEN 0 AND 9),
+    completed_at TEXT NOT NULL,
+    created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT
+  );
+  CREATE INDEX retail_sale_returns_sale_completed_idx ON retail_sale_returns(original_sale_id,completed_at,id);
+  CREATE TABLE retail_sale_return_items (
+    id TEXT PRIMARY KEY,
+    return_id TEXT NOT NULL REFERENCES retail_sale_returns(id) ON DELETE RESTRICT,
+    original_sale_item_id TEXT NOT NULL REFERENCES retail_sale_items(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK(typeof(quantity)='integer' AND quantity>0),
+    refunded_amount_minor INTEGER NOT NULL CHECK(typeof(refunded_amount_minor)='integer' AND refunded_amount_minor>0),
+    UNIQUE(return_id,original_sale_item_id)
+  );
+  CREATE TABLE retail_sale_return_refund_allocations (
+    id TEXT PRIMARY KEY,
+    return_id TEXT NOT NULL REFERENCES retail_sale_returns(id) ON DELETE RESTRICT,
+    original_payment_allocation_id TEXT NOT NULL REFERENCES retail_payment_allocations(id) ON DELETE RESTRICT,
+    amount_minor INTEGER NOT NULL CHECK(typeof(amount_minor)='integer' AND amount_minor>0),
+    UNIQUE(return_id,original_payment_allocation_id)
+  );
+  CREATE TABLE retail_sale_return_operation_receipts (
+    client_operation_id TEXT PRIMARY KEY,
+    schema_version INTEGER NOT NULL CHECK(typeof(schema_version)='integer' AND schema_version>0),
+    payload_hash TEXT NOT NULL,
+    return_id TEXT NOT NULL REFERENCES retail_sale_returns(id) ON DELETE RESTRICT,
+    accepted_at TEXT NOT NULL
+  );
+  CREATE TRIGGER retail_sale_returns_no_update BEFORE UPDATE ON retail_sale_returns BEGIN SELECT RAISE(ABORT,'Completed Retail Sale Returns are immutable.'); END;
+  CREATE TRIGGER retail_sale_returns_no_delete BEFORE DELETE ON retail_sale_returns BEGIN SELECT RAISE(ABORT,'Completed Retail Sale Returns are immutable.'); END;
+  CREATE TRIGGER retail_sale_return_items_no_update BEFORE UPDATE ON retail_sale_return_items BEGIN SELECT RAISE(ABORT,'Completed Retail Sale Return Items are immutable.'); END;
+  CREATE TRIGGER retail_sale_return_items_no_delete BEFORE DELETE ON retail_sale_return_items BEGIN SELECT RAISE(ABORT,'Completed Retail Sale Return Items are immutable.'); END;
+  CREATE TRIGGER retail_sale_return_refund_allocations_no_update BEFORE UPDATE ON retail_sale_return_refund_allocations BEGIN SELECT RAISE(ABORT,'Completed Retail Sale Return Refund Allocations are immutable.'); END;
+  CREATE TRIGGER retail_sale_return_refund_allocations_no_delete BEFORE DELETE ON retail_sale_return_refund_allocations BEGIN SELECT RAISE(ABORT,'Completed Retail Sale Return Refund Allocations are immutable.'); END;
+  CREATE TRIGGER retail_sale_return_operation_receipts_no_update BEFORE UPDATE ON retail_sale_return_operation_receipts BEGIN SELECT RAISE(ABORT,'Retail Sale Return operation receipts are immutable.'); END;
+  CREATE TRIGGER retail_sale_return_operation_receipts_no_delete BEFORE DELETE ON retail_sale_return_operation_receipts BEGIN SELECT RAISE(ABORT,'Retail Sale Return operation receipts are immutable.'); END;
+`)
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns] as const

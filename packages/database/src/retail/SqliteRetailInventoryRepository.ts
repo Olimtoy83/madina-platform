@@ -75,7 +75,7 @@ export function recordRetailInventoryMovement(database: DatabaseSync, input: Rec
   if (existing) return toMovement(existing)
   const product = database.prepare('SELECT status FROM retail_products WHERE id = ?').get(movement.productId) as { status: string } | undefined
   if (!product) throw new Error('Retail Product not found.')
-  if (product.status !== 'active') throw new Error('Retail Product is inactive.')
+  if (product.status !== 'active' && !isHistoricalSaleReturn(database, movement)) throw new Error('Retail Product is inactive.')
   const location = database.prepare('SELECT status FROM retail_locations WHERE id = ?').get(movement.locationId) as { status: string } | undefined
   if (!location) throw new Error('Retail Location not found.')
   if (location.status !== 'active') throw new Error('Retail Location is inactive.')
@@ -86,4 +86,26 @@ export function recordRetailInventoryMovement(database: DatabaseSync, input: Rec
   database.prepare('INSERT INTO retail_inventory_balances (product_id, location_id, on_hand_quantity, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(product_id, location_id) DO UPDATE SET on_hand_quantity = excluded.on_hand_quantity, updated_at = excluded.updated_at').run(movement.productId, movement.locationId, next, movement.createdAt.toISOString())
   appendAuditEvent(database, { id: randomUUID(), occurredAt: new Date(), actorType: context.actorType, actorUserId: context.actorUserId, requestId: context.requestId, domain: 'retail', entityType: 'retail_inventory_movement', entityId: movement.id, action: 'retail.inventory_movement_recorded', metadata: { productId: movement.productId, locationId: movement.locationId, quantityDelta: movement.quantityDelta, type: movement.type, sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineId: movement.sourceLineId } })
   return movement
+}
+
+function isHistoricalSaleReturn(database: DatabaseSync, movement: RetailInventoryMovement): boolean {
+  if (movement.type !== 'return' || movement.sourceType !== 'retail_sale_return') return false
+  return database.prepare(`
+    SELECT 1
+    FROM retail_sale_return_items return_item
+    JOIN retail_sale_returns sale_return ON sale_return.id = return_item.return_id
+    JOIN retail_sale_items sale_item ON sale_item.id = return_item.original_sale_item_id
+    JOIN retail_sales sale ON sale.id = sale_item.sale_id
+    WHERE return_item.id = ?
+      AND sale_return.id = ?
+      AND sale_item.product_id = ?
+      AND sale.location_id = ?
+      AND sale_return.location_id = ?
+  `).get(
+    movement.sourceLineId,
+    movement.sourceId,
+    movement.productId,
+    movement.locationId,
+    movement.locationId,
+  ) !== undefined
 }
