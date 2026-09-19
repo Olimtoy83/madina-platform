@@ -19,6 +19,12 @@ export interface RetailSaleReturnResult {
   replayed: boolean
 }
 
+export interface RetailCompletedSaleRead {
+  sale: unknown
+  items: unknown[]
+  paymentAllocations: unknown[]
+}
+
 interface SaleRow { id: string; location_id: string; status: string; currency_code: string; currency_exponent: number; payable_total_minor: number }
 interface SaleItemRow { id: string; sale_id: string; product_id: string; quantity: number; line_total_minor: number; discount_amount_minor: number | null }
 interface PaymentRow { id: string; sale_id: string; method: string; amount_minor: number; ordinal: number }
@@ -49,6 +55,38 @@ export class SqliteRetailSaleReturnRepository {
   private readonly database: DatabaseSync
 
   constructor(filename: string) { this.database = openDatabaseConnection(filename) }
+
+  async findCompletedSale(locationId: string, saleId: string): Promise<RetailCompletedSaleRead | undefined> {
+    const sale = this.database.prepare(`
+      SELECT id, location_id, status, currency_code, currency_exponent, payable_total_minor, completed_at
+      FROM retail_sales WHERE id = ? AND location_id = ? AND status = 'completed'
+    `).get(saleId, locationId)
+    if (!sale) return undefined
+    const items = this.database.prepare(`
+      SELECT sale_item.id AS sale_item_id, sale_item.product_id, product.source_id, product.name,
+             sale_item.quantity, sale_item.unit_price_minor, sale_item.line_total_minor,
+             COALESCE(discount.amount_minor, 0) AS discount_amount_minor,
+             COALESCE((SELECT SUM(return_item.quantity) FROM retail_sale_return_items return_item
+               JOIN retail_sale_returns sale_return ON sale_return.id = return_item.return_id
+               WHERE return_item.original_sale_item_id = sale_item.id AND sale_return.original_sale_id = ?), 0) AS already_returned_quantity,
+             COALESCE((SELECT SUM(return_item.refunded_amount_minor) FROM retail_sale_return_items return_item
+               JOIN retail_sale_returns sale_return ON sale_return.id = return_item.return_id
+               WHERE return_item.original_sale_item_id = sale_item.id AND sale_return.original_sale_id = ?), 0) AS already_refunded_amount_minor
+      FROM retail_sale_items sale_item
+      JOIN retail_products product ON product.id = sale_item.product_id
+      LEFT JOIN retail_sale_item_discounts discount ON discount.sale_item_id = sale_item.id
+      WHERE sale_item.sale_id = ? ORDER BY sale_item.id
+    `).all(saleId, saleId, saleId) as unknown[]
+    const paymentAllocations = this.database.prepare(`
+      SELECT payment.id, payment.method, payment.amount_minor, payment.ordinal,
+             COALESCE((SELECT SUM(refund.amount_minor) FROM retail_sale_return_refund_allocations refund
+               JOIN retail_sale_returns sale_return ON sale_return.id = refund.return_id
+               WHERE refund.original_payment_allocation_id = payment.id AND sale_return.original_sale_id = ?), 0) AS already_refunded_amount_minor
+      FROM retail_payment_allocations payment
+      WHERE payment.sale_id = ? ORDER BY payment.ordinal, payment.id
+    `).all(saleId, saleId) as unknown[]
+    return { sale, items, paymentAllocations }
+  }
 
   async complete(locationId: string, input: RetailSaleReturnInput, context: CommandContext): Promise<RetailSaleReturnResult> {
     return this.transaction(async () => {
