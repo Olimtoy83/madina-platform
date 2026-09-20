@@ -113,6 +113,8 @@ function offlineEffects(fixture: OfflineSyncFixture): OfflineEffects {
 
 function assertNoOfflineEffects(fixture: OfflineSyncFixture, before: OfflineEffects): void { deepEqual(offlineEffects(fixture), before) }
 function permitEvidenceCount(fixture: OfflineSyncFixture, permitId: string): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_sale_evidence WHERE permit_id=?').get(permitId) as { count: number }).count }
+function conflictVerificationCount(fixture: OfflineSyncFixture, permitId: string): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE permit_id=?').get(permitId) as { count: number }).count }
+function conflictVerificationTotal(fixture: OfflineSyncFixture): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications').get() as { count: number }).count }
 
 async function withOfflineSyncFixture(run: (fixture: OfflineSyncFixture) => Promise<void>): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'retail-offline-sync-api-')), file = join(directory, 'x.sqlite'), previous = process.env.DATABASE_FILE
@@ -185,6 +187,7 @@ test('Offline Sync HTTP failure matrix batch 2: authority and permit failures ha
     const otherAuthority = await fixture.offline.issueAuthority({ terminalId: fixture.terminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
     const otherPermit = (await fixture.offline.listPermits(otherAuthority.id))[0]!
     equal((await postOffline(fixture, signedOfflinePayload(offlineEnvelope(fixture, otherPermit), fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    equal(conflictVerificationTotal(fixture), 0)
     const reusableAuthority = await fixture.offline.issueAuthority({ terminalId: fixture.terminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
     const reusablePermit = (await fixture.offline.listPermits(reusableAuthority.id))[0]!, first = offlineEnvelope(fixture, reusablePermit, { authorityId: reusableAuthority.id })
     equal((await postOffline(fixture, signedOfflinePayload(first, fixture.pair.privateKey))).statusCode, 201)
@@ -210,15 +213,17 @@ test('Offline Sync HTTP failure matrix batch 3: product, money, and schema failu
       { ...valid.envelope, paymentAllocations: [valid.envelope.cashAllocation, valid.envelope.cashAllocation] },
       { ...valid.envelope, discountAmountMinor: 1 },
     ]) { equal((await postOffline(fixture, { ...valid, envelope })).statusCode, 400); assertNoOfflineEffects(fixture, before) }
+    equal(conflictVerificationTotal(fixture), 0)
   })
 })
 
-test('Offline Sync HTTP failure matrix batch 4: stock conflict and signed idempotency conflict preserve effects', async () => {
+test('Offline Sync HTTP stock conflict persists only immutable verification evidence', async () => {
   await withOfflineSyncFixture(async (fixture) => {
     const before = offlineEffects(fixture)
     const insufficient = offlineEnvelope(fixture, fixture.permits[0]!, { lines: [{ id: 'stock-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'stock-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
     const stockResponse = await postOffline(fixture, signedOfflinePayload(insufficient, fixture.pair.privateKey))
-    equal(stockResponse.statusCode, 409); equal((stockResponse.json() as { message: string }).message, 'VERIFIED_OFFLINE_STOCK_CONFLICT'); assertNoOfflineEffects(fixture, before); equal(permitEvidenceCount(fixture, fixture.permits[0]!.id), 0)
+    equal(stockResponse.statusCode, 409); equal((stockResponse.json() as { message: string }).message, 'VERIFIED_OFFLINE_STOCK_CONFLICT'); assertNoOfflineEffects(fixture, before); equal(permitEvidenceCount(fixture, fixture.permits[0]!.id), 0); equal(conflictVerificationCount(fixture, fixture.permits[0]!.id), 1)
+    equal((await postOffline(fixture, signedOfflinePayload(insufficient, fixture.pair.privateKey))).statusCode, 409); equal(conflictVerificationCount(fixture, fixture.permits[0]!.id), 1)
     const original = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'idempotency-operation', proposedSaleId: 'idempotency-sale' })
     equal((await postOffline(fixture, signedOfflinePayload(original, fixture.pair.privateKey))).statusCode, 201)
     const afterOriginal = offlineEffects(fixture), changed = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'idempotency-operation', proposedSaleId: 'changed-sale', lines: [{ id: 'changed-line', productId: fixture.product.id, quantity: 1, unitPriceMinor: 100 }], cashAllocation: { id: 'changed-payment', method: 'cash', amountMinor: 100, ordinal: 0 } })

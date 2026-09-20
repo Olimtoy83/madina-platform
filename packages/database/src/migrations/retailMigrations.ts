@@ -535,4 +535,45 @@ const retailOfflineSaleSync = createSqlMigration('041_retail_offline_sale_sync_v
   CREATE TRIGGER retail_offline_sale_sync_receipts_no_update BEFORE UPDATE ON retail_offline_sale_sync_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline Sale sync receipts are immutable.'); END;
   CREATE TRIGGER retail_offline_sale_sync_receipts_no_delete BEFORE DELETE ON retail_offline_sale_sync_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline Sale sync receipts are immutable.'); END;
 `)
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync] as const
+const retailOfflineStockConflictVerification = createSqlMigration('042_retail_offline_stock_conflict_verification_v1', `
+  CREATE TABLE retail_offline_stock_conflict_verifications (
+    offline_operation_id TEXT PRIMARY KEY,
+    authority_id TEXT NOT NULL REFERENCES retail_offline_authorities(id) ON DELETE RESTRICT,
+    authority_version INTEGER NOT NULL,
+    permit_id TEXT NOT NULL REFERENCES retail_offline_authority_permits(id) ON DELETE RESTRICT,
+    terminal_id TEXT NOT NULL,
+    terminal_key_version INTEGER NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    currency_code TEXT NOT NULL,
+    currency_exponent INTEGER NOT NULL,
+    proposed_sale_id TEXT NOT NULL UNIQUE,
+    cash_allocation_id TEXT NOT NULL UNIQUE,
+    claimed_completed_at TEXT NOT NULL,
+    canonical_payload TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    first_received_at TEXT NOT NULL,
+    verified_at TEXT NOT NULL,
+    verification_schema_version INTEGER NOT NULL CHECK(verification_schema_version=1),
+    UNIQUE(authority_id, permit_id),
+    FOREIGN KEY(terminal_id, terminal_key_version) REFERENCES retail_offline_terminal_keys(terminal_id, key_version)
+  );
+  CREATE TABLE retail_offline_stock_conflict_verification_lines (
+    offline_operation_id TEXT NOT NULL REFERENCES retail_offline_stock_conflict_verifications(offline_operation_id) ON DELETE RESTRICT,
+    sale_item_id TEXT NOT NULL,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    quantity INTEGER NOT NULL CHECK(typeof(quantity)='integer' AND quantity>0),
+    authorized_unit_price_minor INTEGER NOT NULL CHECK(typeof(authorized_unit_price_minor)='integer' AND authorized_unit_price_minor>0),
+    observed_on_hand_quantity INTEGER NOT NULL CHECK(typeof(observed_on_hand_quantity)='integer' AND observed_on_hand_quantity>=0),
+    initial_deficit_quantity INTEGER NOT NULL CHECK(typeof(initial_deficit_quantity)='integer' AND initial_deficit_quantity>=0),
+    PRIMARY KEY(offline_operation_id, sale_item_id),
+    UNIQUE(offline_operation_id, product_id)
+  );
+  CREATE INDEX retail_offline_stock_conflict_verifications_location_received_idx ON retail_offline_stock_conflict_verifications(location_id, first_received_at, offline_operation_id);
+  CREATE TRIGGER retail_offline_stock_conflict_verifications_no_update BEFORE UPDATE ON retail_offline_stock_conflict_verifications BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict verification is immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_verifications_no_delete BEFORE DELETE ON retail_offline_stock_conflict_verifications BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict verification is immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_verification_lines_no_update BEFORE UPDATE ON retail_offline_stock_conflict_verification_lines BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict verification lines are immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_verification_lines_no_delete BEFORE DELETE ON retail_offline_stock_conflict_verification_lines BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict verification lines are immutable.'); END;
+`)
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification] as const
