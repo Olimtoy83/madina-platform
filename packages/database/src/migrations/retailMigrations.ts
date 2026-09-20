@@ -431,4 +431,98 @@ const retailSaleReturns = createSqlMigration('039_retail_sale_returns_v1', `
   CREATE TRIGGER retail_sale_return_operation_receipts_no_update BEFORE UPDATE ON retail_sale_return_operation_receipts BEGIN SELECT RAISE(ABORT,'Retail Sale Return operation receipts are immutable.'); END;
   CREATE TRIGGER retail_sale_return_operation_receipts_no_delete BEFORE DELETE ON retail_sale_return_operation_receipts BEGIN SELECT RAISE(ABORT,'Retail Sale Return operation receipts are immutable.'); END;
 `)
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns] as const
+const retailOfflineAuthorityFoundation = createSqlMigration('040_retail_offline_authority_foundation_v1', `
+  CREATE TABLE retail_offline_terminals (
+    id TEXT PRIMARY KEY,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    current_key_version INTEGER NOT NULL CHECK(typeof(current_key_version)='integer' AND current_key_version>0),
+    enrolled_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    enrolled_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE retail_offline_terminal_keys (
+    terminal_id TEXT NOT NULL REFERENCES retail_offline_terminals(id) ON DELETE RESTRICT,
+    key_version INTEGER NOT NULL CHECK(typeof(key_version)='integer' AND key_version>0),
+    key_algorithm TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    created_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    PRIMARY KEY(terminal_id,key_version),
+    UNIQUE(terminal_id,public_key)
+  );
+  CREATE TABLE retail_offline_terminal_revocations (
+    terminal_id TEXT PRIMARY KEY REFERENCES retail_offline_terminals(id) ON DELETE RESTRICT,
+    revoked_at TEXT NOT NULL,
+    revoked_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    reason TEXT NOT NULL
+  );
+  CREATE TABLE retail_offline_authorities (
+    id TEXT PRIMARY KEY,
+    authority_version INTEGER NOT NULL CHECK(typeof(authority_version)='integer' AND authority_version>0),
+    terminal_id TEXT NOT NULL,
+    terminal_key_version INTEGER NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    issued_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    currency_code TEXT NOT NULL CHECK(typeof(currency_code)='text' AND length(currency_code)=3 AND currency_code GLOB '[A-Z][A-Z][A-Z]'),
+    currency_exponent INTEGER NOT NULL CHECK(typeof(currency_exponent)='integer' AND currency_exponent BETWEEN 0 AND 9),
+    payment_method TEXT NOT NULL CHECK(payment_method='cash'),
+    discounts_allowed INTEGER NOT NULL CHECK(discounts_allowed=0),
+    permit_count INTEGER NOT NULL CHECK(typeof(permit_count)='integer' AND permit_count>0),
+    issued_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    FOREIGN KEY(terminal_id,terminal_key_version) REFERENCES retail_offline_terminal_keys(terminal_id,key_version),
+    CHECK(expires_at > issued_at)
+  );
+  CREATE TABLE retail_offline_authority_product_prices (
+    authority_id TEXT NOT NULL REFERENCES retail_offline_authorities(id) ON DELETE RESTRICT,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    unit_price_minor INTEGER NOT NULL CHECK(typeof(unit_price_minor)='integer' AND unit_price_minor>0),
+    PRIMARY KEY(authority_id,product_id)
+  );
+  CREATE TABLE retail_offline_authority_permits (
+    id TEXT PRIMARY KEY,
+    authority_id TEXT NOT NULL REFERENCES retail_offline_authorities(id) ON DELETE RESTRICT,
+    sequence INTEGER NOT NULL CHECK(typeof(sequence)='integer' AND sequence>=0),
+    UNIQUE(authority_id,sequence)
+  );
+  CREATE TABLE retail_offline_authority_revocations (
+    authority_id TEXT PRIMARY KEY REFERENCES retail_offline_authorities(id) ON DELETE RESTRICT,
+    revoked_at TEXT NOT NULL,
+    revoked_by_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    reason TEXT NOT NULL
+  );
+  CREATE TABLE retail_offline_sale_evidence (
+    offline_operation_id TEXT PRIMARY KEY,
+    authority_id TEXT NOT NULL REFERENCES retail_offline_authorities(id) ON DELETE RESTRICT,
+    authority_version INTEGER NOT NULL,
+    permit_id TEXT NOT NULL REFERENCES retail_offline_authority_permits(id) ON DELETE RESTRICT,
+    terminal_id TEXT NOT NULL,
+    terminal_key_version INTEGER NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    proposed_sale_id TEXT NOT NULL,
+    claimed_completed_at TEXT NOT NULL,
+    canonical_payload TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    UNIQUE(authority_id,permit_id),
+    FOREIGN KEY(terminal_id,terminal_key_version) REFERENCES retail_offline_terminal_keys(terminal_id,key_version)
+  );
+  CREATE TRIGGER retail_offline_terminal_keys_no_update BEFORE UPDATE ON retail_offline_terminal_keys BEGIN SELECT RAISE(ABORT,'Retail Offline Terminal keys are immutable.'); END;
+  CREATE TRIGGER retail_offline_terminal_keys_no_delete BEFORE DELETE ON retail_offline_terminal_keys BEGIN SELECT RAISE(ABORT,'Retail Offline Terminal keys are immutable.'); END;
+  CREATE TRIGGER retail_offline_terminal_revocations_no_update BEFORE UPDATE ON retail_offline_terminal_revocations BEGIN SELECT RAISE(ABORT,'Retail Offline Terminal revocations are immutable.'); END;
+  CREATE TRIGGER retail_offline_terminal_revocations_no_delete BEFORE DELETE ON retail_offline_terminal_revocations BEGIN SELECT RAISE(ABORT,'Retail Offline Terminal revocations are immutable.'); END;
+  CREATE TRIGGER retail_offline_authorities_no_update BEFORE UPDATE ON retail_offline_authorities BEGIN SELECT RAISE(ABORT,'Retail Offline Authorities are immutable.'); END;
+  CREATE TRIGGER retail_offline_authorities_no_delete BEFORE DELETE ON retail_offline_authorities BEGIN SELECT RAISE(ABORT,'Retail Offline Authorities are immutable.'); END;
+  CREATE TRIGGER retail_offline_authority_product_prices_no_update BEFORE UPDATE ON retail_offline_authority_product_prices BEGIN SELECT RAISE(ABORT,'Retail Offline Authority Product prices are immutable.'); END;
+  CREATE TRIGGER retail_offline_authority_product_prices_no_delete BEFORE DELETE ON retail_offline_authority_product_prices BEGIN SELECT RAISE(ABORT,'Retail Offline Authority Product prices are immutable.'); END;
+  CREATE TRIGGER retail_offline_authority_permits_no_update BEFORE UPDATE ON retail_offline_authority_permits BEGIN SELECT RAISE(ABORT,'Retail Offline Authority permits are immutable.'); END;
+  CREATE TRIGGER retail_offline_authority_permits_no_delete BEFORE DELETE ON retail_offline_authority_permits BEGIN SELECT RAISE(ABORT,'Retail Offline Authority permits are immutable.'); END;
+  CREATE TRIGGER retail_offline_authority_revocations_no_update BEFORE UPDATE ON retail_offline_authority_revocations BEGIN SELECT RAISE(ABORT,'Retail Offline Authority revocations are immutable.'); END;
+  CREATE TRIGGER retail_offline_authority_revocations_no_delete BEFORE DELETE ON retail_offline_authority_revocations BEGIN SELECT RAISE(ABORT,'Retail Offline Authority revocations are immutable.'); END;
+  CREATE TRIGGER retail_offline_sale_evidence_no_update BEFORE UPDATE ON retail_offline_sale_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Sale evidence is immutable.'); END;
+  CREATE TRIGGER retail_offline_sale_evidence_no_delete BEFORE DELETE ON retail_offline_sale_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Sale evidence is immutable.'); END;
+`)
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation] as const

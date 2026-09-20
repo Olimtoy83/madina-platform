@@ -74,6 +74,11 @@ export type AuditAction =
   | 'retail.transfer_created' | 'retail.transfer_updated' | 'retail.transfer_dispatched' | 'retail.transfer_received'
   | 'retail.sale_completed'
   | 'retail.sale_return_completed'
+  | 'retail.offline_terminal_enrolled'
+  | 'retail.offline_terminal_key_rotated'
+  | 'retail.offline_terminal_revoked'
+  | 'retail.offline_authority_issued'
+  | 'retail.offline_authority_revoked'
 
 export type JsonValue =
   | null
