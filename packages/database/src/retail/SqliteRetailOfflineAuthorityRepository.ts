@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
-import { hasRetailCapability } from '@madina/retail'
+import { hasRetailCapability, validateRetailOfflineEnvelope } from '@madina/retail'
 import type { CommandContext } from '@madina/shared'
 import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
 import { openDatabaseConnection } from '../connectionPolicy.js'
+import { validateRetailOfflineTerminalPublicKey, verifyRetailOfflineEnvelope, type VerifiedRetailOfflineEnvelope } from './retailOfflineEnvelopeCrypto.js'
 
 export interface EnrollRetailOfflineTerminalInput { locationId: string; keyAlgorithm: string; publicKey: string }
 export interface IssueRetailOfflineAuthorityInput { terminalId: string; userId: string; locationId: string; expiresAt: Date; permitCount: number; productIds: readonly string[]; authorityVersion?: number; paymentMethod?: string; discountsAllowed?: boolean }
 export interface PersistRetailOfflineSaleEvidenceInput { offlineOperationId: string; authorityId: string; authorityVersion: number; permitId: string; terminalId: string; terminalKeyVersion: number; userId: string; locationId: string; proposedSaleId: string; claimedCompletedAt: Date; canonicalPayload: string; payloadHash: string; signature: string }
 export interface RetailOfflineTerminal { id: string; locationId: string; currentKeyVersion: number; enrolledByUserId: string; enrolledAt: Date; updatedAt: Date; revoked: boolean }
 export interface RetailOfflineAuthority { id: string; authorityVersion: number; terminalId: string; terminalKeyVersion: number; userId: string; locationId: string; issuedAt: Date; expiresAt: Date; currencyCode: string; currencyExponent: number; permitCount: number; revoked: boolean }
+export interface RetailOfflineTerminalKey { terminalId: string; keyVersion: number; keyAlgorithm: string; publicKey: string; createdAt: Date; createdByUserId: string }
 
 const required = (value: string, field: string): string => { if (typeof value !== 'string' || !value.trim()) throw new Error(`Retail Offline ${field} is required.`); return value }
 const positive = (value: number, field: string): number => { if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Retail Offline ${field} is invalid.`); return value }
@@ -23,7 +25,7 @@ export class SqliteRetailOfflineAuthorityRepository {
     const location = this.location(input.locationId)
     if (location.status !== 'active' || location.type !== 'store') throw new Error('Retail Offline Terminal requires an active Store Location.')
     const now = new Date(); const id = randomUUID(); const actor = this.authorizedActorForLocation(context, input.locationId)
-    required(input.keyAlgorithm, 'Terminal key algorithm'); required(input.publicKey, 'Terminal public key')
+    required(input.keyAlgorithm, 'Terminal key algorithm'); required(input.publicKey, 'Terminal public key'); validateRetailOfflineTerminalPublicKey(input.keyAlgorithm,input.publicKey)
     this.database.prepare('INSERT INTO retail_offline_terminals(id,location_id,current_key_version,enrolled_by_user_id,enrolled_at,updated_at) VALUES(?,?,1,?,?,?)').run(id,input.locationId,actor,now.toISOString(),now.toISOString())
     this.database.prepare('INSERT INTO retail_offline_terminal_keys(terminal_id,key_version,key_algorithm,public_key,created_at,created_by_user_id) VALUES(?,1,?,?,?,?)').run(id,input.keyAlgorithm,input.publicKey,now.toISOString(),actor)
     this.audit(context,'retail_offline_terminal',id,'retail.offline_terminal_enrolled',{ locationId: input.locationId, keyVersion: 1 })
@@ -32,7 +34,7 @@ export class SqliteRetailOfflineAuthorityRepository {
 
   async rotateTerminalKey(terminalId: string, keyAlgorithm: string, publicKey: string, context: CommandContext): Promise<RetailOfflineTerminal> { return this.tx(async () => {
     const terminal = this.requiredTerminal(terminalId); if (terminal.revoked) throw new Error('Retail Offline Terminal is revoked.')
-    required(keyAlgorithm,'Terminal key algorithm'); required(publicKey,'Terminal public key')
+    required(keyAlgorithm,'Terminal key algorithm'); required(publicKey,'Terminal public key'); validateRetailOfflineTerminalPublicKey(keyAlgorithm,publicKey)
     const version = terminal.currentKeyVersion + 1; const now = new Date(); const actor = this.authorizedActorForLocation(context, terminal.locationId)
     this.database.prepare('INSERT INTO retail_offline_terminal_keys(terminal_id,key_version,key_algorithm,public_key,created_at,created_by_user_id) VALUES(?,?,?,?,?,?)').run(terminalId,version,keyAlgorithm,publicKey,now.toISOString(),actor)
     this.database.prepare('UPDATE retail_offline_terminals SET current_key_version=?,updated_at=? WHERE id=?').run(version,now.toISOString(),terminalId)
@@ -86,6 +88,8 @@ export class SqliteRetailOfflineAuthorityRepository {
 
   async findTerminal(id:string):Promise<RetailOfflineTerminal|undefined>{ const row=this.database.prepare(`SELECT t.id,t.location_id,t.current_key_version,t.enrolled_by_user_id,t.enrolled_at,t.updated_at,r.terminal_id AS revoked FROM retail_offline_terminals t LEFT JOIN retail_offline_terminal_revocations r ON r.terminal_id=t.id WHERE t.id=?`).get(id) as {id:string;location_id:string;current_key_version:number;enrolled_by_user_id:string;enrolled_at:string;updated_at:string;revoked:string|null}|undefined; return row&&{id:row.id,locationId:row.location_id,currentKeyVersion:row.current_key_version,enrolledByUserId:row.enrolled_by_user_id,enrolledAt:new Date(row.enrolled_at),updatedAt:new Date(row.updated_at),revoked:Boolean(row.revoked)} }
   async findAuthority(id:string):Promise<RetailOfflineAuthority|undefined>{return this.findAuthoritySync(id)}
+  async findTerminalKey(terminalId:string,keyVersion:number):Promise<RetailOfflineTerminalKey|undefined>{const row=this.database.prepare('SELECT terminal_id,key_version,key_algorithm,public_key,created_at,created_by_user_id FROM retail_offline_terminal_keys WHERE terminal_id=? AND key_version=?').get(terminalId,positive(keyVersion,'Terminal key version')) as {terminal_id:string;key_version:number;key_algorithm:string;public_key:string;created_at:string;created_by_user_id:string}|undefined;return row&&{terminalId:row.terminal_id,keyVersion:row.key_version,keyAlgorithm:row.key_algorithm,publicKey:row.public_key,createdAt:new Date(row.created_at),createdByUserId:row.created_by_user_id}}
+  async verifyEnvelopeSignature(input:{envelope:unknown;payloadHash:string;signature:string}):Promise<VerifiedRetailOfflineEnvelope>{const envelope=validateRetailOfflineEnvelope(input.envelope);const terminal=this.requiredTerminal(envelope.terminalId);const key=await this.findTerminalKey(terminal.id,envelope.terminalKeyVersion);if(!key)throw new Error('Retail Offline Envelope terminal key version is invalid.');return verifyRetailOfflineEnvelope({envelope,payloadHash:input.payloadHash,signature:input.signature,keyAlgorithm:key.keyAlgorithm,publicKey:key.publicKey})}
   async listPermits(authorityId:string):Promise<{id:string;sequence:number}[]>{return this.database.prepare('SELECT id,sequence FROM retail_offline_authority_permits WHERE authority_id=? ORDER BY sequence').all(authorityId) as {id:string;sequence:number}[]}
   private requiredTerminal(id:string):RetailOfflineTerminal{ const terminal=this.findTerminalSync(id); if(!terminal)throw new Error('Retail Offline Terminal not found.'); return terminal }
   private findTerminalSync(id:string):RetailOfflineTerminal|undefined{const row=this.database.prepare(`SELECT t.id,t.location_id,t.current_key_version,t.enrolled_by_user_id,t.enrolled_at,t.updated_at,r.terminal_id AS revoked FROM retail_offline_terminals t LEFT JOIN retail_offline_terminal_revocations r ON r.terminal_id=t.id WHERE t.id=?`).get(id) as {id:string;location_id:string;current_key_version:number;enrolled_by_user_id:string;enrolled_at:string;updated_at:string;revoked:string|null}|undefined;return row&&{id:row.id,locationId:row.location_id,currentKeyVersion:row.current_key_version,enrolledByUserId:row.enrolled_by_user_id,enrolledAt:new Date(row.enrolled_at),updatedAt:new Date(row.updated_at),revoked:Boolean(row.revoked)}}

@@ -2,6 +2,7 @@ export type RetailLocationType = 'central_warehouse' | 'store'
 export type RetailLocationStatus = 'active' | 'inactive'
 
 export * from './saleDraft.js'
+export * from './offlineEnvelope.js'
 
 export type RetailProductStatus = 'active' | 'inactive'
 export type RetailBaseUnit = 'piece'

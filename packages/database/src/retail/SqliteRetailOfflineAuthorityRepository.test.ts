@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { generateKeyPairSync } from 'node:crypto'
 import test from 'node:test'
 import { hasRetailCapability } from '@madina/retail'
 import { initializeDatabase } from '../migrations/initializeDatabase.js'
@@ -10,8 +11,10 @@ import { SqliteAuthRepository } from '../auth/SqliteAuthRepository.js'
 import { SqliteRetailAccessRepository } from './SqliteRetailAccessRepository.js'
 import { SqliteRetailCatalogRepository } from './SqliteRetailCatalogRepository.js'
 import { SqliteRetailOfflineAuthorityRepository } from './SqliteRetailOfflineAuthorityRepository.js'
+import { RETAIL_OFFLINE_SIGNATURE_ALGORITHM } from '@madina/retail'
 
 const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'offline-authority-test' }
+const publicKey = () => generateKeyPairSync('ed25519').publicKey.export({ format: 'der', type: 'spki' }).toString('base64')
 
 async function fixture(run: (value: { file: string; offline: SqliteRetailOfflineAuthorityRepository; access: SqliteRetailAccessRepository; catalog: SqliteRetailCatalogRepository; location: { id: string }; product: { id: string } }) => Promise<void>) {
   const directory = mkdtempSync(join(tmpdir(), 'retail-offline-authority-'))
@@ -32,7 +35,7 @@ async function fixture(run: (value: { file: string; offline: SqliteRetailOffline
 }
 
 async function authority(value: { offline: SqliteRetailOfflineAuthorityRepository; location: { id: string }; product: { id: string } }) {
-  const terminal = await value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: 'ed25519', publicKey: 'public-key-v1' }, context)
+  const terminal = await value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: publicKey() }, context)
   const issued = await value.offline.issueAuthority({ terminalId: terminal.id, userId: 'cashier-1', locationId: value.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 2, productIds: [value.product.id] }, context)
   return { terminal, issued, permits: await value.offline.listPermits(issued.id) }
 }
@@ -45,11 +48,11 @@ test('offline terminal capability is limited to admin and manager', () => {
 })
 
 test('offline terminal lifecycle requires terminal-management capability and manager Location access', async () => fixture(async (value) => {
-  await rejects(value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: 'ed25519', publicKey: 'operator-key' }, { actorType: 'user', actorUserId: 'operator-1', requestId: 'operator' }), /management access/)
+  await rejects(value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: publicKey() }, { actorType: 'user', actorUserId: 'operator-1', requestId: 'operator' }), /management access/)
   const manager = { actorType: 'user' as const, actorUserId: 'manager-1', requestId: 'manager' }
-  await rejects(value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: 'ed25519', publicKey: 'manager-key' }, manager), /Location access/)
+  await rejects(value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: publicKey() }, manager), /Location access/)
   await value.access.grant('manager-1', value.location.id, context)
-  equal((await value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: 'ed25519', publicKey: 'manager-key' }, manager)).enrolledByUserId, 'manager-1')
+  equal((await value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: publicKey() }, manager)).enrolledByUserId, 'manager-1')
 }))
 
 test('offline authority snapshots server price and creates immutable public-key terminal evidence', async () => fixture(async (value) => {
@@ -65,16 +68,16 @@ test('offline authority snapshots server price and creates immutable public-key 
     throws(() => database.prepare('UPDATE retail_offline_authorities SET expires_at=? WHERE id=?').run(new Date().toISOString(), issued.id), /immutable/)
     throws(() => database.prepare('UPDATE retail_offline_authority_product_prices SET unit_price_minor=1 WHERE authority_id=?').run(issued.id), /immutable/)
   } finally { database.close() }
-  const rotated = await value.offline.rotateTerminalKey(terminal.id, 'ed25519', 'public-key-v2', context)
+  const rotated = await value.offline.rotateTerminalKey(terminal.id, RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey(), context)
   equal(rotated.currentKeyVersion, 2)
   await value.offline.revokeTerminal(terminal.id, 'lost device', context)
-  await rejects(value.offline.rotateTerminalKey(terminal.id, 'ed25519', 'public-key-v3', context), /revoked/)
+  await rejects(value.offline.rotateTerminalKey(terminal.id, RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey(), context), /revoked/)
   await value.offline.revokeAuthority(issued.id, 'expired device', context)
   equal((await value.offline.findAuthority(issued.id))?.revoked, true)
 }))
 
 test('offline authority rejects unsafe policy and atomically rolls back a failed permit issuance', async () => fixture(async (value) => {
-  const terminal = await value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: 'ed25519', publicKey: 'rollback-key' }, context)
+  const terminal = await value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: publicKey() }, context)
   const input = { terminalId: terminal.id, userId: 'cashier-1', locationId: value.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 2, productIds: [value.product.id] }
   await rejects(value.offline.issueAuthority({ ...input, terminalId: 'missing' }, context), /not found/)
   await rejects(value.offline.issueAuthority({ ...input, locationId: 'wrong-location' }, context), /Location mismatch/)
@@ -82,6 +85,8 @@ test('offline authority rejects unsafe policy and atomically rolls back a failed
   await rejects(value.offline.issueAuthority({ ...input, permitCount: 0 }, context), /permit count/)
   await rejects(value.offline.issueAuthority({ ...input, paymentMethod: 'card' }, context), /cash/)
   await rejects(value.offline.issueAuthority({ ...input, discountsAllowed: true }, context), /discounts/)
+  await rejects(value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: 'ed25519', publicKey: publicKey() }, context), /unsupported/)
+  await rejects(value.offline.enrollTerminal({ locationId: value.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: 'not-base64!' }, context), /invalid/)
   const database = new DatabaseSync(value.file)
   try {
     database.exec("CREATE TRIGGER test_fail_offline_permit BEFORE INSERT ON retail_offline_authority_permits BEGIN SELECT RAISE(ABORT, 'forced permit failure'); END;")
