@@ -148,6 +148,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '038_retail_sale_discounts_v1',
       '039_retail_sale_returns_v1',
       '040_retail_offline_authority_foundation_v1',
+      '041_retail_offline_sale_sync_v1',
     ].join(','))
   })
 })

@@ -75,7 +75,7 @@ export function recordRetailInventoryMovement(database: DatabaseSync, input: Rec
   if (existing) return toMovement(existing)
   const product = database.prepare('SELECT status FROM retail_products WHERE id = ?').get(movement.productId) as { status: string } | undefined
   if (!product) throw new Error('Retail Product not found.')
-  if (product.status !== 'active' && !isHistoricalSaleReturn(database, movement)) throw new Error('Retail Product is inactive.')
+  if (product.status !== 'active' && !isHistoricalSaleReturn(database, movement) && !isVerifiedHistoricalOfflineSale(database, movement)) throw new Error('Retail Product is inactive.')
   const location = database.prepare('SELECT status FROM retail_locations WHERE id = ?').get(movement.locationId) as { status: string } | undefined
   if (!location) throw new Error('Retail Location not found.')
   if (location.status !== 'active') throw new Error('Retail Location is inactive.')
@@ -108,4 +108,17 @@ function isHistoricalSaleReturn(database: DatabaseSync, movement: RetailInventor
     movement.locationId,
     movement.locationId,
   ) !== undefined
+}
+
+/** Narrow Stage 11.3 policy seam: only an already-linked, verified offline sale may move a later-inactivated product. */
+function isVerifiedHistoricalOfflineSale(database: DatabaseSync, movement: RetailInventoryMovement): boolean {
+  if (movement.type !== 'sale' || movement.sourceType !== 'retail_offline_sale_sync') return false
+  return database.prepare(`
+    SELECT 1
+    FROM retail_offline_sale_evidence evidence
+    JOIN retail_offline_authority_product_prices price ON price.authority_id = evidence.authority_id
+    WHERE evidence.offline_operation_id = ?
+      AND evidence.location_id = ?
+      AND price.product_id = ?
+  `).get(movement.sourceId, movement.locationId, movement.productId) !== undefined
 }

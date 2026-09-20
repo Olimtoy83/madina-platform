@@ -79,6 +79,7 @@ export type AuditAction =
   | 'retail.offline_terminal_revoked'
   | 'retail.offline_authority_issued'
   | 'retail.offline_authority_revoked'
+  | 'retail.offline_sale_synced'
 
 export type JsonValue =
   | null

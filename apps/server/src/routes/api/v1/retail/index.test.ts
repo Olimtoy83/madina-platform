@@ -10,13 +10,16 @@ import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { join } from 'node:path'
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
+import type { KeyObject } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
 import test from 'node:test'
 import {
   hashSessionSecret,
   type User,
   type UserRole,
 } from '@madina/auth'
-import { hasRetailCapability } from '@madina/retail'
+import { hasRetailCapability, RETAIL_OFFLINE_SIGNATURE_ALGORITHM, RETAIL_OFFLINE_SIGNATURE_PREFIX, canonicalizeRetailOfflineEnvelope, type RetailOfflineEnvelope } from '@madina/retail'
 import {
   initializeDatabase,
   SqliteAuditRepository,
@@ -26,6 +29,7 @@ import {
   SqliteRetailInventoryRepository,
   SqliteRetailReconciliationRepository,
   SqliteRetailSaleRepository,
+  SqliteRetailOfflineAuthorityRepository,
 } from '@madina/database'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
@@ -56,6 +60,226 @@ test('retail boundary composes without routes or CRM dependencies', async () => 
   } finally {
     await app.close()
   }
+})
+
+interface OfflineSyncFixture {
+  readonly file: string
+  readonly database: DatabaseSync
+  readonly app: FastifyInstance
+  readonly session: string
+  readonly access: SqliteRetailAccessRepository
+  readonly catalog: SqliteRetailCatalogRepository
+  readonly inventory: SqliteRetailInventoryRepository
+  readonly offline: SqliteRetailOfflineAuthorityRepository
+  readonly context: { actorType: 'user'; actorUserId: string; requestId: string }
+  readonly location: { id: string }
+  readonly otherLocation: { id: string }
+  readonly product: { id: string }
+  readonly extraProduct: { id: string }
+  readonly terminal: { id: string }
+  readonly authority: { id: string }
+  readonly permits: readonly { id: string; sequence: number }[]
+  readonly pair: { publicKey: KeyObject; privateKey: KeyObject }
+  readonly url: string
+}
+
+interface OfflineEffects { sales: number; items: number; allocations: number; movements: number; evidence: number; receipts: number; balance: number | undefined }
+
+function offlineEnvelope(fixture: OfflineSyncFixture, permit: { id: string; sequence: number }, overrides: Partial<RetailOfflineEnvelope> = {}): RetailOfflineEnvelope {
+  return {
+    schemaVersion: 1, offlineOperationId: `http-op-${permit.sequence}`, authorityId: fixture.authority.id, authorityVersion: 1,
+    permitId: permit.id, permitSequence: permit.sequence, terminalId: fixture.terminal.id, terminalKeyVersion: 1,
+    userId: 'operator-1', locationId: fixture.location.id, proposedSaleId: `http-sale-${permit.sequence}`,
+    lines: [{ id: `http-line-${permit.sequence}`, productId: fixture.product.id, quantity: 1, unitPriceMinor: 100 }],
+    currencyCode: 'USD', currencyExponent: 2,
+    cashAllocation: { id: `http-payment-${permit.sequence}`, method: 'cash', amountMinor: 100, ordinal: 0 },
+    subtotalMinor: 100, payableTotalMinor: 100, claimedOfflineCompletedAt: '2026-09-20T00:00:00.000Z', ...overrides,
+  }
+}
+
+function signedOfflinePayload(envelope: RetailOfflineEnvelope, privateKey: KeyObject): { envelope: RetailOfflineEnvelope; payloadHash: string; signature: string } {
+  const canonical = canonicalizeRetailOfflineEnvelope(envelope)
+  return { envelope, payloadHash: createHash('sha256').update(canonical).digest('hex'), signature: `${RETAIL_OFFLINE_SIGNATURE_PREFIX}${sign(null, Buffer.from(canonical), privateKey).toString('base64')}` }
+}
+
+function offlineEffects(fixture: OfflineSyncFixture): OfflineEffects {
+  const count = (table: string, where = ''): number => (fixture.database.prepare(`SELECT COUNT(*) AS count FROM ${table}${where}`).get() as { count: number }).count
+  return {
+    sales: count('retail_sales'), items: count('retail_sale_items'), allocations: count('retail_payment_allocations'),
+    movements: count('retail_inventory_movements', " WHERE source_type='retail_offline_sale_sync'"), evidence: count('retail_offline_sale_evidence'), receipts: count('retail_offline_sale_sync_receipts'),
+    balance: (fixture.database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(fixture.product.id, fixture.location.id) as { on_hand_quantity: number } | undefined)?.on_hand_quantity,
+  }
+}
+
+function assertNoOfflineEffects(fixture: OfflineSyncFixture, before: OfflineEffects): void { deepEqual(offlineEffects(fixture), before) }
+function permitEvidenceCount(fixture: OfflineSyncFixture, permitId: string): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_sale_evidence WHERE permit_id=?').get(permitId) as { count: number }).count }
+
+async function withOfflineSyncFixture(run: (fixture: OfflineSyncFixture) => Promise<void>): Promise<void> {
+  const directory = mkdtempSync(join(tmpdir(), 'retail-offline-sync-api-')), file = join(directory, 'x.sqlite'), previous = process.env.DATABASE_FILE
+  initializeDatabase(file)
+  const sessions = await seedSessions(file, [{ id: 'admin-1', role: 'admin' }, { id: 'manager-1', role: 'manager' }, { id: 'operator-1', role: 'operator' }])
+  const access = new SqliteRetailAccessRepository(file), catalog = new SqliteRetailCatalogRepository(file), inventory = new SqliteRetailInventoryRepository(file), offline = new SqliteRetailOfflineAuthorityRepository(file), database = new DatabaseSync(file)
+  const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'offline-api' }
+  const location = await access.createLocation({ code: 'OFFLINE', name: 'Offline', type: 'store', status: 'active' }, context)
+  const otherLocation = await access.createLocation({ code: 'OFFLINE-OTHER', name: 'Offline other', type: 'store', status: 'active' }, context)
+  await access.configureCurrency(location.id, 'USD', 2, context); await access.configureCurrency(otherLocation.id, 'USD', 2, context)
+  const product = await catalog.createProduct({ sourceId: 'O', name: 'Offline' }, context), extraProduct = await catalog.createProduct({ sourceId: 'X', name: 'Extra' }, context)
+  await catalog.setPrice(product.id, location.id, 100, context); await catalog.setPrice(extraProduct.id, location.id, 200, context)
+  await inventory.recordMovement({ productId: product.id, locationId: location.id, quantityDelta: 5, type: 'opening', sourceType: 'test', sourceId: 'offline', sourceLineId: 'seed' }, context)
+  await inventory.recordMovement({ productId: extraProduct.id, locationId: location.id, quantityDelta: 5, type: 'opening', sourceType: 'test', sourceId: 'offline-extra', sourceLineId: 'seed' }, context)
+  await access.grant('manager-1', location.id, context); await access.grant('manager-1', otherLocation.id, context)
+  const pair = generateKeyPairSync('ed25519'), terminal = await offline.enrollTerminal({ locationId: location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: pair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64') }, context)
+  const authority = await offline.issueAuthority({ terminalId: terminal.id, userId: 'operator-1', locationId: location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 20, productIds: [product.id] }, context)
+  const permits = await offline.listPermits(authority.id)
+  process.env.DATABASE_FILE = file
+  const app = buildApp()
+  try {
+    await app.ready()
+    await run({ file, database, app, session: sessions['manager-1']!, access, catalog, inventory, offline, context, location, otherLocation, product, extraProduct, terminal, authority, permits, pair, url: `/api/v1/retail/locations/${location.id}/offline-sales/sync` })
+  } finally {
+    await app.close(); database.close(); offline.close(); inventory.close(); catalog.close(); access.close()
+    if (previous === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previous
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+function postOffline(fixture: OfflineSyncFixture, payload: unknown, url = fixture.url) { return request(fixture.app, fixture.session, { method: 'POST', url, payload }) }
+
+test('Offline Sync HTTP failure matrix batch 1: Location and crypto failures have zero effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const before = offlineEffects(fixture), valid = offlineEnvelope(fixture, fixture.permits[0]!)
+    equal((await fixture.app.inject({ method: 'POST', url: fixture.url, payload: signedOfflinePayload(valid, fixture.pair.privateKey) })).statusCode, 401)
+    equal((await postOffline(fixture, signedOfflinePayload(valid, fixture.pair.privateKey), fixture.url.replace(fixture.location.id, fixture.otherLocation.id))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const invalid = signedOfflinePayload(valid, fixture.pair.privateKey); invalid.signature = `${RETAIL_OFFLINE_SIGNATURE_PREFIX}${Buffer.alloc(64).toString('base64')}`
+    equal((await postOffline(fixture, invalid)).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const otherPair = generateKeyPairSync('ed25519')
+    equal((await postOffline(fixture, signedOfflinePayload(valid, otherPair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const boundTerminal = await fixture.offline.enrollTerminal({ locationId: fixture.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: otherPair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64') }, fixture.context)
+    const wrongTerminal = offlineEnvelope(fixture, fixture.permits[1]!, { terminalId: boundTerminal.id })
+    equal((await postOffline(fixture, signedOfflinePayload(wrongTerminal, otherPair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const rotatedPair = generateKeyPairSync('ed25519')
+    await fixture.offline.rotateTerminalKey(fixture.terminal.id, RETAIL_OFFLINE_SIGNATURE_ALGORITHM, rotatedPair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64'), fixture.context)
+    const wrongVersion = offlineEnvelope(fixture, fixture.permits[2]!, { terminalKeyVersion: 2 })
+    equal((await postOffline(fixture, signedOfflinePayload(wrongVersion, rotatedPair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+  })
+})
+
+test('Offline Sync HTTP failure matrix batch 2: authority and permit failures have zero effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const before = offlineEffects(fixture)
+    const expired = await fixture.offline.issueAuthority({ terminalId: fixture.terminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 25), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
+    const expiredPermit = (await fixture.offline.listPermits(expired.id))[0]!
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const expiredEnvelope = offlineEnvelope(fixture, expiredPermit, { authorityId: expired.id })
+    equal((await postOffline(fixture, signedOfflinePayload(expiredEnvelope, fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const revokedPair = generateKeyPairSync('ed25519'), revokedTerminal = await fixture.offline.enrollTerminal({ locationId: fixture.location.id, keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: revokedPair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64') }, fixture.context)
+    const revokedTerminalAuthority = await fixture.offline.issueAuthority({ terminalId: revokedTerminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
+    const revokedTerminalPermit = (await fixture.offline.listPermits(revokedTerminalAuthority.id))[0]!; await fixture.offline.revokeTerminal(revokedTerminal.id, 'test', fixture.context)
+    const revokedTerminalEnvelope = offlineEnvelope(fixture, revokedTerminalPermit, { authorityId: revokedTerminalAuthority.id, terminalId: revokedTerminal.id })
+    equal((await postOffline(fixture, signedOfflinePayload(revokedTerminalEnvelope, revokedPair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const revokedAuthority = await fixture.offline.issueAuthority({ terminalId: fixture.terminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
+    const revokedAuthorityPermit = (await fixture.offline.listPermits(revokedAuthority.id))[0]!; await fixture.offline.revokeAuthority(revokedAuthority.id, 'test', fixture.context)
+    equal((await postOffline(fixture, signedOfflinePayload(offlineEnvelope(fixture, revokedAuthorityPermit, { authorityId: revokedAuthority.id }), fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    equal((await postOffline(fixture, signedOfflinePayload(offlineEnvelope(fixture, { id: 'unknown-permit', sequence: 99 }), fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const otherAuthority = await fixture.offline.issueAuthority({ terminalId: fixture.terminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
+    const otherPermit = (await fixture.offline.listPermits(otherAuthority.id))[0]!
+    equal((await postOffline(fixture, signedOfflinePayload(offlineEnvelope(fixture, otherPermit), fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const reusableAuthority = await fixture.offline.issueAuthority({ terminalId: fixture.terminal.id, userId: 'operator-1', locationId: fixture.location.id, expiresAt: new Date(Date.now() + 60_000), permitCount: 1, productIds: [fixture.product.id] }, fixture.context)
+    const reusablePermit = (await fixture.offline.listPermits(reusableAuthority.id))[0]!, first = offlineEnvelope(fixture, reusablePermit, { authorityId: reusableAuthority.id })
+    equal((await postOffline(fixture, signedOfflinePayload(first, fixture.pair.privateKey))).statusCode, 201)
+    const afterFirst = offlineEffects(fixture), changedOperation = offlineEnvelope(fixture, reusablePermit, { authorityId: reusableAuthority.id, offlineOperationId: 'different-operation', proposedSaleId: 'different-sale', lines: [{ id: 'different-line', productId: fixture.product.id, quantity: 1, unitPriceMinor: 100 }], cashAllocation: { id: 'different-payment', method: 'cash', amountMinor: 100, ordinal: 0 } })
+    equal((await postOffline(fixture, signedOfflinePayload(changedOperation, fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, afterFirst); equal(permitEvidenceCount(fixture, reusablePermit.id), 1)
+  })
+})
+
+test('Offline Sync HTTP failure matrix batch 3: product, money, and schema failures have zero effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const before = offlineEffects(fixture)
+    const absentProduct = offlineEnvelope(fixture, fixture.permits[0]!, { lines: [{ id: 'extra-line', productId: fixture.extraProduct.id, quantity: 1, unitPriceMinor: 200 }], cashAllocation: { id: 'extra-payment', method: 'cash', amountMinor: 200, ordinal: 0 }, subtotalMinor: 200, payableTotalMinor: 200 })
+    equal((await postOffline(fixture, signedOfflinePayload(absentProduct, fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const alteredPrice = offlineEnvelope(fixture, fixture.permits[1]!, { lines: [{ id: 'altered-line', productId: fixture.product.id, quantity: 1, unitPriceMinor: 101 }], cashAllocation: { id: 'altered-payment', method: 'cash', amountMinor: 101, ordinal: 0 }, subtotalMinor: 101, payableTotalMinor: 101 })
+    equal((await postOffline(fixture, signedOfflinePayload(alteredPrice, fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const wrongCurrency = offlineEnvelope(fixture, fixture.permits[2]!, { currencyCode: 'EUR' })
+    equal((await postOffline(fixture, signedOfflinePayload(wrongCurrency, fixture.pair.privateKey))).statusCode, 409); assertNoOfflineEffects(fixture, before)
+    const valid = signedOfflinePayload(offlineEnvelope(fixture, fixture.permits[3]!), fixture.pair.privateKey)
+    equal((await postOffline(fixture, { ...valid, envelope: { ...valid.envelope, subtotalMinor: 99 } })).statusCode, 400); assertNoOfflineEffects(fixture, before)
+    equal((await postOffline(fixture, { ...valid, envelope: { ...valid.envelope, lines: [{ ...valid.envelope.lines[0]!, quantity: 0 }] } })).statusCode, 400); assertNoOfflineEffects(fixture, before)
+    for (const envelope of [
+      { ...valid.envelope, cashAllocation: { ...valid.envelope.cashAllocation, method: 'card' } },
+      { ...valid.envelope, paymentAllocations: [valid.envelope.cashAllocation, valid.envelope.cashAllocation] },
+      { ...valid.envelope, discountAmountMinor: 1 },
+    ]) { equal((await postOffline(fixture, { ...valid, envelope })).statusCode, 400); assertNoOfflineEffects(fixture, before) }
+  })
+})
+
+test('Offline Sync HTTP failure matrix batch 4: stock conflict and signed idempotency conflict preserve effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const before = offlineEffects(fixture)
+    const insufficient = offlineEnvelope(fixture, fixture.permits[0]!, { lines: [{ id: 'stock-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'stock-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
+    const stockResponse = await postOffline(fixture, signedOfflinePayload(insufficient, fixture.pair.privateKey))
+    equal(stockResponse.statusCode, 409); equal((stockResponse.json() as { message: string }).message, 'VERIFIED_OFFLINE_STOCK_CONFLICT'); assertNoOfflineEffects(fixture, before); equal(permitEvidenceCount(fixture, fixture.permits[0]!.id), 0)
+    const original = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'idempotency-operation', proposedSaleId: 'idempotency-sale' })
+    equal((await postOffline(fixture, signedOfflinePayload(original, fixture.pair.privateKey))).statusCode, 201)
+    const afterOriginal = offlineEffects(fixture), changed = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'idempotency-operation', proposedSaleId: 'changed-sale', lines: [{ id: 'changed-line', productId: fixture.product.id, quantity: 1, unitPriceMinor: 100 }], cashAllocation: { id: 'changed-payment', method: 'cash', amountMinor: 100, ordinal: 0 } })
+    const conflict = await postOffline(fixture, signedOfflinePayload(changed, fixture.pair.privateKey))
+    equal(conflict.statusCode, 409); equal((conflict.json() as { message: string }).message, 'IDEMPOTENCY_CONFLICT'); assertNoOfflineEffects(fixture, afterOriginal); equal(permitEvidenceCount(fixture, fixture.permits[1]!.id), 1)
+  })
+})
+
+interface OnlineSaleEffects { sales: number; items: number; allocations: number; onlineMovements: number; offlineMovements: number; onlineReceipts: number; offlineEvidence: number; offlineReceipts: number; productBalance: number; extraProductBalance: number }
+
+function onlineSaleEffects(fixture: OfflineSyncFixture): OnlineSaleEffects {
+  const count = (table: string, where = ''): number => (fixture.database.prepare(`SELECT COUNT(*) AS count FROM ${table}${where}`).get() as { count: number }).count
+  const balance = (productId: string): number => (fixture.database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(productId, fixture.location.id) as { on_hand_quantity: number }).on_hand_quantity
+  return {
+    sales: count('retail_sales'), items: count('retail_sale_items'), allocations: count('retail_payment_allocations'),
+    onlineMovements: count('retail_inventory_movements', " WHERE source_type='retail_sale'"), offlineMovements: count('retail_inventory_movements', " WHERE source_type='retail_offline_sale_sync'"),
+    onlineReceipts: count('retail_operation_receipts', " WHERE operation_kind='retail_sale_complete'"), offlineEvidence: count('retail_offline_sale_evidence'), offlineReceipts: count('retail_offline_sale_sync_receipts'),
+    productBalance: balance(fixture.product.id), extraProductBalance: balance(fixture.extraProduct.id),
+  }
+}
+
+function onlineSalePayload(operationId: string, productId: string, quantity: number, amountMinor: number): { clientOperationId: string; saleId: string; lines: Array<{ id: string; productId: string; quantity: number; unitPriceMinor: number }>; allocations: Array<{ id: string; method: 'cash'; amountMinor: number; ordinal: number }> } {
+  return { clientOperationId: operationId, saleId: `online-sale-${operationId}`, lines: [{ id: `online-line-${operationId}`, productId, quantity, unitPriceMinor: 999 }], allocations: [{ id: `online-payment-${operationId}`, method: 'cash', amountMinor, ordinal: 0 }] }
+}
+
+function postOnline(fixture: OfflineSyncFixture, payload: unknown) { return request(fixture.app, fixture.session, { method: 'POST', url: `/api/v1/retail/locations/${fixture.location.id}/sales/complete`, payload }) }
+
+test('Online Sale HTTP regression preserves ordinary rules and offline namespace isolation', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const first = onlineSalePayload('online-authority-price', fixture.product.id, 1, 100)
+    const accepted = await postOnline(fixture, { ...first, authorityId: fixture.authority.id, permitId: fixture.permits[0]!.id, terminalId: fixture.terminal.id })
+    equal(accepted.statusCode, 201)
+    const acceptedBody = accepted.json() as { sale: { id: string; status: string }; items: Array<{ product_id: string; unit_price_minor: number }>; allocations: Array<{ method: string; amount_minor: number; ordinal: number }> }
+    equal(acceptedBody.sale.id, first.saleId); equal(acceptedBody.sale.status, 'completed'); equal(acceptedBody.items[0]?.product_id, fixture.product.id); equal(acceptedBody.items[0]?.unit_price_minor, 100)
+    deepEqual(acceptedBody.allocations, [{ id: `online-payment-${first.clientOperationId}`, sale_id: first.saleId, method: 'cash', amount_minor: 100, ordinal: 0 }])
+    deepEqual(onlineSaleEffects(fixture), { sales: 1, items: 1, allocations: 1, onlineMovements: 1, offlineMovements: 0, onlineReceipts: 1, offlineEvidence: 0, offlineReceipts: 0, productBalance: 4, extraProductBalance: 5 })
+
+    await fixture.catalog.updateProduct(fixture.product.id, { name: 'Offline', status: 'inactive' }, fixture.context)
+    const afterInactive = onlineSaleEffects(fixture)
+    const inactive = onlineSalePayload('online-inactive', fixture.product.id, 1, 100)
+    equal((await postOnline(fixture, { ...inactive, authorityId: fixture.authority.id, permitId: fixture.permits[0]!.id, signature: 'offline-evidence-is-not-online-authority' })).statusCode, 409)
+    deepEqual(onlineSaleEffects(fixture), afterInactive)
+
+    const insufficient = onlineSalePayload('online-insufficient', fixture.extraProduct.id, 6, 1200)
+    equal((await postOnline(fixture, insufficient)).statusCode, 409)
+    deepEqual(onlineSaleEffects(fixture), afterInactive); equal(onlineSaleEffects(fixture).extraProductBalance >= 0, true)
+
+    const offlineShared = offlineEnvelope(fixture, fixture.permits[0]!, { offlineOperationId: 'shared-offline-operation', proposedSaleId: 'offline-shared-sale' })
+    equal((await postOffline(fixture, signedOfflinePayload(offlineShared, fixture.pair.privateKey))).statusCode, 201)
+    deepEqual(onlineSaleEffects(fixture), { sales: 2, items: 2, allocations: 2, onlineMovements: 1, offlineMovements: 1, onlineReceipts: 1, offlineEvidence: 1, offlineReceipts: 1, productBalance: 3, extraProductBalance: 5 })
+
+    const onlineWithOfflineOperationId = onlineSalePayload('shared-offline-operation', fixture.extraProduct.id, 1, 200)
+    equal((await postOnline(fixture, onlineWithOfflineOperationId)).statusCode, 201)
+    equal(onlineSaleEffects(fixture).onlineReceipts, 2); equal(onlineSaleEffects(fixture).offlineReceipts, 1); equal(onlineSaleEffects(fixture).extraProductBalance, 4)
+
+    const onlineOnly = onlineSalePayload('online-only-operation', fixture.extraProduct.id, 1, 200)
+    equal((await postOnline(fixture, onlineOnly)).statusCode, 201)
+    const offlineWithOnlineOperationId = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'online-only-operation', proposedSaleId: 'offline-online-only-sale' })
+    equal((await postOffline(fixture, signedOfflinePayload(offlineWithOnlineOperationId, fixture.pair.privateKey))).statusCode, 201)
+    deepEqual(onlineSaleEffects(fixture), { sales: 5, items: 5, allocations: 5, onlineMovements: 3, offlineMovements: 2, onlineReceipts: 3, offlineEvidence: 2, offlineReceipts: 2, productBalance: 2, extraProductBalance: 3 })
+  })
 })
 
 test('Retail Sale, price, and discount capabilities map only to admin and manager', () => {

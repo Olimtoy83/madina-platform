@@ -525,4 +525,14 @@ const retailOfflineAuthorityFoundation = createSqlMigration('040_retail_offline_
   CREATE TRIGGER retail_offline_sale_evidence_no_update BEFORE UPDATE ON retail_offline_sale_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Sale evidence is immutable.'); END;
   CREATE TRIGGER retail_offline_sale_evidence_no_delete BEFORE DELETE ON retail_offline_sale_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Sale evidence is immutable.'); END;
 `)
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation] as const
+const retailOfflineSaleSync = createSqlMigration('041_retail_offline_sale_sync_v1', `
+  CREATE TABLE retail_offline_sale_sync_receipts (
+    offline_operation_id TEXT PRIMARY KEY REFERENCES retail_offline_sale_evidence(offline_operation_id) ON DELETE RESTRICT,
+    payload_hash TEXT NOT NULL,
+    sale_id TEXT NOT NULL UNIQUE REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    accepted_at TEXT NOT NULL
+  );
+  CREATE TRIGGER retail_offline_sale_sync_receipts_no_update BEFORE UPDATE ON retail_offline_sale_sync_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline Sale sync receipts are immutable.'); END;
+  CREATE TRIGGER retail_offline_sale_sync_receipts_no_delete BEFORE DELETE ON retail_offline_sale_sync_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline Sale sync receipts are immutable.'); END;
+`)
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync] as const
