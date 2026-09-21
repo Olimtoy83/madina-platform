@@ -1,6 +1,7 @@
 import {
   deepEqual,
   equal,
+  rejects,
 } from 'node:assert/strict'
 import {
   mkdtempSync,
@@ -30,6 +31,7 @@ import {
   SqliteRetailReconciliationRepository,
   SqliteRetailSaleRepository,
   SqliteRetailOfflineAuthorityRepository,
+  SqliteRetailOfflineStockConflictMaterializationRepository,
 } from '@madina/database'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
@@ -116,6 +118,10 @@ function assertNoOfflineEffects(fixture: OfflineSyncFixture, before: OfflineEffe
 function permitEvidenceCount(fixture: OfflineSyncFixture, permitId: string): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_sale_evidence WHERE permit_id=?').get(permitId) as { count: number }).count }
 function conflictVerificationCount(fixture: OfflineSyncFixture, permitId: string): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE permit_id=?').get(permitId) as { count: number }).count }
 function conflictVerificationTotal(fixture: OfflineSyncFixture): number { return (fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications').get() as { count: number }).count }
+function materializationEffects(fixture: OfflineSyncFixture): { sales: number; items: number; allocations: number; evidence: number; movements: number; incidents: number; receipts: number; balance: number | undefined } {
+  const count = (table: string, where = ''): number => (fixture.database.prepare(`SELECT COUNT(*) AS count FROM ${table}${where}`).get() as { count: number }).count
+  return { sales: count('retail_sales'), items: count('retail_sale_items'), allocations: count('retail_payment_allocations'), evidence: count('retail_offline_sale_evidence'), movements: count('retail_inventory_movements', " WHERE source_type='retail_offline_stock_conflict_materialization'"), incidents: count('retail_offline_stock_conflict_incidents'), receipts: count('retail_offline_stock_conflict_materialization_receipts'), balance: (fixture.database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(fixture.product.id, fixture.location.id) as { on_hand_quantity: number } | undefined)?.on_hand_quantity }
+}
 
 async function withOfflineSyncFixture(run: (fixture: OfflineSyncFixture) => Promise<void>): Promise<void> {
   const directory = mkdtempSync(join(tmpdir(), 'retail-offline-sync-api-')), file = join(directory, 'x.sqlite'), previous = process.env.DATABASE_FILE
@@ -245,6 +251,45 @@ test('Offline stock-conflict materialization requires the narrow manager command
     equal((await request(fixture.app, fixture.session, { method: 'GET', url: `/api/v1/retail/locations/${fixture.location.id}/sales/${conflict.proposedSaleId}` })).statusCode, 200)
     equal((fixture.database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(fixture.product.id, fixture.location.id) as { on_hand_quantity: number }).on_hand_quantity, -1)
     equal((fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incidents WHERE offline_operation_id=?').get(conflict.offlineOperationId) as { count: number }).count, 1)
+  })
+})
+
+test('Fixture C: first Offline Sync presentation after authority trust loss creates no eligible verification or materialization effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const envelope = offlineEnvelope(fixture, fixture.permits[11]!, { offlineOperationId: 'trust-loss-first-presentation', proposedSaleId: 'trust-loss-sale', lines: [{ id: 'trust-loss-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'trust-loss-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
+    await fixture.offline.revokeAuthority(fixture.authority.id, 'trust lost before first presentation', fixture.context)
+    const before = materializationEffects(fixture)
+    equal((await postOffline(fixture, signedOfflinePayload(envelope, fixture.pair.privateKey))).statusCode, 409)
+    equal(conflictVerificationCount(fixture, fixture.permits[11]!.id), 0)
+    equal(conflictVerificationTotal(fixture), 0)
+    const materializer = new SqliteRetailOfflineStockConflictMaterializationRepository(fixture.file)
+    try { await rejects(materializer.materialize(fixture.location.id, { offlineOperationId: envelope.offlineOperationId, commandId: 'trust-loss-materialize' }, fixture.context), /verification is required/) } finally { materializer.close() }
+    deepEqual(materializationEffects(fixture), before)
+  })
+})
+
+test('Fixture D: materialization HTTP endpoint denies a capable manager without an active Location grant and persists no effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const envelope = offlineEnvelope(fixture, fixture.permits[12]!, { offlineOperationId: 'missing-grant-materialization', proposedSaleId: 'missing-grant-sale', lines: [{ id: 'missing-grant-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'missing-grant-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
+    equal((await postOffline(fixture, signedOfflinePayload(envelope, fixture.pair.privateKey))).statusCode, 409)
+    equal(conflictVerificationCount(fixture, fixture.permits[12]!.id), 1)
+    const before = materializationEffects(fixture)
+    await fixture.access.revoke('manager-1', fixture.location.id, fixture.context)
+    const response = await request(fixture.app, fixture.session, { method: 'POST', url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`, payload: { offlineOperationId: envelope.offlineOperationId, commandId: 'missing-grant-command' } })
+    equal(response.statusCode, 403)
+    deepEqual(materializationEffects(fixture), before)
+  })
+})
+
+test('Fixture E: materialization HTTP endpoint rejects an explicitly untrusted Origin without persisted effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const envelope = offlineEnvelope(fixture, fixture.permits[13]!, { offlineOperationId: 'untrusted-origin-materialization', proposedSaleId: 'untrusted-origin-sale', lines: [{ id: 'untrusted-origin-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'untrusted-origin-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
+    equal((await postOffline(fixture, signedOfflinePayload(envelope, fixture.pair.privateKey))).statusCode, 409)
+    const before = materializationEffects(fixture)
+    const response = await fixture.app.inject({ method: 'POST', url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`, payload: { offlineOperationId: envelope.offlineOperationId, commandId: 'untrusted-origin-command' }, headers: { cookie: `madina-session=${fixture.session}`, origin: 'https://untrusted.example' } })
+    equal(response.statusCode, 403)
+    deepEqual(materializationEffects(fixture), before)
+    equal(conflictVerificationCount(fixture, fixture.permits[13]!.id), 1)
   })
 })
 
