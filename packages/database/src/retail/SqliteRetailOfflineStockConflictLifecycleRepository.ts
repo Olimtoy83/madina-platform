@@ -1,0 +1,18 @@
+import { createHash } from 'node:crypto'
+import type { DatabaseSync } from 'node:sqlite'
+import { openDatabaseConnection } from '../connectionPolicy.js'
+
+export type OfflineStockConflictLifecycleState = 'open'|'under_review'
+export interface ReviewOfflineStockConflictInput { offlineOperationId:string; saleItemId:string; commandId:string; expectedCurrentState:OfflineStockConflictLifecycleState; targetState:OfflineStockConflictLifecycleState; actorUserId:string }
+
+export class SqliteRetailOfflineStockConflictLifecycleRepository {
+  private readonly database:DatabaseSync
+  constructor(file:string){this.database=openDatabaseConnection(file)}
+  async review(locationId:string,input:ReviewOfflineStockConflictInput){return this.tx(async()=>{const hash=createHash('sha256').update(JSON.stringify({locationId,...input})).digest('hex'),prior=this.database.prepare('SELECT payload_hash,offline_operation_id,sale_item_id FROM retail_offline_stock_conflict_incident_events WHERE command_id=?').get(input.commandId)as{payload_hash:string;offline_operation_id:string;sale_item_id:string}|undefined;if(prior){if(prior.payload_hash!==hash)throw Error('IDEMPOTENCY_CONFLICT');return this.state(prior.offline_operation_id,prior.sale_item_id)}if(input.expectedCurrentState!=='open'||input.targetState!=='under_review')throw Error('INVALID_INCIDENT_TRANSITION');const row=this.database.prepare('SELECT current_state,version,location_id FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?').get(input.offlineOperationId,input.saleItemId)as{current_state:OfflineStockConflictLifecycleState;version:number;location_id:string}|undefined;if(!row||row.location_id!==locationId)throw Error('Retail Offline Stock Conflict incident not found.');if(row.current_state!==input.expectedCurrentState)throw Error('STALE_INCIDENT_STATE');const now=new Date().toISOString();this.database.prepare("INSERT INTO retail_offline_stock_conflict_incident_events(event_id,offline_operation_id,sale_item_id,event_type,previous_state,resulting_state,command_id,payload_hash,actor_user_id,occurred_at) VALUES(lower(hex(randomblob(16))),?,?, 'review_started','open','under_review',?,?,?,?)").run(input.offlineOperationId,input.saleItemId,input.commandId,hash,input.actorUserId,now);this.database.prepare("UPDATE retail_offline_stock_conflict_incident_lifecycle SET current_state='under_review',version=?,updated_at=?,updated_by=? WHERE offline_operation_id=? AND sale_item_id=?").run(row.version+1,now,input.actorUserId,input.offlineOperationId,input.saleItemId);return this.state(input.offlineOperationId,input.saleItemId)})}
+  async getCurrentState(operation:string,item:string){return this.state(operation,item)}
+  async listEvents(operation:string,item:string){return this.database.prepare('SELECT * FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=? ORDER BY occurred_at,event_id').all(operation,item)}
+  async isProductLocationBlocked(product:string,location:string){return Boolean(this.database.prepare("SELECT 1 FROM retail_offline_stock_conflict_incident_lifecycle WHERE product_id=? AND location_id=? AND current_state IN ('open','under_review')").get(product,location))}
+  private state(operation:string,item:string){return this.database.prepare('SELECT * FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?').get(operation,item)}
+  private async tx<T>(f:()=>Promise<T>):Promise<T>{this.database.exec('BEGIN IMMEDIATE');try{const x=await f();this.database.exec('COMMIT');return x}catch(e){this.database.exec('ROLLBACK');throw e}}
+  close(){this.database.close()}
+}
