@@ -80,6 +80,7 @@ export type AuditAction =
   | 'retail.offline_authority_issued'
   | 'retail.offline_authority_revoked'
   | 'retail.offline_sale_synced'
+  | 'retail.offline_stock_conflict_materialized'
 
 export type JsonValue =
   | null

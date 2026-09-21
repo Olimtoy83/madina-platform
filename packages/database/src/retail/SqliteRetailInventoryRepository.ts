@@ -88,6 +88,29 @@ export function recordRetailInventoryMovement(database: DatabaseSync, input: Rec
   return movement
 }
 
+/** Stage 11.4C-only primitive. Its source and prior materialization receipt are both fixed. */
+export function recordVerifiedOfflineStockConflictMaterializationMovement(database: DatabaseSync, input: RecordRetailInventoryMovementInput, context: CommandContext): RetailInventoryMovement {
+  if (input.type !== 'sale' || input.sourceType !== 'retail_offline_stock_conflict_materialization') throw new Error('Retail Offline Stock Conflict movement source is invalid.')
+  const receipt = database.prepare('SELECT 1 FROM retail_offline_stock_conflict_materialization_receipts WHERE offline_operation_id=?').get(input.sourceId)
+  const verification = database.prepare('SELECT 1 FROM retail_offline_stock_conflict_verification_lines WHERE offline_operation_id=? AND sale_item_id=? AND product_id=?').get(input.sourceId, input.sourceLineId, input.productId)
+  if (!receipt || !verification) throw new Error('Retail Offline Stock Conflict movement is not materialized.')
+  return recordRetailInventoryMovementAllowingNegative(database, input, context)
+}
+
+function recordRetailInventoryMovementAllowingNegative(database: DatabaseSync, input: RecordRetailInventoryMovementInput, context: CommandContext): RetailInventoryMovement {
+  if (!Number.isSafeInteger(input.quantityDelta) || input.quantityDelta === 0) throw new Error('Retail Inventory quantityDelta must be a non-zero safe integer.')
+  const movement: RetailInventoryMovement = { id: randomUUID(), productId: requiredText(input.productId, 'productId'), locationId: requiredText(input.locationId, 'locationId'), quantityDelta: input.quantityDelta, type: input.type, sourceType: input.sourceType, sourceId: input.sourceId, sourceLineId: input.sourceLineId, createdAt: new Date() }
+  const product = database.prepare('SELECT status FROM retail_products WHERE id=?').get(movement.productId) as {status:string}|undefined
+  const location = database.prepare('SELECT status FROM retail_locations WHERE id=?').get(movement.locationId) as {status:string}|undefined
+  if (!product || !location || location.status !== 'active' || (product.status !== 'active' && !isVerifiedHistoricalOfflineConflict(database,movement))) throw new Error('Retail Offline Stock Conflict historical binding is invalid.')
+  const balance=database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(movement.productId,movement.locationId) as {on_hand_quantity:number}|undefined
+  const next=(balance?.on_hand_quantity??0)+movement.quantityDelta
+  database.prepare('INSERT INTO retail_inventory_movements (id,product_id,location_id,quantity_delta,movement_type,source_type,source_id,source_line_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(movement.id,movement.productId,movement.locationId,movement.quantityDelta,movement.type,movement.sourceType,movement.sourceId,movement.sourceLineId,movement.createdAt.toISOString())
+  database.prepare('INSERT INTO retail_inventory_balances(product_id,location_id,on_hand_quantity,updated_at) VALUES(?,?,?,?) ON CONFLICT(product_id,location_id) DO UPDATE SET on_hand_quantity=excluded.on_hand_quantity,updated_at=excluded.updated_at').run(movement.productId,movement.locationId,next,movement.createdAt.toISOString())
+  appendAuditEvent(database,{id:randomUUID(),occurredAt:new Date(),actorType:context.actorType,actorUserId:context.actorUserId,requestId:context.requestId,domain:'retail',entityType:'retail_inventory_movement',entityId:movement.id,action:'retail.inventory_movement_recorded',metadata:{productId:movement.productId,locationId:movement.locationId,quantityDelta:movement.quantityDelta,type:movement.type,sourceType:movement.sourceType,sourceId:movement.sourceId,sourceLineId:movement.sourceLineId}})
+  return movement
+}
+
 function isHistoricalSaleReturn(database: DatabaseSync, movement: RetailInventoryMovement): boolean {
   if (movement.type !== 'return' || movement.sourceType !== 'retail_sale_return') return false
   return database.prepare(`
@@ -121,4 +144,8 @@ function isVerifiedHistoricalOfflineSale(database: DatabaseSync, movement: Retai
       AND evidence.location_id = ?
       AND price.product_id = ?
   `).get(movement.sourceId, movement.locationId, movement.productId) !== undefined
+}
+
+function isVerifiedHistoricalOfflineConflict(database: DatabaseSync, movement: RetailInventoryMovement): boolean {
+  return database.prepare('SELECT 1 FROM retail_offline_stock_conflict_verification_lines line JOIN retail_offline_stock_conflict_verifications verification ON verification.offline_operation_id=line.offline_operation_id WHERE line.offline_operation_id=? AND line.sale_item_id=? AND line.product_id=? AND verification.location_id=?').get(movement.sourceId,movement.sourceLineId,movement.productId,movement.locationId)!==undefined
 }

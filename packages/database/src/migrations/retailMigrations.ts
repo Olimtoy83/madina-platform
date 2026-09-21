@@ -576,4 +576,68 @@ const retailOfflineStockConflictVerification = createSqlMigration('042_retail_of
   CREATE TRIGGER retail_offline_stock_conflict_verification_lines_no_update BEFORE UPDATE ON retail_offline_stock_conflict_verification_lines BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict verification lines are immutable.'); END;
   CREATE TRIGGER retail_offline_stock_conflict_verification_lines_no_delete BEFORE DELETE ON retail_offline_stock_conflict_verification_lines BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict verification lines are immutable.'); END;
 `)
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification] as const
+const retailOfflineStockConflictMaterialization = createSqlMigration('043_retail_offline_stock_conflict_materialization_v1', `
+  CREATE TABLE retail_inventory_balances_v2 (
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    on_hand_quantity INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (product_id, location_id)
+  );
+  INSERT INTO retail_inventory_balances_v2(product_id,location_id,on_hand_quantity,updated_at) SELECT product_id,location_id,on_hand_quantity,updated_at FROM retail_inventory_balances;
+  DROP TABLE retail_inventory_balances;
+  ALTER TABLE retail_inventory_balances_v2 RENAME TO retail_inventory_balances;
+  CREATE TABLE retail_offline_stock_conflict_materialization_receipts (
+    command_id TEXT PRIMARY KEY,
+    offline_operation_id TEXT NOT NULL UNIQUE REFERENCES retail_offline_stock_conflict_verifications(offline_operation_id) ON DELETE RESTRICT,
+    payload_hash TEXT NOT NULL,
+    sale_id TEXT NOT NULL UNIQUE REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    materialized_at TEXT NOT NULL,
+    materialized_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT
+  );
+  CREATE TABLE retail_offline_stock_conflict_incidents (
+    offline_operation_id TEXT NOT NULL REFERENCES retail_offline_stock_conflict_verifications(offline_operation_id) ON DELETE RESTRICT,
+    sale_item_id TEXT NOT NULL REFERENCES retail_sale_items(id) ON DELETE RESTRICT,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    sale_id TEXT NOT NULL REFERENCES retail_sales(id) ON DELETE RESTRICT,
+    movement_id TEXT NOT NULL REFERENCES retail_inventory_movements(id) ON DELETE RESTRICT,
+    authority_id TEXT NOT NULL REFERENCES retail_offline_authorities(id) ON DELETE RESTRICT,
+    permit_id TEXT NOT NULL REFERENCES retail_offline_authority_permits(id) ON DELETE RESTRICT,
+    terminal_id TEXT NOT NULL REFERENCES retail_offline_terminals(id) ON DELETE RESTRICT,
+    terminal_key_version INTEGER NOT NULL,
+    observed_on_hand_quantity INTEGER NOT NULL,
+    sold_quantity INTEGER NOT NULL,
+    resulting_on_hand_quantity INTEGER NOT NULL,
+    initial_deficit_quantity INTEGER NOT NULL,
+    materialization_deficit_quantity INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status='open'),
+    policy_version INTEGER NOT NULL CHECK(policy_version=1),
+    opened_at TEXT NOT NULL,
+    PRIMARY KEY (offline_operation_id, sale_item_id)
+  );
+  CREATE INDEX retail_offline_stock_conflict_incidents_location_open_idx ON retail_offline_stock_conflict_incidents(location_id, status, opened_at);
+  CREATE TRIGGER retail_inventory_balances_negative_insert_guard BEFORE INSERT ON retail_inventory_balances WHEN NEW.on_hand_quantity < 0 BEGIN
+    SELECT RAISE(ABORT,'Retail Inventory negative balance requires verified Offline Stock Conflict materialization.') WHERE NOT EXISTS (
+      SELECT 1 FROM retail_inventory_movements movement
+      JOIN retail_offline_stock_conflict_materialization_receipts receipt ON receipt.offline_operation_id=movement.source_id
+      JOIN retail_offline_stock_conflict_verification_lines line ON line.offline_operation_id=movement.source_id AND line.sale_item_id=movement.source_line_id
+      WHERE movement.source_type='retail_offline_stock_conflict_materialization' AND movement.movement_type='sale'
+        AND movement.product_id=NEW.product_id AND movement.location_id=NEW.location_id AND movement.created_at=NEW.updated_at
+    );
+  END;
+  CREATE TRIGGER retail_inventory_balances_negative_update_guard BEFORE UPDATE OF on_hand_quantity,updated_at ON retail_inventory_balances WHEN NEW.on_hand_quantity < 0 BEGIN
+    SELECT RAISE(ABORT,'Retail Inventory negative balance requires verified Offline Stock Conflict materialization.') WHERE NOT EXISTS (
+      SELECT 1 FROM retail_inventory_movements movement
+      JOIN retail_offline_stock_conflict_materialization_receipts receipt ON receipt.offline_operation_id=movement.source_id
+      JOIN retail_offline_stock_conflict_verification_lines line ON line.offline_operation_id=movement.source_id AND line.sale_item_id=movement.source_line_id
+      WHERE movement.source_type='retail_offline_stock_conflict_materialization' AND movement.movement_type='sale'
+        AND movement.product_id=NEW.product_id AND movement.location_id=NEW.location_id AND movement.created_at=NEW.updated_at
+    );
+  END;
+  CREATE TRIGGER retail_offline_stock_conflict_materialization_receipts_no_update BEFORE UPDATE ON retail_offline_stock_conflict_materialization_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict materialization receipts are immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_materialization_receipts_no_delete BEFORE DELETE ON retail_offline_stock_conflict_materialization_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict materialization receipts are immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_incidents_no_update BEFORE UPDATE ON retail_offline_stock_conflict_incidents BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict incidents are immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_incidents_no_delete BEFORE DELETE ON retail_offline_stock_conflict_incidents BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict incidents are immutable.'); END;
+`)
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization] as const

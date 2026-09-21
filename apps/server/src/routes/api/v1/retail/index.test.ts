@@ -67,6 +67,7 @@ interface OfflineSyncFixture {
   readonly database: DatabaseSync
   readonly app: FastifyInstance
   readonly session: string
+  readonly sessions: Record<string, string>
   readonly access: SqliteRetailAccessRepository
   readonly catalog: SqliteRetailCatalogRepository
   readonly inventory: SqliteRetailInventoryRepository
@@ -137,7 +138,7 @@ async function withOfflineSyncFixture(run: (fixture: OfflineSyncFixture) => Prom
   const app = buildApp()
   try {
     await app.ready()
-    await run({ file, database, app, session: sessions['manager-1']!, access, catalog, inventory, offline, context, location, otherLocation, product, extraProduct, terminal, authority, permits, pair, url: `/api/v1/retail/locations/${location.id}/offline-sales/sync` })
+    await run({ file, database, app, session: sessions['manager-1']!, sessions, access, catalog, inventory, offline, context, location, otherLocation, product, extraProduct, terminal, authority, permits, pair, url: `/api/v1/retail/locations/${location.id}/offline-sales/sync` })
   } finally {
     await app.close(); database.close(); offline.close(); inventory.close(); catalog.close(); access.close()
     if (previous === undefined) delete process.env.DATABASE_FILE
@@ -229,6 +230,21 @@ test('Offline Sync HTTP stock conflict persists only immutable verification evid
     const afterOriginal = offlineEffects(fixture), changed = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'idempotency-operation', proposedSaleId: 'changed-sale', lines: [{ id: 'changed-line', productId: fixture.product.id, quantity: 1, unitPriceMinor: 100 }], cashAllocation: { id: 'changed-payment', method: 'cash', amountMinor: 100, ordinal: 0 } })
     const conflict = await postOffline(fixture, signedOfflinePayload(changed, fixture.pair.privateKey))
     equal(conflict.statusCode, 409); equal((conflict.json() as { message: string }).message, 'IDEMPOTENCY_CONFLICT'); assertNoOfflineEffects(fixture, afterOriginal); equal(permitEvidenceCount(fixture, fixture.permits[1]!.id), 1)
+  })
+})
+
+test('Offline stock-conflict materialization requires the narrow manager command and preserves a completed Sale', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const conflict = offlineEnvelope(fixture, fixture.permits[10]!, { lines: [{ id: 'materialize-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'materialize-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
+    equal((await postOffline(fixture, signedOfflinePayload(conflict, fixture.pair.privateKey))).statusCode, 409)
+    const url = `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`, payload = { offlineOperationId: conflict.offlineOperationId, commandId: 'materialize-http' }
+    equal((await fixture.app.inject({ method: 'POST', url, payload })).statusCode, 401)
+    equal((await request(fixture.app, fixture.sessions['operator-1']!, { method: 'POST', url, payload })).statusCode, 403)
+    equal((await request(fixture.app, fixture.session, { method: 'POST', url, payload })).statusCode, 201)
+    equal((await request(fixture.app, fixture.session, { method: 'POST', url, payload })).statusCode, 200)
+    equal((await request(fixture.app, fixture.session, { method: 'GET', url: `/api/v1/retail/locations/${fixture.location.id}/sales/${conflict.proposedSaleId}` })).statusCode, 200)
+    equal((fixture.database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(fixture.product.id, fixture.location.id) as { on_hand_quantity: number }).on_hand_quantity, -1)
+    equal((fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incidents WHERE offline_operation_id=?').get(conflict.offlineOperationId) as { count: number }).count, 1)
   })
 })
 
