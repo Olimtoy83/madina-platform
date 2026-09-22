@@ -258,6 +258,264 @@ test('D.2A Sale HTTP returns the exact conflict code with zero Sale effects',asy
 
 test('D.2A Transfer dispatch HTTP returns the exact conflict code with zero outbound effects',async()=>{await withOfflineSyncFixture(async fixture=>{const permit=fixture.permits[0]!,conflict=offlineEnvelope(fixture,permit,{offlineOperationId:'d2a-transfer-conflict',proposedSaleId:'d2a-transfer-conflict-sale',lines:[{id:'d2a-transfer-conflict-item',productId:fixture.product.id,quantity:6,unitPriceMinor:100}],cashAllocation:{id:'d2a-transfer-conflict-payment',method:'cash',amountMinor:600,ordinal:0},subtotalMinor:600,payableTotalMinor:600});await postOffline(fixture,signedOfflinePayload(conflict,fixture.pair.privateKey));await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,payload:{offlineOperationId:conflict.offlineOperationId,commandId:'d2a-transfer-materialize'}});await fixture.inventory.recordMovement({productId:fixture.product.id,locationId:fixture.location.id,quantityDelta:10,type:'goods_receipt',sourceType:'test',sourceId:'d2a-transfer-restock',sourceLineId:'d2a-transfer-restock'},fixture.context);const created=await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/transfers`,payload:{destinationLocationId:fixture.otherLocation.id,lines:[{productId:fixture.product.id,quantity:1}]}}),transfer=(created.json()as {transfer:{id:string}}).transfer;equal(created.statusCode,201);const response=await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/transfers/${transfer.id}/dispatch`,payload:{}});equal(response.statusCode,409);equal((response.json()as {message:string}).message,'RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED');equal((fixture.database.prepare('SELECT status FROM retail_transfers WHERE id=?').get(transfer.id)as {status:string}).status,'draft');equal((fixture.database.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_transfer_dispatched' AND source_id=?").get(transfer.id)as {count:number}).count,0)})})
 
+test('D.2B Offline Sync HTTP returns exact unresolved conflict code with zero effects', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const conflictPermit = fixture.permits[14]!
+    const blockedPermit = fixture.permits[15]!
+
+    const conflict = offlineEnvelope(fixture, conflictPermit, {
+      offlineOperationId: 'd2b-http-origin-conflict',
+      proposedSaleId: 'd2b-http-origin-sale',
+      lines: [{
+        id: 'd2b-http-origin-line',
+        productId: fixture.product.id,
+        quantity: 6,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'd2b-http-origin-payment',
+        method: 'cash',
+        amountMinor: 600,
+        ordinal: 0,
+      },
+      subtotalMinor: 600,
+      payableTotalMinor: 600,
+    })
+
+    const conflictResponse = await postOffline(
+      fixture,
+      signedOfflinePayload(conflict, fixture.pair.privateKey),
+    )
+
+    equal(conflictResponse.statusCode, 409)
+    equal(
+      (conflictResponse.json() as { message: string }).message,
+      'VERIFIED_OFFLINE_STOCK_CONFLICT',
+    )
+    equal(conflictVerificationCount(fixture, conflictPermit.id), 1)
+
+    const materializeResponse = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,
+        payload: {
+          offlineOperationId: conflict.offlineOperationId,
+          commandId: 'd2b-http-origin-materialize',
+        },
+      },
+    )
+
+    equal(materializeResponse.statusCode, 201)
+
+    await fixture.inventory.recordMovement(
+      {
+        productId: fixture.product.id,
+        locationId: fixture.location.id,
+        quantityDelta: 10,
+        type: 'goods_receipt',
+        sourceType: 'test',
+        sourceId: 'd2b-http-restock',
+        sourceLineId: 'd2b-http-restock',
+      },
+      fixture.context,
+    )
+
+    const blocked = offlineEnvelope(fixture, blockedPermit, {
+      offlineOperationId: 'd2b-http-blocked',
+      proposedSaleId: 'd2b-http-blocked-sale',
+      lines: [{
+        id: 'd2b-http-blocked-line',
+        productId: fixture.product.id,
+        quantity: 1,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'd2b-http-blocked-payment',
+        method: 'cash',
+        amountMinor: 100,
+        ordinal: 0,
+      },
+      subtotalMinor: 100,
+      payableTotalMinor: 100,
+    })
+
+    const before = offlineEffects(fixture)
+    const verificationBefore = conflictVerificationTotal(fixture)
+
+    const response = await postOffline(
+      fixture,
+      signedOfflinePayload(blocked, fixture.pair.privateKey),
+    )
+
+    equal(response.statusCode, 409)
+    equal(
+      (response.json() as { message: string }).message,
+      'RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED',
+    )
+
+    assertNoOfflineEffects(fixture, before)
+
+    equal(permitEvidenceCount(fixture, blockedPermit.id), 0)
+    equal(conflictVerificationCount(fixture, blockedPermit.id), 0)
+    equal(conflictVerificationTotal(fixture), verificationBefore)
+
+    equal(
+      (
+        fixture.database.prepare(
+          'SELECT COUNT(*) AS count FROM retail_sales WHERE id=?',
+        ).get(blocked.proposedSaleId) as { count: number }
+      ).count,
+      0,
+    )
+
+    equal(
+      (
+        fixture.database.prepare(
+          'SELECT COUNT(*) AS count FROM retail_payment_allocations WHERE id=?',
+        ).get(blocked.cashAllocation.id) as { count: number }
+      ).count,
+      0,
+    )
+
+    equal(
+      (
+        fixture.database.prepare(
+          "SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_offline_sale_sync' AND source_id=?",
+        ).get(blocked.proposedSaleId) as { count: number }
+      ).count,
+      0,
+    )
+  })
+})
+test('D.2B Fixture V preserves authority expiry precedence over unresolved blocking', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const expiringAuthority = await fixture.offline.issueAuthority(
+      {
+        terminalId: fixture.terminal.id,
+        userId: 'operator-1',
+        locationId: fixture.location.id,
+        expiresAt: new Date(Date.now() + 250),
+        permitCount: 1,
+        productIds: [fixture.product.id],
+      },
+      fixture.context,
+    )
+
+    const expiringPermit = (await fixture.offline.listPermits(expiringAuthority.id))[0]!
+
+    const expiringEnvelope = offlineEnvelope(fixture, expiringPermit, {
+      authorityId: expiringAuthority.id,
+      offlineOperationId: 'd2b-v-expired-operation',
+      proposedSaleId: 'd2b-v-expired-sale',
+      lines: [{
+        id: 'd2b-v-expired-line',
+        productId: fixture.product.id,
+        quantity: 1,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'd2b-v-expired-payment',
+        method: 'cash',
+        amountMinor: 100,
+        ordinal: 0,
+      },
+      subtotalMinor: 100,
+      payableTotalMinor: 100,
+    })
+
+    const conflictPermit = fixture.permits[16]!
+    const conflict = offlineEnvelope(fixture, conflictPermit, {
+      offlineOperationId: 'd2b-v-origin-conflict',
+      proposedSaleId: 'd2b-v-origin-sale',
+      lines: [{
+        id: 'd2b-v-origin-line',
+        productId: fixture.product.id,
+        quantity: 6,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'd2b-v-origin-payment',
+        method: 'cash',
+        amountMinor: 600,
+        ordinal: 0,
+      },
+      subtotalMinor: 600,
+      payableTotalMinor: 600,
+    })
+
+    const conflictResponse = await postOffline(
+      fixture,
+      signedOfflinePayload(conflict, fixture.pair.privateKey),
+    )
+
+    equal(conflictResponse.statusCode, 409)
+    equal(
+      (conflictResponse.json() as { message: string }).message,
+      'VERIFIED_OFFLINE_STOCK_CONFLICT',
+    )
+
+    const materializeResponse = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,
+        payload: {
+          offlineOperationId: conflict.offlineOperationId,
+          commandId: 'd2b-v-materialize',
+        },
+      },
+    )
+
+    equal(materializeResponse.statusCode, 201)
+
+    await fixture.inventory.recordMovement(
+      {
+        productId: fixture.product.id,
+        locationId: fixture.location.id,
+        quantityDelta: 10,
+        type: 'goods_receipt',
+        sourceType: 'test',
+        sourceId: 'd2b-v-restock',
+        sourceLineId: 'd2b-v-restock',
+      },
+      fixture.context,
+    )
+
+    const waitMs = Math.max(0, expiringAuthority.expiresAt.getTime() - Date.now() + 50)
+    await new Promise(resolve => setTimeout(resolve, waitMs))
+
+    const before = offlineEffects(fixture)
+    const verificationBefore = conflictVerificationTotal(fixture)
+
+    const response = await postOffline(
+      fixture,
+      signedOfflinePayload(expiringEnvelope, fixture.pair.privateKey),
+    )
+
+    equal(response.statusCode, 409)
+    equal(
+      (response.json() as { message: string }).message,
+      'RETAIL_OFFLINE_REVIEW_REQUIRED',
+    )
+
+    assertNoOfflineEffects(fixture, before)
+    equal(permitEvidenceCount(fixture, expiringPermit.id), 0)
+    equal(conflictVerificationCount(fixture, expiringPermit.id), 0)
+    equal(conflictVerificationTotal(fixture), verificationBefore)
+
+    equal(
+      (
+        fixture.database.prepare(
+          'SELECT COUNT(*) AS count FROM retail_sales WHERE id=?',
+        ).get(expiringEnvelope.proposedSaleId) as { count: number }
+      ).count,
+      0,
+    )
+  })
+})
 test('Fixture C: first Offline Sync presentation after authority trust loss creates no eligible verification or materialization effects', async () => {
   await withOfflineSyncFixture(async (fixture) => {
     const envelope = offlineEnvelope(fixture, fixture.permits[11]!, { offlineOperationId: 'trust-loss-first-presentation', proposedSaleId: 'trust-loss-sale', lines: [{ id: 'trust-loss-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'trust-loss-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })

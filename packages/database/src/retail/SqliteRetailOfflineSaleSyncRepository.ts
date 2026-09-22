@@ -6,6 +6,7 @@ import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
 import { openDatabaseConnection } from '../connectionPolicy.js'
 import { recordRetailInventoryMovement } from './SqliteRetailInventoryRepository.js'
 import { verifyRetailOfflineEnvelope } from './retailOfflineEnvelopeCrypto.js'
+import { isRetailProductLocationConflictBlocked } from './SqliteRetailOfflineStockConflictLifecycleRepository.js'
 
 export interface RetailOfflineSaleSyncInput { envelope: unknown; payloadHash: string; signature: string }
 export interface RetailOfflineSaleSyncResult { sale: unknown; items: unknown[]; allocations: unknown[]; replayed: boolean }
@@ -63,6 +64,7 @@ export class SqliteRetailOfflineSaleSyncRepository {
         for (const line of verifiedLines) this.database.prepare('INSERT INTO retail_offline_stock_conflict_verification_lines(offline_operation_id,sale_item_id,product_id,quantity,authorized_unit_price_minor,observed_on_hand_quantity,initial_deficit_quantity) VALUES(?,?,?,?,?,?,?)').run(envelope.offlineOperationId,line.id,line.productId,line.quantity,line.unitPriceMinor,line.observed,line.deficit)
         return { conflict: true }
       }
+      for (const line of verifiedLines) if (isRetailProductLocationConflictBlocked(this.database,line.productId,locationId)) throw new Error('RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED')
       const now = new Date()
       this.database.prepare('INSERT INTO retail_offline_sale_evidence(offline_operation_id,authority_id,authority_version,permit_id,terminal_id,terminal_key_version,user_id,location_id,proposed_sale_id,claimed_completed_at,canonical_payload,payload_hash,signature,received_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(envelope.offlineOperationId,envelope.authorityId,envelope.authorityVersion,envelope.permitId,envelope.terminalId,envelope.terminalKeyVersion,envelope.userId,locationId,envelope.proposedSaleId,envelope.claimedOfflineCompletedAt,verified.canonicalPayload,verified.payloadHash,input.signature,now.toISOString())
       this.database.prepare("INSERT INTO retail_sales(id,location_id,status,currency_code,currency_exponent,subtotal_minor,payable_total_minor,created_at,completed_at) VALUES(?,?,'completed',?,?,?,?,?,?)").run(envelope.proposedSaleId,locationId,envelope.currencyCode,envelope.currencyExponent,envelope.subtotalMinor,envelope.payableTotalMinor,now.toISOString(),now.toISOString())

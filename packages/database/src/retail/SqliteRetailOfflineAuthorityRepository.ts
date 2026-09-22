@@ -5,6 +5,7 @@ import type { CommandContext } from '@madina/shared'
 import { appendAuditEvent } from '../audit/SqliteAuditRepository.js'
 import { openDatabaseConnection } from '../connectionPolicy.js'
 import { validateRetailOfflineTerminalPublicKey, verifyRetailOfflineEnvelope, type VerifiedRetailOfflineEnvelope } from './retailOfflineEnvelopeCrypto.js'
+import { isRetailProductLocationConflictBlocked } from './SqliteRetailOfflineStockConflictLifecycleRepository.js'
 
 export interface EnrollRetailOfflineTerminalInput { locationId: string; keyAlgorithm: string; publicKey: string }
 export interface IssueRetailOfflineAuthorityInput { terminalId: string; userId: string; locationId: string; expiresAt: Date; permitCount: number; productIds: readonly string[]; authorityVersion?: number; paymentMethod?: string; discountsAllowed?: boolean }
@@ -58,7 +59,9 @@ export class SqliteRetailOfflineAuthorityRepository {
     if (input.discountsAllowed !== undefined && input.discountsAllowed !== false) throw new Error('Retail Offline Authority discounts are not permitted.')
     const permitCount = positive(input.permitCount,'Authority permit count'); if (!Array.isArray(input.productIds) || !input.productIds.length || new Set(input.productIds).size !== input.productIds.length) throw new Error('Retail Offline Authority Product evidence is invalid.')
     const prices = input.productIds.map((productId) => { required(productId,'Authority Product id'); const product=this.database.prepare("SELECT status FROM retail_products WHERE id=?").get(productId) as {status:string}|undefined; const price=this.database.prepare('SELECT unit_price_minor FROM retail_product_prices WHERE product_id=? AND location_id=?').get(productId,input.locationId) as {unit_price_minor:number}|undefined; if (!product || product.status!=='active' || !price) throw new Error('Retail Offline Authority Product price evidence is invalid.'); return { productId, unitPriceMinor: price.unit_price_minor } })
-    const id=randomUUID(); const version=input.authorityVersion ?? 1; positive(version,'Authority version'); const actor=this.authorizedActorForLocation(context, input.locationId)
+    const actor=this.authorizedActorForLocation(context, input.locationId)
+    for (const price of prices) if (isRetailProductLocationConflictBlocked(this.database,price.productId,input.locationId)) throw new Error('RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED')
+    const id=randomUUID(); const version=input.authorityVersion ?? 1; positive(version,'Authority version')
     this.database.prepare("INSERT INTO retail_offline_authorities(id,authority_version,terminal_id,terminal_key_version,user_id,location_id,issued_at,expires_at,currency_code,currency_exponent,payment_method,discounts_allowed,permit_count,issued_by_user_id) VALUES(?,?,?,?,?,?,?,?,?,?, 'cash',0,?,?)").run(id,version,input.terminalId,terminal.currentKeyVersion,input.userId,input.locationId,issuedAt.toISOString(),expiresAt.toISOString(),location.currency_code,location.currency_exponent,permitCount,actor)
     for (const price of prices) this.database.prepare('INSERT INTO retail_offline_authority_product_prices(authority_id,product_id,unit_price_minor) VALUES(?,?,?)').run(id,price.productId,price.unitPriceMinor)
     for (let sequence=0;sequence<permitCount;sequence++) this.database.prepare('INSERT INTO retail_offline_authority_permits(id,authority_id,sequence) VALUES(?,?,?)').run(randomUUID(),id,sequence)

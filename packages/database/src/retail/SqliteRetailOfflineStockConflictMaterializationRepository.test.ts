@@ -21,6 +21,495 @@ import { SqliteRetailTransferRepository } from './SqliteRetailTransferRepository
 
 const deepEqual = (actual: unknown, expected: unknown): void => equal(JSON.stringify(actual), JSON.stringify(expected))
 
+
+async function d2bFixture(){
+  const directory=mkdtempSync(join(tmpdir(),'retail-d2b-')),file=join(directory,'x.sqlite'),admin={actorType:'user' as const,actorUserId:'admin-1',requestId:'d2b'},manager={actorType:'user' as const,actorUserId:'manager-1',requestId:'d2b-manager'}
+  initializeDatabase(file);const auth=new SqliteAuthRepository(file),access=new SqliteRetailAccessRepository(file),catalog=new SqliteRetailCatalogRepository(file),inventory=new SqliteRetailInventoryRepository(file),authority=new SqliteRetailOfflineAuthorityRepository(file),sync=new SqliteRetailOfflineSaleSyncRepository(file),materializer=new SqliteRetailOfflineStockConflictMaterializationRepository(file)
+  for(const [id,role] of [['admin-1','admin'],['manager-1','manager'],['cashier-1','operator']] as const)await auth.createUser({id,username:id,normalizedUsername:id,email:`${id}@test`,role,status:'active',sessionVersion:1,createdAt:new Date(),updatedAt:new Date()})
+  const location=await access.createLocation({code:'D2B-X',name:'D2B X',type:'store',status:'active'},admin),other=await access.createLocation({code:'D2B-Y',name:'D2B Y',type:'store',status:'active'},admin);await access.configureCurrency(location.id,'USD',2,admin);await access.configureCurrency(other.id,'USD',2,admin);await access.grant('manager-1',location.id,admin)
+  const blocked=await catalog.createProduct({sourceId:'d2b-blocked',name:'Blocked'},admin),clean=await catalog.createProduct({sourceId:'d2b-clean',name:'Clean'},admin);for(const l of [location,other])for(const p of [blocked,clean])await catalog.setPrice(p.id,l.id,100,admin);await inventory.recordMovement({productId:blocked.id,locationId:location.id,quantityDelta:5,type:'opening',sourceType:'test',sourceId:'d2b-seed',sourceLineId:'d2b-blocked'},admin);await inventory.recordMovement({productId:clean.id,locationId:location.id,quantityDelta:5,type:'opening',sourceType:'test',sourceId:'d2b-seed',sourceLineId:'d2b-clean'},admin)
+  const pair=generateKeyPairSync('ed25519'),terminal=await authority.enrollTerminal({locationId:location.id,keyAlgorithm:RETAIL_OFFLINE_SIGNATURE_ALGORITHM,publicKey:pair.publicKey.export({format:'der',type:'spki'}).toString('base64')},admin),issued=await authority.issueAuthority({terminalId:terminal.id,userId:'cashier-1',locationId:location.id,expiresAt:new Date(Date.now()+60_000),permitCount:6,productIds:[blocked.id,clean.id]},admin),permits=await authority.listPermits(issued.id)
+  const signed=(operation:string,permitIndex:number,lines:Array<{id:string;productId:string;quantity:number}>)=>{const amount=lines.reduce((n,l)=>n+l.quantity*100,0),envelope={schemaVersion:1 as const,offlineOperationId:operation,authorityId:issued.id,authorityVersion:issued.authorityVersion,permitId:permits[permitIndex]!.id,permitSequence:permits[permitIndex]!.sequence,terminalId:terminal.id,terminalKeyVersion:1,userId:'cashier-1',locationId:location.id,proposedSaleId:`${operation}-sale`,lines:lines.map(l=>({...l,unitPriceMinor:100})),currencyCode:'USD',currencyExponent:2,cashAllocation:{id:`${operation}-payment`,method:'cash' as const,amountMinor:amount,ordinal:0 as const},subtotalMinor:amount,payableTotalMinor:amount,claimedOfflineCompletedAt:'2026-09-21T00:00:00.000Z'},canonical=canonicalizeRetailOfflineEnvelope(envelope);return{envelope,payloadHash:createHash('sha256').update(canonical).digest('hex'),signature:`${RETAIL_OFFLINE_SIGNATURE_PREFIX}${sign(null,Buffer.from(canonical),pair.privateKey).toString('base64')}`}}
+  const conflict=signed('d2b-origin',0,[{id:'d2b-origin-item',productId:blocked.id,quantity:6}]);await rejects(sync.sync(location.id,conflict,admin),/VERIFIED_OFFLINE_STOCK_CONFLICT/);await materializer.materialize(location.id,{offlineOperationId:'d2b-origin',commandId:'d2b-materialize'},manager);await inventory.recordMovement({productId:blocked.id,locationId:location.id,quantityDelta:20,type:'goods_receipt',sourceType:'test',sourceId:'d2b-restock',sourceLineId:'d2b-restock'},admin)
+  return{file,admin,manager,location,other,blocked,clean,authority,sync,inventory,materializer,issued,permits,signed,close:()=>{materializer.close();sync.close();authority.close();inventory.close();catalog.close();access.close();auth.close();try{rmSync(directory,{recursive:true,force:true,maxRetries:5,retryDelay:100})}catch(error){if(!(error instanceof Error)||!('code'in error)||error.code!=='EPERM')throw error}}}
+}
+
+test('D.2B Authority and Sync enforce unresolved exact pairs with zero effects and deficit precedence',async()=>{const f=await d2bFixture();try{const db=new DatabaseSync(f.file),count=(table:string)=>((db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()as{count:number}).count),before={authorities:count('retail_offline_authorities'),snapshots:count('retail_offline_authority_product_prices'),permits:count('retail_offline_authority_permits'),audits:count('audit_events')};const terminal=await f.authority.enrollTerminal({locationId:f.location.id,keyAlgorithm:RETAIL_OFFLINE_SIGNATURE_ALGORITHM,publicKey:generateKeyPairSync('ed25519').publicKey.export({format:'der',type:'spki'}).toString('base64')},f.admin);const authorityInput={terminalId:terminal.id,userId:'cashier-1',locationId:f.location.id,expiresAt:new Date(Date.now()+60_000),permitCount:1,productIds:[f.clean.id,f.blocked.id]};await rejects(f.authority.issueAuthority(authorityInput,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);equal(count('retail_offline_authorities'),before.authorities);equal(count('retail_offline_authority_product_prices'),before.snapshots);equal(count('retail_offline_authority_permits'),before.permits);equal(count('audit_events'),before.audits+1);await f.authority.issueAuthority({...authorityInput,productIds:[f.clean.id]},f.admin);const blocked=f.signed('d2b-blocked',1,[{id:'d2b-blocked-item',productId:f.blocked.id,quantity:1}]),effects={sales:count('retail_sales'),items:count('retail_sale_items'),payments:count('retail_payment_allocations'),evidence:count('retail_offline_sale_evidence'),receipts:count('retail_offline_sale_sync_receipts'),verifications:count('retail_offline_stock_conflict_verifications')};await rejects(f.sync.sync(f.location.id,blocked,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);deepEqual({sales:count('retail_sales'),items:count('retail_sale_items'),payments:count('retail_payment_allocations'),evidence:count('retail_offline_sale_evidence'),receipts:count('retail_offline_sale_sync_receipts'),verifications:count('retail_offline_stock_conflict_verifications')},effects);equal((db.prepare('SELECT COUNT(*) AS count FROM retail_offline_sale_evidence WHERE permit_id=?').get(f.permits[1]!.id)as{count:number}).count,0);equal((db.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE permit_id=?').get(f.permits[1]!.id)as{count:number}).count,0);const multi=f.signed('d2b-multi',2,[{id:'d2b-clean-item',productId:f.clean.id,quantity:1},{id:'d2b-blocked-multi-item',productId:f.blocked.id,quantity:1}]);await rejects(f.sync.sync(f.location.id,multi,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);const deficit=f.signed('d2b-deficit',3,[{id:'d2b-deficit-item',productId:f.blocked.id,quantity:30}]);await rejects(f.sync.sync(f.location.id,deficit,f.admin),/VERIFIED_OFFLINE_STOCK_CONFLICT/);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE offline_operation_id='d2b-deficit'").get()as{count:number}).count,1);db.close()}finally{f.close()}})
+
+test('D.2B Authority A-G blocks exact unresolved pairs without retroactive mutation',async()=>{const f=await d2bFixture();try{const db=new DatabaseSync(f.file),count=(t:string)=>((db.prepare(`SELECT COUNT(*) AS count FROM ${t}`).get()as{count:number}).count),original={authority:db.prepare('SELECT * FROM retail_offline_authorities WHERE id=?').get(f.issued.id),snapshots:db.prepare('SELECT * FROM retail_offline_authority_product_prices WHERE authority_id=?').all(f.issued.id),permits:db.prepare('SELECT * FROM retail_offline_authority_permits WHERE authority_id=?').all(f.issued.id)},terminal=await f.authority.enrollTerminal({locationId:f.location.id,keyAlgorithm:RETAIL_OFFLINE_SIGNATURE_ALGORITHM,publicKey:generateKeyPairSync('ed25519').publicKey.export({format:'der',type:'spki'}).toString('base64')},f.admin),input={terminalId:terminal.id,userId:'cashier-1',locationId:f.location.id,expiresAt:new Date(Date.now()+60_000),permitCount:2,productIds:[f.blocked.id]};const before=[count('retail_offline_authorities'),count('retail_offline_authority_product_prices'),count('retail_offline_authority_permits'),count('audit_events')];await rejects(f.authority.issueAuthority(input,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);deepEqual([count('retail_offline_authorities'),count('retail_offline_authority_product_prices'),count('retail_offline_authority_permits'),count('audit_events')],before);await f.authority.issueAuthority({...input,productIds:[f.clean.id]},f.admin);const otherTerminal=await f.authority.enrollTerminal({locationId:f.other.id,keyAlgorithm:RETAIL_OFFLINE_SIGNATURE_ALGORITHM,publicKey:generateKeyPairSync('ed25519').publicKey.export({format:'der',type:'spki'}).toString('base64')},f.admin);await f.authority.issueAuthority({...input,terminalId:otherTerminal.id,locationId:f.other.id,productIds:[f.blocked.id]},f.admin);const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);await lifecycle.review(f.location.id,{offlineOperationId:'d2b-origin',saleItemId:'d2b-origin-item',commandId:'d2b-authority-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});await rejects(f.authority.issueAuthority(input,f.manager),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);deepEqual(db.prepare('SELECT * FROM retail_offline_authorities WHERE id=?').get(f.issued.id),original.authority);deepEqual(db.prepare('SELECT * FROM retail_offline_authority_product_prices WHERE authority_id=?').all(f.issued.id),original.snapshots);deepEqual(db.prepare('SELECT * FROM retail_offline_authority_permits WHERE authority_id=?').all(f.issued.id),original.permits);lifecycle.close();db.close()}finally{f.close()}})
+
+test('D.2B Fixture I blocks sufficient-stock Sync for UNDER_REVIEW exact pair',async()=>{const f=await d2bFixture();try{const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);await lifecycle.review(f.location.id,{offlineOperationId:'d2b-origin',saleItemId:'d2b-origin-item',commandId:'d2b-i-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});equal((await lifecycle.getCurrentState('d2b-origin','d2b-origin-item')as{current_state:string}).current_state,'under_review');const input=f.signed('d2b-i-blocked',4,[{id:'d2b-i-item',productId:f.blocked.id,quantity:1}]),db=new DatabaseSync(f.file),count=(t:string)=>((db.prepare(`SELECT COUNT(*) AS count FROM ${t} WHERE offline_operation_id='d2b-i-blocked'`).get()as{count:number}).count);await rejects(f.sync.sync(f.location.id,input,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);equal(count('retail_offline_sale_evidence'),0);equal(count('retail_offline_sale_sync_receipts'),0);equal(count('retail_offline_stock_conflict_verifications'),0);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2b-i-blocked-sale'").get()as{count:number}).count,0);equal((db.prepare('SELECT COUNT(*) AS count FROM retail_offline_sale_evidence WHERE permit_id=?').get(f.permits[4]!.id)as{count:number}).count,0);equal((db.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE permit_id=?').get(f.permits[4]!.id)as{count:number}).count,0);db.close();lifecycle.close()}finally{f.close()}})
+
+test('D.2B Fixture J allows unrelated Product at same unresolved Location',async()=>{const f=await d2bFixture();try{const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),input=f.signed('d2b-j-clean',5,[{id:'d2b-j-item',productId:f.clean.id,quantity:1}]),before=(await f.inventory.findBalance(f.clean.id,f.location.id))!.onHandQuantity,result=await f.sync.sync(f.location.id,input,f.admin),db=new DatabaseSync(f.file);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.location.id),true);equal(await lifecycle.isProductLocationBlocked(f.clean.id,f.location.id),false);equal(result.replayed,false);equal((await f.inventory.findBalance(f.clean.id,f.location.id))!.onHandQuantity,before-1);for(const [t,w]of[['retail_offline_sale_evidence',"offline_operation_id='d2b-j-clean'"],['retail_offline_sale_sync_receipts',"offline_operation_id='d2b-j-clean'"],['retail_sales',"id='d2b-j-clean-sale'"],['retail_sale_items',"id='d2b-j-item'"],['retail_payment_allocations',"id='d2b-j-clean-payment'"]])equal((db.prepare(`SELECT COUNT(*) AS count FROM ${t} WHERE ${w}`).get()as{count:number}).count,1);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE offline_operation_id='d2b-j-clean'").get()as{count:number}).count,0);db.close();lifecycle.close()}finally{f.close()}})
+
+test('D.2B Fixture K allows same Product at unrelated Location',async()=>{const f=await d2bFixture();try{const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.location.id),true);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.other.id),false);await f.inventory.recordMovement({productId:f.blocked.id,locationId:f.other.id,quantityDelta:5,type:'opening',sourceType:'test',sourceId:'d2b-k-stock',sourceLineId:'d2b-k-stock'},f.admin);const before=(await f.inventory.findBalance(f.blocked.id,f.other.id))!.onHandQuantity,pair=generateKeyPairSync('ed25519'),terminal=await f.authority.enrollTerminal({locationId:f.other.id,keyAlgorithm:RETAIL_OFFLINE_SIGNATURE_ALGORITHM,publicKey:pair.publicKey.export({format:'der',type:'spki'}).toString('base64')},f.admin),issued=await f.authority.issueAuthority({terminalId:terminal.id,userId:'cashier-1',locationId:f.other.id,expiresAt:new Date(Date.now()+60_000),permitCount:1,productIds:[f.blocked.id]},f.admin),permit=(await f.authority.listPermits(issued.id))[0]!,envelope={schemaVersion:1 as const,offlineOperationId:'d2b-k-other-location',authorityId:issued.id,authorityVersion:issued.authorityVersion,permitId:permit.id,permitSequence:permit.sequence,terminalId:terminal.id,terminalKeyVersion:1,userId:'cashier-1',locationId:f.other.id,proposedSaleId:'d2b-k-other-location-sale',lines:[{id:'d2b-k-other-location-item',productId:f.blocked.id,quantity:1,unitPriceMinor:100}],currencyCode:'USD',currencyExponent:2,cashAllocation:{id:'d2b-k-other-location-payment',method:'cash' as const,amountMinor:100,ordinal:0 as const},subtotalMinor:100,payableTotalMinor:100,claimedOfflineCompletedAt:'2026-09-21T00:00:00.000Z'},canonical=canonicalizeRetailOfflineEnvelope(envelope),result=await f.sync.sync(f.other.id,{envelope,payloadHash:createHash('sha256').update(canonical).digest('hex'),signature:`${RETAIL_OFFLINE_SIGNATURE_PREFIX}${sign(null,Buffer.from(canonical),pair.privateKey).toString('base64')}`},f.admin),db=new DatabaseSync(f.file);equal(result.replayed,false);equal((await f.inventory.findBalance(f.blocked.id,f.other.id))!.onHandQuantity,before-1);for(const [t,w]of[['retail_offline_sale_evidence',"offline_operation_id='d2b-k-other-location'"],['retail_offline_sale_sync_receipts',"offline_operation_id='d2b-k-other-location'"],['retail_sales',"id='d2b-k-other-location-sale' AND location_id='"+f.other.id+"'"],['retail_sale_items',"id='d2b-k-other-location-item' AND product_id='"+f.blocked.id+"'"],['retail_payment_allocations',"id='d2b-k-other-location-payment'"]])equal((db.prepare(`SELECT COUNT(*) AS count FROM ${t} WHERE ${w}`).get()as{count:number}).count,1);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE offline_operation_id='d2b-k-other-location'").get()as{count:number}).count,0);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.location.id),true);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.other.id),false);db.close();lifecycle.close()}finally{f.close()}})
+
+test('D.2B Fixture M recovered stock remains blocked while conflict unresolved',async()=>{const f=await d2bFixture();try{const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.location.id),true);const before=(await f.inventory.findBalance(f.blocked.id,f.location.id))!.onHandQuantity;equal(before,19);const input=f.signed('d2b-m-blocked',1,[{id:'d2b-m-item',productId:f.blocked.id,quantity:1}]),db=new DatabaseSync(f.file);await rejects(f.sync.sync(f.location.id,input,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);equal((await f.inventory.findBalance(f.blocked.id,f.location.id))!.onHandQuantity,before);for(const t of['retail_offline_sale_evidence','retail_offline_sale_sync_receipts','retail_offline_stock_conflict_verifications'])equal((db.prepare(`SELECT COUNT(*) AS count FROM ${t} WHERE offline_operation_id='d2b-m-blocked'`).get()as{count:number}).count,0);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2b-m-blocked-sale'").get()as{count:number}).count,0);for(const t of['retail_offline_sale_evidence','retail_offline_stock_conflict_verifications'])equal((db.prepare(`SELECT COUNT(*) AS count FROM ${t} WHERE permit_id=?`).get(f.permits[1]!.id)as{count:number}).count,0);equal(await lifecycle.isProductLocationBlocked(f.blocked.id,f.location.id),true);db.close();lifecycle.close()}finally{f.close()}})
+
+
+test('D.2B Fixture Q gives stock deficit precedence over unresolved multi-line blocking', async () => {
+  const f = await d2bFixture()
+
+  try {
+    const lifecycle = new SqliteRetailOfflineStockConflictLifecycleRepository(f.file)
+    const db = new DatabaseSync(f.file)
+
+    try {
+      equal(
+        await lifecycle.isProductLocationBlocked(f.blocked.id, f.location.id),
+        true,
+      )
+
+      equal(
+        await lifecycle.isProductLocationBlocked(f.clean.id, f.location.id),
+        false,
+      )
+
+      const blockedBefore = (
+        await f.inventory.findBalance(f.blocked.id, f.location.id)
+      )!.onHandQuantity
+
+      const cleanBefore = (
+        await f.inventory.findBalance(f.clean.id, f.location.id)
+      )!.onHandQuantity
+
+      const input = f.signed(
+        'd2b-q-multi-deficit',
+        4,
+        [
+          {
+            id: 'd2b-q-blocked-item',
+            productId: f.blocked.id,
+            quantity: 1,
+          },
+          {
+            id: 'd2b-q-deficit-item',
+            productId: f.clean.id,
+            quantity: cleanBefore + 1,
+          },
+        ],
+      )
+
+      await rejects(
+        f.sync.sync(f.location.id, input, f.admin),
+        /VERIFIED_OFFLINE_STOCK_CONFLICT/,
+      )
+
+      const verification = db.prepare(
+        "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE offline_operation_id='d2b-q-multi-deficit'",
+      ).get() as { count: number }
+
+      equal(verification.count, 1)
+
+      const lines = db.prepare(
+        "SELECT sale_item_id,product_id,quantity,observed_on_hand_quantity,initial_deficit_quantity FROM retail_offline_stock_conflict_verification_lines WHERE offline_operation_id='d2b-q-multi-deficit' ORDER BY sale_item_id",
+      ).all() as Array<{
+        sale_item_id: string
+        product_id: string
+        quantity: number
+        observed_on_hand_quantity: number
+        initial_deficit_quantity: number
+      }>
+
+      deepEqual(lines, [
+        {
+          sale_item_id: 'd2b-q-blocked-item',
+          product_id: f.blocked.id,
+          quantity: 1,
+          observed_on_hand_quantity: blockedBefore,
+          initial_deficit_quantity: 0,
+        },
+        {
+          sale_item_id: 'd2b-q-deficit-item',
+          product_id: f.clean.id,
+          quantity: cleanBefore + 1,
+          observed_on_hand_quantity: cleanBefore,
+          initial_deficit_quantity: 1,
+        },
+      ])
+
+      equal(
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2b-q-multi-deficit-sale'",
+        ).get() as { count: number }).count,
+        0,
+      )
+
+      equal(
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_sale_evidence WHERE offline_operation_id='d2b-q-multi-deficit'",
+        ).get() as { count: number }).count,
+        0,
+      )
+
+      equal(
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_sale_sync_receipts WHERE offline_operation_id='d2b-q-multi-deficit'",
+        ).get() as { count: number }).count,
+        0,
+      )
+
+      equal(
+        (
+          await f.inventory.findBalance(f.blocked.id, f.location.id)
+        )!.onHandQuantity,
+        blockedBefore,
+      )
+
+      equal(
+        (
+          await f.inventory.findBalance(f.clean.id, f.location.id)
+        )!.onHandQuantity,
+        cleanBefore,
+      )
+
+      equal(
+        await lifecycle.isProductLocationBlocked(f.blocked.id, f.location.id),
+        true,
+      )
+    } finally {
+      db.close()
+      lifecycle.close()
+    }
+  } finally {
+    f.close()
+  }
+})
+test('D.2B Fixture O preserves verified-conflict replay after unresolved lifecycle', async () => {
+  const f = await d2bFixture()
+
+  try {
+    const lifecycle = new SqliteRetailOfflineStockConflictLifecycleRepository(f.file)
+    const db = new DatabaseSync(f.file)
+
+    try {
+      equal(
+        await lifecycle.isProductLocationBlocked(f.blocked.id, f.location.id),
+        true,
+      )
+
+      const countVerification = (): number =>
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE offline_operation_id='d2b-origin'",
+        ).get() as { count: number }).count
+
+      const countVerificationLines = (): number =>
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verification_lines WHERE offline_operation_id='d2b-origin'",
+        ).get() as { count: number }).count
+
+      const countSales = (): number =>
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2b-origin-sale'",
+        ).get() as { count: number }).count
+
+      const countMaterializationReceipts = (): number =>
+        (db.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_materialization_receipts WHERE offline_operation_id='d2b-origin'",
+        ).get() as { count: number }).count
+
+      const before = {
+        verification: countVerification(),
+        verificationLines: countVerificationLines(),
+        sales: countSales(),
+        materializationReceipts: countMaterializationReceipts(),
+        stock: (await f.inventory.findBalance(
+          f.blocked.id,
+          f.location.id,
+        ))!.onHandQuantity,
+      }
+
+      equal(before.verification, 1)
+      equal(before.verificationLines, 1)
+      equal(before.sales, 1)
+      equal(before.materializationReceipts, 1)
+
+      const exactReplay = f.signed(
+        'd2b-origin',
+        0,
+        [{
+          id: 'd2b-origin-item',
+          productId: f.blocked.id,
+          quantity: 6,
+        }],
+      )
+
+      await rejects(
+        f.sync.sync(f.location.id, exactReplay, f.admin),
+        /RETAIL_OFFLINE_REVIEW_REQUIRED/,
+      )
+
+      const after = {
+        verification: countVerification(),
+        verificationLines: countVerificationLines(),
+        sales: countSales(),
+        materializationReceipts: countMaterializationReceipts(),
+        stock: (await f.inventory.findBalance(
+          f.blocked.id,
+          f.location.id,
+        ))!.onHandQuantity,
+      }
+
+      deepEqual(after, before)
+
+      equal(
+        await lifecycle.isProductLocationBlocked(f.blocked.id, f.location.id),
+        true,
+      )
+    } finally {
+      db.close()
+      lifecycle.close()
+    }
+  } finally {
+    f.close()
+  }
+})
+test('D.2B Fixture N preserves accepted Offline Sync replay after later unresolved conflict', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'retail-d2b-n-'))
+  const file = join(directory, 'x.sqlite')
+  const admin = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'd2b-n-admin' }
+  const manager = { actorType: 'user' as const, actorUserId: 'manager-1', requestId: 'd2b-n-manager' }
+
+  initializeDatabase(file)
+
+  const auth = new SqliteAuthRepository(file)
+  const access = new SqliteRetailAccessRepository(file)
+  const catalog = new SqliteRetailCatalogRepository(file)
+  const inventory = new SqliteRetailInventoryRepository(file)
+  const authority = new SqliteRetailOfflineAuthorityRepository(file)
+  const sync = new SqliteRetailOfflineSaleSyncRepository(file)
+  const materializer = new SqliteRetailOfflineStockConflictMaterializationRepository(file)
+  const lifecycle = new SqliteRetailOfflineStockConflictLifecycleRepository(file)
+
+  try {
+    for (const [id, role] of [
+      ['admin-1', 'admin'],
+      ['manager-1', 'manager'],
+      ['cashier-1', 'operator'],
+    ] as const) {
+      await auth.createUser({
+        id,
+        username: id,
+        normalizedUsername: id,
+        email: `${id}@test`,
+        role,
+        status: 'active',
+        sessionVersion: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+    }
+
+    const location = await access.createLocation({
+      code: 'D2B-N-X',
+      name: 'D2B N X',
+      type: 'store',
+      status: 'active',
+    }, admin)
+
+    await access.configureCurrency(location.id, 'USD', 2, admin)
+    await access.grant('manager-1', location.id, admin)
+
+    const product = await catalog.createProduct({
+      sourceId: 'd2b-n-product',
+      name: 'D2B N Product',
+    }, admin)
+
+    await catalog.setPrice(product.id, location.id, 100, admin)
+
+    await inventory.recordMovement({
+      productId: product.id,
+      locationId: location.id,
+      quantityDelta: 5,
+      type: 'opening',
+      sourceType: 'test',
+      sourceId: 'd2b-n-seed',
+      sourceLineId: 'd2b-n-seed',
+    }, admin)
+
+    const pair = generateKeyPairSync('ed25519')
+
+    const terminal = await authority.enrollTerminal({
+      locationId: location.id,
+      keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM,
+      publicKey: pair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+    }, admin)
+
+    const issued = await authority.issueAuthority({
+      terminalId: terminal.id,
+      userId: 'cashier-1',
+      locationId: location.id,
+      expiresAt: new Date(Date.now() + 60_000),
+      permitCount: 2,
+      productIds: [product.id],
+    }, admin)
+
+    const permits = await authority.listPermits(issued.id)
+    equal(permits.length, 2)
+
+    const makeSigned = (
+      operationId: string,
+      permitIndex: number,
+      saleItemId: string,
+      quantity: number,
+    ) => {
+      const amount = quantity * 100
+      const envelope = {
+        schemaVersion: 1 as const,
+        offlineOperationId: operationId,
+        authorityId: issued.id,
+        authorityVersion: issued.authorityVersion,
+        permitId: permits[permitIndex]!.id,
+        permitSequence: permits[permitIndex]!.sequence,
+        terminalId: terminal.id,
+        terminalKeyVersion: 1,
+        userId: 'cashier-1',
+        locationId: location.id,
+        proposedSaleId: `${operationId}-sale`,
+        lines: [{
+          id: saleItemId,
+          productId: product.id,
+          quantity,
+          unitPriceMinor: 100,
+        }],
+        currencyCode: 'USD',
+        currencyExponent: 2,
+        cashAllocation: {
+          id: `${operationId}-payment`,
+          method: 'cash' as const,
+          amountMinor: amount,
+          ordinal: 0 as const,
+        },
+        subtotalMinor: amount,
+        payableTotalMinor: amount,
+        claimedOfflineCompletedAt: '2026-09-21T00:00:00.000Z',
+      }
+
+      const canonical = canonicalizeRetailOfflineEnvelope(envelope)
+
+      return {
+        envelope,
+        payloadHash: createHash('sha256').update(canonical).digest('hex'),
+        signature: `${RETAIL_OFFLINE_SIGNATURE_PREFIX}${sign(
+          null,
+          Buffer.from(canonical),
+          pair.privateKey,
+        ).toString('base64')}`,
+      }
+    }
+
+    // Both permits already exist while Product+Location is still clean.
+    equal(await lifecycle.isProductLocationBlocked(product.id, location.id), false)
+
+    const op1 = makeSigned('d2b-n-op1', 0, 'd2b-n-op1-item', 1)
+    const op2 = makeSigned('d2b-n-op2', 1, 'd2b-n-op2-item', 5)
+
+    const initialStock = (await inventory.findBalance(product.id, location.id))!.onHandQuantity
+    equal(initialStock, 5)
+
+    const first = await sync.sync(location.id, op1, admin)
+    equal(first.replayed, false)
+
+    const stockAfterFirst = (await inventory.findBalance(product.id, location.id))!.onHandQuantity
+    equal(stockAfterFirst, 4)
+
+    const db = new DatabaseSync(file)
+
+    const countWhere = (table: string, where: string): number =>
+      (db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${where}`).get() as { count: number }).count
+
+    const op1CountsBeforeReplay = {
+      evidence: countWhere('retail_offline_sale_evidence', "offline_operation_id='d2b-n-op1'"),
+      receipts: countWhere('retail_offline_sale_sync_receipts', "offline_operation_id='d2b-n-op1'"),
+      sales: countWhere('retail_sales', "id='d2b-n-op1-sale'"),
+      items: countWhere('retail_sale_items', "id='d2b-n-op1-item'"),
+      payments: countWhere('retail_payment_allocations', "id='d2b-n-op1-payment'"),
+      verifications: countWhere(
+        'retail_offline_stock_conflict_verifications',
+        "offline_operation_id='d2b-n-op1'",
+      ),
+    }
+
+    deepEqual(op1CountsBeforeReplay, {
+      evidence: 1,
+      receipts: 1,
+      sales: 1,
+      items: 1,
+      payments: 1,
+      verifications: 0,
+    })
+
+    await rejects(
+      sync.sync(location.id, op2, admin),
+      /VERIFIED_OFFLINE_STOCK_CONFLICT/,
+    )
+
+    equal(
+      countWhere(
+        'retail_offline_stock_conflict_verifications',
+        "offline_operation_id='d2b-n-op2'",
+      ),
+      1,
+    )
+
+    await materializer.materialize(location.id, {
+      offlineOperationId: 'd2b-n-op2',
+      commandId: 'd2b-n-materialize-op2',
+    }, manager)
+
+    equal(await lifecycle.isProductLocationBlocked(product.id, location.id), true)
+
+    const stockBeforeReplay = (await inventory.findBalance(product.id, location.id))!.onHandQuantity
+    equal(stockBeforeReplay, -1)
+
+    const replay = await sync.sync(location.id, op1, admin)
+    equal(replay.replayed, true)
+
+    const stockAfterReplay = (await inventory.findBalance(product.id, location.id))!.onHandQuantity
+    equal(stockAfterReplay, stockBeforeReplay)
+
+    const op1CountsAfterReplay = {
+      evidence: countWhere('retail_offline_sale_evidence', "offline_operation_id='d2b-n-op1'"),
+      receipts: countWhere('retail_offline_sale_sync_receipts', "offline_operation_id='d2b-n-op1'"),
+      sales: countWhere('retail_sales', "id='d2b-n-op1-sale'"),
+      items: countWhere('retail_sale_items', "id='d2b-n-op1-item'"),
+      payments: countWhere('retail_payment_allocations', "id='d2b-n-op1-payment'"),
+      verifications: countWhere(
+        'retail_offline_stock_conflict_verifications',
+        "offline_operation_id='d2b-n-op1'",
+      ),
+    }
+
+    deepEqual(op1CountsAfterReplay, op1CountsBeforeReplay)
+    equal(await lifecycle.isProductLocationBlocked(product.id, location.id), true)
+
+    db.close()
+  } finally {
+    lifecycle.close()
+    materializer.close()
+    sync.close()
+    authority.close()
+    inventory.close()
+    catalog.close()
+    access.close()
+    auth.close()
+
+    try {
+      rmSync(directory, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      })
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !('code' in error) ||
+        error.code !== 'EPERM'
+      ) throw error
+    }
+  }
+})
 test('verified conflict materialization is atomic, idempotent, and creates the only negative-stock seam', async () => {
   const directory=mkdtempSync(join(tmpdir(),'retail-conflict-materialization-')),file=join(directory,'x.sqlite'),context={actorType:'user' as const,actorUserId:'admin-1',requestId:'materialization'}
   initializeDatabase(file);const auth=new SqliteAuthRepository(file),access=new SqliteRetailAccessRepository(file),catalog=new SqliteRetailCatalogRepository(file),inventory=new SqliteRetailInventoryRepository(file),authority=new SqliteRetailOfflineAuthorityRepository(file),sync=new SqliteRetailOfflineSaleSyncRepository(file),materializer=new SqliteRetailOfflineStockConflictMaterializationRepository(file),returns=new SqliteRetailSaleReturnRepository(file)
@@ -78,8 +567,295 @@ test('lifecycle invalid transition, late failure rollback, and independent doubl
 
 test('Fixture P: materialization rolls incident and lifecycle projection back with late projection failure',async()=>{const f=await conflictFixture([{stock:1,quantity:2}],'projection-rollback');try{const guard=new DatabaseSync(f.file);guard.exec("CREATE TRIGGER fail_projection BEFORE INSERT ON retail_offline_stock_conflict_incident_lifecycle BEGIN SELECT RAISE(ABORT,'forced projection failure'); END;");await rejects(f.materializer.materialize(f.location.id,{offlineOperationId:'projection-rollback',commandId:'projection-fail'},f.manager),/forced projection failure/);const count=(table:string)=>(guard.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()as{count:number}).count;equal(count('retail_sales'),0);equal(count('retail_sale_items'),0);equal(count('retail_payment_allocations'),0);equal(count('retail_offline_sale_evidence'),0);equal(count('retail_inventory_movements'),1);equal(count('retail_offline_stock_conflict_incidents'),0);equal(count('retail_offline_stock_conflict_incident_lifecycle'),0);equal(count('retail_offline_stock_conflict_incident_events'),0);equal(count('retail_offline_stock_conflict_materialization_receipts'),0);equal(count('retail_offline_stock_conflict_verifications'),1);equal((await f.inventory.findBalance(f.products[0]!.id,f.location.id))?.onHandQuantity,1);guard.close()}finally{f.close()}})
 
-test('Fixture M real same Product and Location incidents retain independent unresolved lifecycle state',async()=>{const f=await conflictFixture([{stock:1,quantity:2}],'multi-conflict-op-1');try{await f.materializer.materialize(f.location.id,{offlineOperationId:'multi-conflict-op-1',commandId:'multi-materialize-1'},f.manager);await f.inventory.recordMovement({productId:f.products[0]!.id,locationId:f.location.id,quantityDelta:2,type:'goods_receipt',sourceType:'test',sourceId:'multi-conflict-restock',sourceLineId:'multi-conflict-restock'},f.admin);const authority=new SqliteRetailOfflineAuthorityRepository(f.file),sync=new SqliteRetailOfflineSaleSyncRepository(f.file),catalog=new SqliteRetailCatalogRepository(f.file),productB=await catalog.createProduct({sourceId:'multi-conflict-product-b',name:'Product B'},f.admin),pair=generateKeyPairSync('ed25519'),terminal=await authority.enrollTerminal({locationId:f.location.id,keyAlgorithm:RETAIL_OFFLINE_SIGNATURE_ALGORITHM,publicKey:pair.publicKey.export({format:'der',type:'spki'}).toString('base64')},f.admin),issued=await authority.issueAuthority({terminalId:terminal.id,userId:'cashier-1',locationId:f.location.id,expiresAt:new Date(Date.now()+60_000),permitCount:1,productIds:[f.products[0]!.id]},f.admin),permit=(await authority.listPermits(issued.id))[0]!,second={...f.envelope,offlineOperationId:'multi-conflict-op-2',authorityId:issued.id,authorityVersion:issued.authorityVersion,permitId:permit.id,permitSequence:permit.sequence,terminalId:terminal.id,proposedSaleId:'multi-conflict-sale-2',lines:[{...f.envelope.lines[0]!,id:'multi-conflict-item-2'}],cashAllocation:{...f.envelope.cashAllocation,id:'multi-conflict-payment-2'}},canonical=canonicalizeRetailOfflineEnvelope(second),input={envelope:second,payloadHash:createHash('sha256').update(canonical).digest('hex'),signature:`${RETAIL_OFFLINE_SIGNATURE_PREFIX}${sign(null,Buffer.from(canonical),pair.privateKey).toString('base64')}`};await rejects(sync.sync(f.location.id,input,f.admin),/VERIFIED_OFFLINE_STOCK_CONFLICT/);await f.materializer.materialize(f.location.id,{offlineOperationId:'multi-conflict-op-2',commandId:'multi-materialize-2'},f.manager);const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),one=await lifecycle.getCurrentState('multi-conflict-op-1',f.envelope.lines[0]!.id)as {current_state:string;version:number},two=await lifecycle.getCurrentState('multi-conflict-op-2','multi-conflict-item-2')as {current_state:string;version:number;updated_at:string;updated_by:string},proof=new DatabaseSync(f.file),unresolved=proof.prepare("SELECT offline_operation_id FROM retail_offline_stock_conflict_incident_lifecycle WHERE product_id=? AND location_id=? AND current_state IN ('open','under_review') ORDER BY offline_operation_id").all(f.products[0]!.id,f.location.id)as Array<{offline_operation_id:string}>;deepEqual(unresolved,[{offline_operation_id:'multi-conflict-op-1'},{offline_operation_id:'multi-conflict-op-2'}]);proof.close();equal(one.current_state,'open');equal(one.version,1);equal(two.current_state,'open');equal(two.version,1);await lifecycle.review(f.location.id,{offlineOperationId:'multi-conflict-op-1',saleItemId:f.envelope.lines[0]!.id,commandId:'multi-review-1',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});const finalOne=await lifecycle.getCurrentState('multi-conflict-op-1',f.envelope.lines[0]!.id)as {current_state:string;version:number},finalTwo=await lifecycle.getCurrentState('multi-conflict-op-2','multi-conflict-item-2')as {current_state:string;version:number;updated_at:string;updated_by:string};equal(finalOne.current_state,'under_review');equal(finalOne.version,2);deepEqual(finalTwo,two);const firstEvents=await lifecycle.listEvents('multi-conflict-op-1',f.envelope.lines[0]!.id);equal((firstEvents as Array<{event_type:string;previous_state:string;resulting_state:string}>).length,1);equal((firstEvents[0]as {event_type:string;previous_state:string;resulting_state:string}).event_type,'review_started');equal((firstEvents[0]as {event_type:string;previous_state:string;resulting_state:string}).previous_state,'open');equal((firstEvents[0]as {event_type:string;previous_state:string;resulting_state:string}).resulting_state,'under_review');equal((await lifecycle.listEvents('multi-conflict-op-2','multi-conflict-item-2')).length,0);equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,f.location.id),true);equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,'other-location'),false);equal(await lifecycle.isProductLocationBlocked(productB.id,f.location.id),false);lifecycle.close();catalog.close();sync.close();authority.close()}finally{f.close()}})
+test(
+  'Fixture M real same Product and Location incidents retain independent unresolved lifecycle state',
+  async () => {
+    const f = await conflictFixture(
+      [{ stock: 1, quantity: 2 }],
+      'multi-conflict-op-1',
+    );
 
+    try {
+      const authority = new SqliteRetailOfflineAuthorityRepository(f.file);
+      const sync = new SqliteRetailOfflineSaleSyncRepository(f.file);
+      const catalog = new SqliteRetailCatalogRepository(f.file);
+
+      const productB = await catalog.createProduct(
+        {
+          sourceId: 'multi-conflict-product-b',
+          name: 'Product B',
+        },
+        f.admin,
+      );
+
+      const pair = generateKeyPairSync('ed25519');
+
+      const terminal = await authority.enrollTerminal(
+        {
+          locationId: f.location.id,
+          keyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM,
+          publicKey: pair.publicKey
+            .export({ format: 'der', type: 'spki' })
+            .toString('base64'),
+        },
+        f.admin,
+      );
+
+      const issued = await authority.issueAuthority(
+        {
+          terminalId: terminal.id,
+          userId: 'cashier-1',
+          locationId: f.location.id,
+          expiresAt: new Date(Date.now() + 60_000),
+          permitCount: 1,
+          productIds: [f.products[0]!.id],
+        },
+        f.admin,
+      );
+
+      const permit = (await authority.listPermits(issued.id))[0]!;
+
+      const second = {
+        ...f.envelope,
+        offlineOperationId: 'multi-conflict-op-2',
+        authorityId: issued.id,
+        authorityVersion: issued.authorityVersion,
+        permitId: permit.id,
+        permitSequence: permit.sequence,
+        terminalId: terminal.id,
+        proposedSaleId: 'multi-conflict-sale-2',
+        lines: [
+          {
+            ...f.envelope.lines[0]!,
+            id: 'multi-conflict-item-2',
+          },
+        ],
+        cashAllocation: {
+          ...f.envelope.cashAllocation,
+          id: 'multi-conflict-payment-2',
+        },
+      };
+
+      const canonical = canonicalizeRetailOfflineEnvelope(second);
+
+      const input = {
+        envelope: second,
+        payloadHash: createHash('sha256')
+          .update(canonical)
+          .digest('hex'),
+        signature: `${RETAIL_OFFLINE_SIGNATURE_PREFIX}${sign(
+          null,
+          Buffer.from(canonical),
+          pair.privateKey,
+        ).toString('base64')}`,
+      };
+
+      await f.materializer.materialize(
+        f.location.id,
+        {
+          offlineOperationId: 'multi-conflict-op-1',
+          commandId: 'multi-materialize-1',
+        },
+        f.manager,
+      );
+
+      await f.inventory.recordMovement(
+        {
+          productId: f.products[0]!.id,
+          locationId: f.location.id,
+          quantityDelta: 2,
+          type: 'goods_receipt',
+          sourceType: 'test',
+          sourceId: 'multi-conflict-restock',
+          sourceLineId: 'multi-conflict-restock',
+        },
+        f.admin,
+      );
+
+      await rejects(
+        sync.sync(f.location.id, input, f.admin),
+        /VERIFIED_OFFLINE_STOCK_CONFLICT/,
+      );
+
+      await f.materializer.materialize(
+        f.location.id,
+        {
+          offlineOperationId: 'multi-conflict-op-2',
+          commandId: 'multi-materialize-2',
+        },
+        f.manager,
+      );
+
+      const lifecycle =
+        new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);
+
+      const one = await lifecycle.getCurrentState(
+        'multi-conflict-op-1',
+        f.envelope.lines[0]!.id,
+      ) as {
+        current_state: string;
+        version: number;
+      };
+
+      const two = await lifecycle.getCurrentState(
+        'multi-conflict-op-2',
+        'multi-conflict-item-2',
+      ) as {
+        current_state: string;
+        version: number;
+        updated_at: string;
+        updated_by: string;
+      };
+
+      const proof = new DatabaseSync(f.file);
+
+      const unresolved = proof
+        .prepare(
+          "SELECT offline_operation_id FROM retail_offline_stock_conflict_incident_lifecycle WHERE product_id=? AND location_id=? AND current_state IN ('open','under_review') ORDER BY offline_operation_id",
+        )
+        .all(
+          f.products[0]!.id,
+          f.location.id,
+        ) as Array<{ offline_operation_id: string }>;
+
+      deepEqual(unresolved, [
+        { offline_operation_id: 'multi-conflict-op-1' },
+        { offline_operation_id: 'multi-conflict-op-2' },
+      ]);
+
+      proof.close();
+
+      equal(one.current_state, 'open');
+      equal(one.version, 1);
+      equal(two.current_state, 'open');
+      equal(two.version, 1);
+
+      await lifecycle.review(
+        f.location.id,
+        {
+          offlineOperationId: 'multi-conflict-op-1',
+          saleItemId: f.envelope.lines[0]!.id,
+          commandId: 'multi-review-1',
+          expectedCurrentState: 'open',
+          targetState: 'under_review',
+          actorUserId: 'manager-1',
+        },
+      );
+
+      const finalOne = await lifecycle.getCurrentState(
+        'multi-conflict-op-1',
+        f.envelope.lines[0]!.id,
+      ) as {
+        current_state: string;
+        version: number;
+      };
+
+      const finalTwo = await lifecycle.getCurrentState(
+        'multi-conflict-op-2',
+        'multi-conflict-item-2',
+      ) as {
+        current_state: string;
+        version: number;
+        updated_at: string;
+        updated_by: string;
+      };
+
+      equal(finalOne.current_state, 'under_review');
+      equal(finalOne.version, 2);
+      deepEqual(finalTwo, two);
+
+      const firstEvents = await lifecycle.listEvents(
+        'multi-conflict-op-1',
+        f.envelope.lines[0]!.id,
+      );
+
+      equal(
+        (
+          firstEvents as Array<{
+            event_type: string;
+            previous_state: string;
+            resulting_state: string;
+          }>
+        ).length,
+        1,
+      );
+
+      equal(
+        (
+          firstEvents[0] as {
+            event_type: string;
+            previous_state: string;
+            resulting_state: string;
+          }
+        ).event_type,
+        'review_started',
+      );
+
+      equal(
+        (
+          firstEvents[0] as {
+            event_type: string;
+            previous_state: string;
+            resulting_state: string;
+          }
+        ).previous_state,
+        'open',
+      );
+
+      equal(
+        (
+          firstEvents[0] as {
+            event_type: string;
+            previous_state: string;
+            resulting_state: string;
+          }
+        ).resulting_state,
+        'under_review',
+      );
+
+      equal(
+        (
+          await lifecycle.listEvents(
+            'multi-conflict-op-2',
+            'multi-conflict-item-2',
+          )
+        ).length,
+        0,
+      );
+
+      equal(
+        await lifecycle.isProductLocationBlocked(
+          f.products[0]!.id,
+          f.location.id,
+        ),
+        true,
+      );
+
+      equal(
+        await lifecycle.isProductLocationBlocked(
+          f.products[0]!.id,
+          'other-location',
+        ),
+        false,
+      );
+
+      equal(
+        await lifecycle.isProductLocationBlocked(
+          productB.id,
+          f.location.id,
+        ),
+        false,
+      );
+
+      lifecycle.close();
+      catalog.close();
+      sync.close();
+      authority.close();
+    } finally {
+      f.close();
+    }
+  },
+);
 test('D.2A outbound operations block only unresolved exact Product and Location pairs',async()=>{const f=await conflictFixture([{stock:1,quantity:2}],'d2a-block');try{await f.materializer.materialize(f.location.id,{offlineOperationId:'d2a-block',commandId:'d2a-materialize'},f.manager);await f.inventory.recordMovement({productId:f.products[0]!.id,locationId:f.location.id,quantityDelta:5,type:'goods_receipt',sourceType:'test',sourceId:'d2a-restock',sourceLineId:'d2a-restock'},f.admin);const catalog=new SqliteRetailCatalogRepository(f.file),access=new SqliteRetailAccessRepository(f.file),sales=new SqliteRetailSaleRepository(f.file),transfers=new SqliteRetailTransferRepository(f.file),clean=await catalog.createProduct({sourceId:'d2a-clean',name:'Clean'},f.admin),other=await access.createLocation({code:'D2A-OTHER',name:'Other',type:'store',status:'active'},f.admin);await access.configureCurrency(other.id,'USD',2,f.admin);await catalog.setPrice(clean.id,f.location.id,100,f.admin);await catalog.setPrice(f.products[0]!.id,other.id,100,f.admin);await catalog.setPrice(clean.id,other.id,100,f.admin);await f.inventory.recordMovement({productId:clean.id,locationId:f.location.id,quantityDelta:5,type:'opening',sourceType:'test',sourceId:'d2a-clean',sourceLineId:'d2a-clean'},f.admin);await f.inventory.recordMovement({productId:f.products[0]!.id,locationId:other.id,quantityDelta:5,type:'opening',sourceType:'test',sourceId:'d2a-other',sourceLineId:'d2a-other'},f.admin);const blocked={clientOperationId:'d2a-blocked',saleId:'d2a-blocked',lines:[{id:'d2a-blocked-line',productId:f.products[0]!.id,quantity:1}],allocations:[{id:'d2a-blocked-payment',method:'cash' as const,amountMinor:100,ordinal:0}]};await rejects(sales.complete(f.location.id,blocked,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);const db=new DatabaseSync(f.file);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2a-blocked'").get()as{count:number}).count,0);db.close();await rejects(sales.complete(f.location.id,{clientOperationId:'d2a-multi',saleId:'d2a-multi',lines:[{id:'d2a-clean-line',productId:clean.id,quantity:1},{id:'d2a-blocked-line-2',productId:f.products[0]!.id,quantity:1}],allocations:[{id:'d2a-multi-payment',method:'cash',amountMinor:200,ordinal:0}]},f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);equal((await f.inventory.findBalance(clean.id,f.location.id))?.onHandQuantity,5);equal((await sales.complete(f.location.id,{clientOperationId:'d2a-clean-sale',saleId:'d2a-clean-sale',lines:[{id:'d2a-clean-sale-line',productId:clean.id,quantity:1}],allocations:[{id:'d2a-clean-sale-payment',method:'cash',amountMinor:100,ordinal:0}]},f.admin)).replayed,false);equal((await sales.complete(other.id,{clientOperationId:'d2a-other-sale',saleId:'d2a-other-sale',lines:[{id:'d2a-other-sale-line',productId:f.products[0]!.id,quantity:1}],allocations:[{id:'d2a-other-sale-payment',method:'cash',amountMinor:100,ordinal:0}]},f.admin)).replayed,false);const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),item=f.envelope.lines[0]!.id;await lifecycle.review(f.location.id,{offlineOperationId:'d2a-block',saleItemId:item,commandId:'d2a-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});await rejects(sales.complete(f.location.id,{...blocked,clientOperationId:'d2a-review-blocked',saleId:'d2a-review-blocked',lines:[{id:'d2a-review-blocked-line',productId:f.products[0]!.id,quantity:1}],allocations:[{id:'d2a-review-blocked-payment',method:'cash',amountMinor:100,ordinal:0}]},f.manager),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);const outbound=await transfers.create({sourceLocationId:f.location.id,destinationLocationId:other.id,lines:[{productId:f.products[0]!.id,quantity:1}]},f.admin);await rejects(transfers.dispatch(outbound.id,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);equal((await transfers.find(outbound.id))?.status,'draft');const inbound=await transfers.create({sourceLocationId:other.id,destinationLocationId:f.location.id,lines:[{productId:f.products[0]!.id,quantity:1}]},f.admin);await transfers.dispatch(inbound.id,f.admin);await transfers.receive(inbound.id,f.admin);equal((await transfers.find(inbound.id))?.status,'received');lifecycle.close();transfers.close();sales.close();access.close();catalog.close()}finally{f.close()}})
 
 test('D.2A Fixture G preserves an accepted Sale replay after later materialization',async()=>{const f=await conflictFixture([{stock:5,quantity:10}],'d2a-g-conflict');try{const sales=new SqliteRetailSaleRepository(f.file),input={clientOperationId:'d2a-g-sale',saleId:'d2a-g-sale',lines:[{id:'d2a-g-item',productId:f.products[0]!.id,quantity:1}],allocations:[{id:'d2a-g-payment',method:'cash' as const,amountMinor:100,ordinal:0}]},first=await sales.complete(f.location.id,input,f.admin),postSale=(await f.inventory.findBalance(f.products[0]!.id,f.location.id))!.onHandQuantity;equal(first.replayed,false);equal(postSale,4);await f.materializer.materialize(f.location.id,{offlineOperationId:'d2a-g-conflict',commandId:'d2a-g-materialize'},f.manager);const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,f.location.id),true);const db=new DatabaseSync(f.file),counts=()=>({sales:(db.prepare("SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2a-g-sale'").get()as{count:number}).count,items:(db.prepare("SELECT COUNT(*) AS count FROM retail_sale_items WHERE sale_id='d2a-g-sale'").get()as{count:number}).count,payments:(db.prepare("SELECT COUNT(*) AS count FROM retail_payment_allocations WHERE sale_id='d2a-g-sale'").get()as{count:number}).count,movements:(db.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_sale' AND source_id='d2a-g-sale'").get()as{count:number}).count,receipts:(db.prepare("SELECT COUNT(*) AS count FROM retail_operation_receipts WHERE client_operation_id='d2a-g-sale'").get()as{count:number}).count}),before=counts(),replay=await sales.complete(f.location.id,input,f.admin);equal(replay.replayed,true);deepEqual(counts(),before);equal((await f.inventory.findBalance(f.products[0]!.id,f.location.id))?.onHandQuantity,-6);await rejects(sales.complete(f.location.id,{...input,saleId:'d2a-g-changed'},f.admin),/IDEMPOTENCY_CONFLICT/);db.close();lifecycle.close();sales.close()}finally{f.close()}})
