@@ -678,4 +678,95 @@ const retailOfflineStockConflictLifecycle = createSqlMigration('044_retail_offli
   CREATE TRIGGER retail_offline_stock_conflict_events_no_update BEFORE UPDATE ON retail_offline_stock_conflict_incident_events BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict lifecycle events are immutable.'); END;
   CREATE TRIGGER retail_offline_stock_conflict_events_no_delete BEFORE DELETE ON retail_offline_stock_conflict_incident_events BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict lifecycle events are immutable.'); END;
 `)
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization, retailOfflineStockConflictLifecycle] as const
+
+const retailOfflineStockConflictResolution = createSqlMigration('045_retail_offline_stock_conflict_resolution_v1', `
+  DROP TRIGGER retail_offline_stock_conflict_lifecycle_transition_guard;
+  DROP TRIGGER retail_offline_stock_conflict_events_no_update;
+  DROP TRIGGER retail_offline_stock_conflict_events_no_delete;
+
+  ALTER TABLE retail_offline_stock_conflict_incident_lifecycle RENAME TO retail_offline_stock_conflict_incident_lifecycle_v044;
+  ALTER TABLE retail_offline_stock_conflict_incident_events RENAME TO retail_offline_stock_conflict_incident_events_v044;
+
+  CREATE TABLE retail_offline_stock_conflict_incident_lifecycle (
+    offline_operation_id TEXT NOT NULL,
+    sale_item_id TEXT NOT NULL,
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    product_id TEXT NOT NULL REFERENCES retail_products(id) ON DELETE RESTRICT,
+    current_state TEXT NOT NULL CHECK(current_state IN ('open','under_review','resolved')),
+    version INTEGER NOT NULL CHECK(version >= 1),
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    PRIMARY KEY(offline_operation_id,sale_item_id),
+    FOREIGN KEY(offline_operation_id,sale_item_id) REFERENCES retail_offline_stock_conflict_incidents(offline_operation_id,sale_item_id) ON DELETE RESTRICT
+  );
+
+  INSERT INTO retail_offline_stock_conflict_incident_lifecycle(
+    offline_operation_id,sale_item_id,location_id,product_id,current_state,version,updated_at,updated_by
+  )
+  SELECT offline_operation_id,sale_item_id,location_id,product_id,current_state,version,updated_at,updated_by
+  FROM retail_offline_stock_conflict_incident_lifecycle_v044;
+
+  CREATE TABLE retail_offline_stock_conflict_incident_events (
+    event_id TEXT PRIMARY KEY,
+    offline_operation_id TEXT NOT NULL,
+    sale_item_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK(event_type IN ('review_started','resolved','reopened')),
+    previous_state TEXT NOT NULL CHECK(previous_state IN ('open','under_review','resolved')),
+    resulting_state TEXT NOT NULL CHECK(resulting_state IN ('under_review','resolved')),
+    command_id TEXT NOT NULL UNIQUE,
+    payload_hash TEXT NOT NULL,
+    actor_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    occurred_at TEXT NOT NULL,
+    CHECK(
+      (event_type='review_started' AND previous_state='open' AND resulting_state='under_review')
+      OR
+      (event_type='resolved' AND previous_state='under_review' AND resulting_state='resolved')
+      OR
+      (event_type='reopened' AND previous_state='resolved' AND resulting_state='under_review')
+    ),
+    FOREIGN KEY(offline_operation_id,sale_item_id) REFERENCES retail_offline_stock_conflict_incidents(offline_operation_id,sale_item_id) ON DELETE RESTRICT
+  );
+
+  INSERT INTO retail_offline_stock_conflict_incident_events(
+    event_id,offline_operation_id,sale_item_id,event_type,previous_state,resulting_state,
+    command_id,payload_hash,actor_user_id,occurred_at
+  )
+  SELECT
+    event_id,offline_operation_id,sale_item_id,event_type,previous_state,resulting_state,
+    command_id,payload_hash,actor_user_id,occurred_at
+  FROM retail_offline_stock_conflict_incident_events_v044;
+
+  CREATE TABLE retail_offline_stock_conflict_resolution_evidence (
+    event_id TEXT PRIMARY KEY REFERENCES retail_offline_stock_conflict_incident_events(event_id) ON DELETE RESTRICT,
+    disposition TEXT NOT NULL CHECK(length(trim(disposition)) > 0),
+    reason TEXT NOT NULL CHECK(length(trim(reason)) > 0),
+    evidence TEXT NOT NULL CHECK(length(trim(evidence)) > 0),
+    corrective_record_type TEXT NOT NULL CHECK(length(trim(corrective_record_type)) > 0),
+    corrective_record_id TEXT NOT NULL CHECK(length(trim(corrective_record_id)) > 0)
+  );
+
+  DROP TABLE retail_offline_stock_conflict_incident_events_v044;
+  DROP TABLE retail_offline_stock_conflict_incident_lifecycle_v044;
+
+  CREATE INDEX retail_offline_stock_conflict_lifecycle_pair_idx ON retail_offline_stock_conflict_incident_lifecycle(offline_operation_id,sale_item_id);
+  CREATE INDEX retail_offline_stock_conflict_lifecycle_block_idx ON retail_offline_stock_conflict_incident_lifecycle(product_id,location_id,current_state);
+  CREATE INDEX retail_offline_stock_conflict_events_history_idx ON retail_offline_stock_conflict_incident_events(offline_operation_id,sale_item_id,occurred_at,event_id);
+
+  CREATE TRIGGER retail_offline_stock_conflict_lifecycle_no_delete BEFORE DELETE ON retail_offline_stock_conflict_incident_lifecycle BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict lifecycle projection cannot be deleted.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_lifecycle_transition_guard BEFORE UPDATE ON retail_offline_stock_conflict_incident_lifecycle
+    WHEN NOT(
+      (OLD.current_state='open' AND NEW.current_state='under_review' AND NEW.version=OLD.version+1)
+      OR
+      (OLD.current_state='under_review' AND NEW.current_state='resolved' AND NEW.version=OLD.version+1)
+      OR
+      (OLD.current_state='resolved' AND NEW.current_state='under_review' AND NEW.version=OLD.version+1)
+    )
+    BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict lifecycle transition is invalid.'); END;
+
+  CREATE TRIGGER retail_offline_stock_conflict_events_no_update BEFORE UPDATE ON retail_offline_stock_conflict_incident_events BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict lifecycle events are immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_events_no_delete BEFORE DELETE ON retail_offline_stock_conflict_incident_events BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict lifecycle events are immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_resolution_evidence_no_update BEFORE UPDATE ON retail_offline_stock_conflict_resolution_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict resolution evidence is immutable.'); END;
+  CREATE TRIGGER retail_offline_stock_conflict_resolution_evidence_no_delete BEFORE DELETE ON retail_offline_stock_conflict_resolution_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict resolution evidence is immutable.'); END;
+`)
+
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization, retailOfflineStockConflictLifecycle, retailOfflineStockConflictResolution] as const

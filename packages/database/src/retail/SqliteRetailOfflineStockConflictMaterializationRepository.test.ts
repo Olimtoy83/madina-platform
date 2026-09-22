@@ -847,6 +847,28 @@ test(
         false,
       );
 
+      const resolved = await lifecycle.resolve(f.location.id, {
+        offlineOperationId: 'multi-conflict-op-1',
+        saleItemId: f.envelope.lines[0]!.id,
+        commandId: 'multi-resolve-1',
+        expectedCurrentState: 'under_review',
+        disposition: 'confirmed',
+        reason: 'review complete',
+        evidence: 'inventory recount',
+        correctiveRecord: { type: 'reconciliation', id: 'reconciliation-1' },
+        actorUserId: 'manager-1',
+      }) as { current_state: string; version: number };
+
+      equal(resolved.current_state, 'resolved');
+      equal(resolved.version, 3);
+      equal(
+        await lifecycle.isProductLocationBlocked(
+          f.products[0]!.id,
+          f.location.id,
+        ),
+        true,
+      );
+
       lifecycle.close();
       catalog.close();
       sync.close();
@@ -863,3 +885,35 @@ test('D.2A Fixture G preserves an accepted Sale replay after later materializati
 test('D.2A Fixture K rejects a multi-line Transfer atomically when one source pair is unresolved',async()=>{const f=await conflictFixture([{stock:5,quantity:10}],'d2a-k');try{await f.materializer.materialize(f.location.id,{offlineOperationId:'d2a-k',commandId:'d2a-k-materialize'},f.manager);await f.inventory.recordMovement({productId:f.products[0]!.id,locationId:f.location.id,quantityDelta:10,type:'goods_receipt',sourceType:'test',sourceId:'d2a-k-restock',sourceLineId:'d2a-k-restock'},f.admin);const catalog=new SqliteRetailCatalogRepository(f.file),access=new SqliteRetailAccessRepository(f.file),transfers=new SqliteRetailTransferRepository(f.file),clean=await catalog.createProduct({sourceId:'d2a-k-clean',name:'Clean'},f.admin),destination=await access.createLocation({code:'D2A-K-DST',name:'Destination',type:'store',status:'active'},f.admin);await f.inventory.recordMovement({productId:clean.id,locationId:f.location.id,quantityDelta:5,type:'opening',sourceType:'test',sourceId:'d2a-k-clean',sourceLineId:'d2a-k-clean'},f.admin);const blocked=await transfers.create({sourceLocationId:f.location.id,destinationLocationId:destination.id,lines:[{productId:clean.id,quantity:1},{productId:f.products[0]!.id,quantity:1}]},f.admin),beforeClean=(await f.inventory.findBalance(clean.id,f.location.id))!.onHandQuantity,beforeBlocked=(await f.inventory.findBalance(f.products[0]!.id,f.location.id))!.onHandQuantity;await rejects(transfers.dispatch(blocked.id,f.admin),/RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED/);equal((await transfers.find(blocked.id))?.status,'draft');equal((await f.inventory.findBalance(clean.id,f.location.id))?.onHandQuantity,beforeClean);equal((await f.inventory.findBalance(f.products[0]!.id,f.location.id))?.onHandQuantity,beforeBlocked);const db=new DatabaseSync(f.file);equal((db.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_transfer_dispatched' AND source_id=?").get(blocked.id)as{count:number}).count,0);equal((db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action='retail.transfer_dispatched' AND entity_id=?").get(blocked.id)as{count:number}).count,0);db.close();const cleanOnly=await transfers.create({sourceLocationId:f.location.id,destinationLocationId:destination.id,lines:[{productId:clean.id,quantity:1}]},f.admin);await transfers.dispatch(cleanOnly.id,f.admin);equal((await transfers.find(cleanOnly.id))?.status,'dispatched');transfers.close();access.close();catalog.close()}finally{f.close()}})
 
 test('D.2A Fixture N preserves successful Transfer dispatch replay after later materialization',async()=>{const f=await conflictFixture([{stock:5,quantity:10}],'d2a-n');try{const access=new SqliteRetailAccessRepository(f.file),transfers=new SqliteRetailTransferRepository(f.file),destination=await access.createLocation({code:'D2A-N-DST',name:'Destination',type:'store',status:'active'},f.admin),transfer=await transfers.create({sourceLocationId:f.location.id,destinationLocationId:destination.id,lines:[{productId:f.products[0]!.id,quantity:1}]},f.admin);const first=await transfers.dispatch(transfer.id,f.admin),postDispatch=(await f.inventory.findBalance(f.products[0]!.id,f.location.id))!.onHandQuantity;equal(first.status,'dispatched');equal(postDispatch,4);await f.materializer.materialize(f.location.id,{offlineOperationId:'d2a-n',commandId:'d2a-n-materialize'},f.manager);const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,f.location.id),true);const db=new DatabaseSync(f.file),before=(db.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_transfer_dispatched' AND source_id=?").get(transfer.id)as{count:number}).count,replay=await transfers.dispatch(transfer.id,f.admin);equal(replay.status,'dispatched');equal((db.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_transfer_dispatched' AND source_id=?").get(transfer.id)as{count:number}).count,before);equal((await f.inventory.findBalance(f.products[0]!.id,f.location.id))?.onHandQuantity,-6);db.close();lifecycle.close();transfers.close();access.close()}finally{f.close()}})
+
+test('resolution persists evidence atomically, replays idempotently, and unblocks a resolved exact pair',async()=>{
+  const f=await conflictFixture([{stock:1,quantity:2}],'resolution');
+  try {
+    await f.materializer.materialize(f.location.id,{offlineOperationId:'resolution',commandId:'resolution-materialize'},f.manager);
+    const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),item=f.envelope.lines[0]!.id;
+    const input={offlineOperationId:'resolution',saleItemId:item,commandId:'resolution-command',expectedCurrentState:'under_review' as const,disposition:'confirmed',reason:'count verified',evidence:'signed recount',correctiveRecord:{type:'reconciliation',id:'reconciliation-1'},actorUserId:'manager-1'};
+    await rejects(lifecycle.resolve(f.location.id,input),/STALE_INCIDENT_STATE/);
+    for(const [field,commandId] of [['disposition','missing-disposition'],['reason','missing-reason'],['evidence','missing-evidence']] as const) await rejects(lifecycle.resolve(f.location.id,{...input,commandId,[field]:''}),/required/);
+    await rejects(lifecycle.resolve(f.location.id,{...input,commandId:'missing-record-type',correctiveRecord:{...input.correctiveRecord,type:''}}),/required/);
+    await rejects(lifecycle.resolve(f.location.id,{...input,commandId:'missing-record-id',correctiveRecord:{...input.correctiveRecord,id:''}}),/required/);
+    await lifecycle.review(f.location.id,{offlineOperationId:'resolution',saleItemId:item,commandId:'resolution-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});
+    const proof=new DatabaseSync(f.file);proof.prepare("UPDATE retail_products SET status='inactive' WHERE id=?").run(f.products[0]!.id);
+    const first=await lifecycle.resolve(f.location.id,input) as {current_state:string;version:number};equal(first.current_state,'resolved');equal(first.version,3);equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,f.location.id),false);
+    const event=proof.prepare("SELECT event_id,event_type,previous_state,resulting_state,actor_user_id FROM retail_offline_stock_conflict_incident_events WHERE command_id=?").get(input.commandId) as {event_id:string;event_type:string;previous_state:string;resulting_state:string;actor_user_id:string};deepEqual(event.event_type,'resolved');deepEqual(event.previous_state,'under_review');deepEqual(event.resulting_state,'resolved');deepEqual(event.actor_user_id,'manager-1');
+    deepEqual(proof.prepare('SELECT disposition,reason,evidence,corrective_record_type,corrective_record_id FROM retail_offline_stock_conflict_resolution_evidence WHERE event_id=?').get(event.event_id),{disposition:'confirmed',reason:'count verified',evidence:'signed recount',corrective_record_type:'reconciliation',corrective_record_id:'reconciliation-1'});
+    const replay=await lifecycle.resolve(f.location.id,input) as {current_state:string;version:number};deepEqual(replay,first);equal((proof.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE command_id=?").get(input.commandId)as{count:number}).count,1);equal((proof.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_resolution_evidence').get()as{count:number}).count,1);
+    await rejects(lifecycle.resolve(f.location.id,{...input,evidence:'changed'}),/IDEMPOTENCY_CONFLICT/);proof.close();lifecycle.close();
+  } finally { f.close() }
+})
+
+test('resolution rolls back event and evidence when the projection update fails',async()=>{
+  const f=await conflictFixture([{stock:1,quantity:2}],'resolution-rollback');
+  try {
+    await f.materializer.materialize(f.location.id,{offlineOperationId:'resolution-rollback',commandId:'resolution-rollback-materialize'},f.manager);
+    const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),item=f.envelope.lines[0]!.id;
+    await lifecycle.review(f.location.id,{offlineOperationId:'resolution-rollback',saleItemId:item,commandId:'resolution-rollback-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});
+    const proof=new DatabaseSync(f.file);proof.exec("CREATE TRIGGER fail_resolution_projection BEFORE UPDATE ON retail_offline_stock_conflict_incident_lifecycle WHEN NEW.current_state='resolved' BEGIN SELECT RAISE(ABORT,'forced resolution projection failure'); END;");
+    await rejects(lifecycle.resolve(f.location.id,{offlineOperationId:'resolution-rollback',saleItemId:item,commandId:'resolution-rollback-command',expectedCurrentState:'under_review',disposition:'confirmed',reason:'count verified',evidence:'signed recount',correctiveRecord:{type:'reconciliation',id:'reconciliation-rollback'},actorUserId:'manager-1'}),/forced resolution projection failure/);
+    equal((proof.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE event_type='resolved'").get()as{count:number}).count,0);equal((proof.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_resolution_evidence').get()as{count:number}).count,0);deepEqual(proof.prepare('SELECT current_state,version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?').get('resolution-rollback',item),{current_state:'under_review',version:2});proof.close();lifecycle.close();
+  } finally { f.close() }
+})

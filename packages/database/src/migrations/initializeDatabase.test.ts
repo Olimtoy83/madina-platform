@@ -64,6 +64,10 @@ test('initializeDatabase prepares every migration on a fresh database', () => {
       '039_retail_sale_returns_v1',
       '040_retail_offline_authority_foundation_v1',
       '041_retail_offline_sale_sync_v1',
+      '042_retail_offline_stock_conflict_verification_v1',
+      '043_retail_offline_stock_conflict_materialization_v1',
+      '044_retail_offline_stock_conflict_lifecycle_v1',
+      '045_retail_offline_stock_conflict_resolution_v1',
     ].join(','))
   })
 })
@@ -101,7 +105,7 @@ test('initializeDatabase adopts an exact legacy database and closes its connecti
 
     const renamed = `${filename}.closed`
     renameSync(filename, renamed)
-    equal(migrationIds(renamed).length, 21)
+    equal(migrationIds(renamed).length, 25)
   })
 })
 
