@@ -917,3 +917,82 @@ test('resolution rolls back event and evidence when the projection update fails'
     equal((proof.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE event_type='resolved'").get()as{count:number}).count,0);equal((proof.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_resolution_evidence').get()as{count:number}).count,0);deepEqual(proof.prepare('SELECT current_state,version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?').get('resolution-rollback',item),{current_state:'under_review',version:2});proof.close();lifecycle.close();
   } finally { f.close() }
 })
+
+test('reopen preserves resolution history, replays idempotently, and blocks the exact pair again',async()=>{
+  const f=await conflictFixture([{stock:1,quantity:2}],'reopen');
+  try {
+    await f.materializer.materialize(f.location.id,{offlineOperationId:'reopen',commandId:'reopen-materialize'},f.manager);
+    const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),item=f.envelope.lines[0]!.id;
+
+    await rejects(lifecycle.reopen(f.location.id,{offlineOperationId:'reopen',saleItemId:item,commandId:'reopen-before-resolution',expectedCurrentState:'resolved',reason:'new evidence',actorUserId:'manager-1'}),/STALE_INCIDENT_STATE/);
+
+    await lifecycle.review(f.location.id,{offlineOperationId:'reopen',saleItemId:item,commandId:'reopen-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});
+
+    await lifecycle.resolve(f.location.id,{offlineOperationId:'reopen',saleItemId:item,commandId:'reopen-resolve',expectedCurrentState:'under_review',disposition:'confirmed',reason:'count verified',evidence:'signed recount',correctiveRecord:{type:'reconciliation',id:'reopen-reconciliation'},actorUserId:'manager-1'});
+
+    equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,f.location.id),false);
+
+    const proof=new DatabaseSync(f.file);
+    const resolvedEvent=proof.prepare("SELECT event_id,event_type,previous_state,resulting_state FROM retail_offline_stock_conflict_incident_events WHERE command_id='reopen-resolve'").get() as {event_id:string;event_type:string;previous_state:string;resulting_state:string};
+    const resolutionEvidence=proof.prepare('SELECT * FROM retail_offline_stock_conflict_resolution_evidence WHERE event_id=?').get(resolvedEvent.event_id);
+
+    const input={offlineOperationId:'reopen',saleItemId:item,commandId:'reopen-command',expectedCurrentState:'resolved' as const,reason:'new evidence requires review',actorUserId:'manager-1'};
+
+    await rejects(lifecycle.reopen(f.location.id,{...input,commandId:'reopen-empty-reason',reason:''}),/Reopen reason is required/);
+
+    const first=await lifecycle.reopen(f.location.id,input) as {current_state:string;version:number};
+    equal(first.current_state,'under_review');
+    equal(first.version,4);
+    equal(await lifecycle.isProductLocationBlocked(f.products[0]!.id,f.location.id),true);
+
+    const reopenedEvent=proof.prepare("SELECT event_type,previous_state,resulting_state,actor_user_id FROM retail_offline_stock_conflict_incident_events WHERE command_id=?").get(input.commandId) as {event_type:string;previous_state:string;resulting_state:string;actor_user_id:string};
+    equal(reopenedEvent.event_type,'reopened');
+    equal(reopenedEvent.previous_state,'resolved');
+    equal(reopenedEvent.resulting_state,'under_review');
+    equal(reopenedEvent.actor_user_id,'manager-1');
+
+    deepEqual(proof.prepare('SELECT * FROM retail_offline_stock_conflict_resolution_evidence WHERE event_id=?').get(resolvedEvent.event_id),resolutionEvidence);
+
+    const replay=await lifecycle.reopen(f.location.id,input) as {current_state:string;version:number};
+    deepEqual(replay,first);
+    equal((proof.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE command_id=?").get(input.commandId) as {count:number}).count,1);
+
+    await rejects(lifecycle.reopen(f.location.id,{...input,reason:'changed reason'}),/IDEMPOTENCY_CONFLICT/);
+    await rejects(lifecycle.reopen(f.location.id,{...input,commandId:'reopen-second-command'}),/STALE_INCIDENT_STATE/);
+
+    proof.close();
+    lifecycle.close();
+  } finally {
+    f.close();
+  }
+})
+
+test('reopen rolls back its event when the projection update fails',async()=>{
+  const f=await conflictFixture([{stock:1,quantity:2}],'reopen-rollback');
+  try {
+    await f.materializer.materialize(f.location.id,{offlineOperationId:'reopen-rollback',commandId:'reopen-rollback-materialize'},f.manager);
+    const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file),item=f.envelope.lines[0]!.id;
+
+    await lifecycle.review(f.location.id,{offlineOperationId:'reopen-rollback',saleItemId:item,commandId:'reopen-rollback-review',expectedCurrentState:'open',targetState:'under_review',actorUserId:'manager-1'});
+
+    await lifecycle.resolve(f.location.id,{offlineOperationId:'reopen-rollback',saleItemId:item,commandId:'reopen-rollback-resolve',expectedCurrentState:'under_review',disposition:'confirmed',reason:'count verified',evidence:'signed recount',correctiveRecord:{type:'reconciliation',id:'reopen-rollback-reconciliation'},actorUserId:'manager-1'});
+
+    const proof=new DatabaseSync(f.file);
+    const beforeEvidence=(proof.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_resolution_evidence').get() as {count:number}).count;
+
+    proof.exec("CREATE TRIGGER fail_reopen_projection BEFORE UPDATE ON retail_offline_stock_conflict_incident_lifecycle WHEN OLD.current_state='resolved' AND NEW.current_state='under_review' BEGIN SELECT RAISE(ABORT,'forced reopen projection failure'); END;");
+
+    await rejects(lifecycle.reopen(f.location.id,{offlineOperationId:'reopen-rollback',saleItemId:item,commandId:'reopen-rollback-command',expectedCurrentState:'resolved',reason:'new evidence',actorUserId:'manager-1'}),/forced reopen projection failure/);
+
+    proof.exec('DROP TRIGGER fail_reopen_projection');
+
+    equal((proof.prepare("SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE command_id='reopen-rollback-command'").get() as {count:number}).count,0);
+    equal((proof.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_resolution_evidence').get() as {count:number}).count,beforeEvidence);
+    deepEqual(proof.prepare('SELECT current_state,version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?').get('reopen-rollback',item),{current_state:'resolved',version:3});
+
+    proof.close();
+    lifecycle.close();
+  } finally {
+    f.close();
+  }
+})

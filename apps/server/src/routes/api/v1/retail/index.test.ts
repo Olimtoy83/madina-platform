@@ -32,6 +32,7 @@ import {
   SqliteRetailSaleRepository,
   SqliteRetailOfflineAuthorityRepository,
   SqliteRetailOfflineStockConflictMaterializationRepository,
+  SqliteRetailOfflineStockConflictLifecycleRepository,
 } from '@madina/database'
 import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
@@ -254,6 +255,476 @@ test('Offline stock-conflict materialization requires the narrow manager command
   })
 })
 
+test('11.4E lifecycle HTTP resolves and reopens a materialized conflict through the manager boundary', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const conflict = offlineEnvelope(fixture, fixture.permits[10]!, {
+      offlineOperationId: 'e2-http-conflict',
+      proposedSaleId: 'e2-http-conflict-sale',
+      lines: [{
+        id: 'e2-http-conflict-line',
+        productId: fixture.product.id,
+        quantity: 6,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'e2-http-conflict-payment',
+        method: 'cash',
+        amountMinor: 600,
+        ordinal: 0,
+      },
+      subtotalMinor: 600,
+      payableTotalMinor: 600,
+    })
+
+    equal(
+      (await postOffline(
+        fixture,
+        signedOfflinePayload(conflict, fixture.pair.privateKey),
+      )).statusCode,
+      409,
+    )
+
+    equal(
+      (
+        await request(fixture.app, fixture.session, {
+          method: 'POST',
+          url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,
+          payload: {
+            offlineOperationId: conflict.offlineOperationId,
+            commandId: 'e2-http-materialize',
+          },
+        })
+      ).statusCode,
+      201,
+    )
+
+    const incident = fixture.database.prepare(
+      'SELECT sale_item_id FROM retail_offline_stock_conflict_incidents WHERE offline_operation_id=?',
+    ).get(conflict.offlineOperationId) as { sale_item_id: string }
+
+    const lifecycleRepository =
+      new SqliteRetailOfflineStockConflictLifecycleRepository(fixture.file)
+
+    try {
+      await lifecycleRepository.review(
+        fixture.location.id,
+        {
+          offlineOperationId: conflict.offlineOperationId,
+          saleItemId: incident.sale_item_id,
+          commandId: 'e2-http-review',
+          expectedCurrentState: 'open',
+          targetState: 'under_review',
+          actorUserId: 'admin-1',
+        },
+      )
+    } finally {
+      lifecycleRepository.close()
+    }
+
+    const resolveUrl =
+      `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/resolve`
+
+    const resolvePayload = {
+      offlineOperationId: conflict.offlineOperationId,
+      saleItemId: incident.sale_item_id,
+      commandId: 'e2-http-resolve',
+      expectedCurrentState: 'under_review',
+      disposition: 'corrected',
+      reason: 'Reviewed and corrected',
+      evidence: 'e2-http-evidence',
+      correctiveRecord: {
+        type: 'inventory_adjustment',
+        id: 'e2-http-corrective-record',
+      },
+    }
+
+    equal(
+      (
+        await fixture.app.inject({
+          method: 'POST',
+          url: resolveUrl,
+          payload: resolvePayload,
+        })
+      ).statusCode,
+      401,
+    )
+
+    equal(
+      (
+        await request(
+          fixture.app,
+          fixture.sessions['operator-1']!,
+          {
+            method: 'POST',
+            url: resolveUrl,
+            payload: resolvePayload,
+          },
+        )
+      ).statusCode,
+      403,
+    )
+
+    equal(
+      (
+        await fixture.app.inject({
+          method: 'POST',
+          url: resolveUrl,
+          payload: resolvePayload,
+          headers: {
+            cookie: `madina-session=${fixture.session}`,
+            origin: 'https://untrusted.example',
+          },
+        })
+      ).statusCode,
+      403,
+    )
+
+    const invalidResolveState = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: resolveUrl,
+        payload: {
+          ...resolvePayload,
+          expectedCurrentState: 'open',
+        },
+      },
+    )
+
+    equal(invalidResolveState.statusCode, 400)
+
+    const blankResolveReason = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: resolveUrl,
+        payload: {
+          ...resolvePayload,
+          reason: '   ',
+        },
+      },
+    )
+
+    equal(blankResolveReason.statusCode, 400)
+
+    const resolved = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: resolveUrl,
+        payload: {
+          ...resolvePayload,
+          actorUserId: 'admin-1',
+        },
+      },
+    )
+
+    equal(resolved.statusCode, 200)
+
+    const resolvedState = fixture.database.prepare(
+      'SELECT current_state, version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?',
+    ).get(
+      conflict.offlineOperationId,
+      incident.sale_item_id,
+    ) as { current_state: string; version: number }
+
+    equal(resolvedState.current_state, 'resolved')
+    equal(resolvedState.version, 3)
+
+    const resolvedEvent = fixture.database.prepare(
+      "SELECT event_type, actor_user_id FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=? AND event_type='resolved'",
+    ).get(
+      conflict.offlineOperationId,
+      incident.sale_item_id,
+    ) as { event_type: string; actor_user_id: string }
+
+    equal(resolvedEvent.event_type, 'resolved')
+    equal(resolvedEvent.actor_user_id, 'manager-1')
+
+    equal(
+      (
+        fixture.database.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=? AND event_type='resolved'",
+        ).get(
+          conflict.offlineOperationId,
+          incident.sale_item_id,
+        ) as { count: number }
+      ).count,
+      1,
+    )
+
+    equal(
+      (
+        await request(
+          fixture.app,
+          fixture.session,
+          {
+            method: 'POST',
+            url: resolveUrl,
+            payload: resolvePayload,
+          },
+        )
+      ).statusCode,
+      200,
+    )
+
+    equal(
+      (
+        fixture.database.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=? AND event_type='resolved'",
+        ).get(
+          conflict.offlineOperationId,
+          incident.sale_item_id,
+        ) as { count: number }
+      ).count,
+      1,
+    )
+
+    const resolveConflict = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: resolveUrl,
+        payload: {
+          ...resolvePayload,
+          reason: 'Changed replay payload',
+        },
+      },
+    )
+
+    equal(resolveConflict.statusCode, 409)
+    equal(
+      (resolveConflict.json() as { message: string }).message,
+      'IDEMPOTENCY_CONFLICT',
+    )
+
+    const staleResolve = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: resolveUrl,
+        payload: {
+          ...resolvePayload,
+          commandId: 'e2-http-resolve-stale',
+        },
+      },
+    )
+
+    equal(staleResolve.statusCode, 409)
+    equal(
+      (staleResolve.json() as { message: string }).message,
+      'STALE_INCIDENT_STATE',
+    )
+
+    const reopenUrl =
+      `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/reopen`
+
+    const reopenPayload = {
+      offlineOperationId: conflict.offlineOperationId,
+      saleItemId: incident.sale_item_id,
+      commandId: 'e2-http-reopen',
+      expectedCurrentState: 'resolved',
+      reason: 'Further review required',
+    }
+
+    equal(
+      (
+        await request(
+          fixture.app,
+          fixture.sessions['operator-1']!,
+          {
+            method: 'POST',
+            url: reopenUrl,
+            payload: reopenPayload,
+          },
+        )
+      ).statusCode,
+      403,
+    )
+
+    const blankReopenReason = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: reopenUrl,
+        payload: {
+          ...reopenPayload,
+          reason: '   ',
+        },
+      },
+    )
+
+    equal(blankReopenReason.statusCode, 400)
+
+    const reopened = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: reopenUrl,
+        payload: reopenPayload,
+      },
+    )
+
+    equal(reopened.statusCode, 200)
+
+    const reopenedState = fixture.database.prepare(
+      'SELECT current_state, version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?',
+    ).get(
+      conflict.offlineOperationId,
+      incident.sale_item_id,
+    ) as { current_state: string; version: number }
+
+    equal(reopenedState.current_state, 'under_review')
+    equal(reopenedState.version, 4)
+
+    const reopenedEvent = fixture.database.prepare(
+      "SELECT event_type, actor_user_id FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=? AND event_type='reopened'",
+    ).get(
+      conflict.offlineOperationId,
+      incident.sale_item_id,
+    ) as { event_type: string; actor_user_id: string }
+
+    equal(reopenedEvent.event_type, 'reopened')
+    equal(reopenedEvent.actor_user_id, 'manager-1')
+
+    equal(
+      (
+        await request(
+          fixture.app,
+          fixture.session,
+          {
+            method: 'POST',
+            url: reopenUrl,
+            payload: reopenPayload,
+          },
+        )
+      ).statusCode,
+      200,
+    )
+
+    equal(
+      (
+        fixture.database.prepare(
+          "SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=? AND event_type='reopened'",
+        ).get(
+          conflict.offlineOperationId,
+          incident.sale_item_id,
+        ) as { count: number }
+      ).count,
+      1,
+    )
+
+    const reopenConflict = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: reopenUrl,
+        payload: {
+          ...reopenPayload,
+          reason: 'Changed reopen replay payload',
+        },
+      },
+    )
+
+    equal(reopenConflict.statusCode, 409)
+    equal(
+      (reopenConflict.json() as { message: string }).message,
+      'IDEMPOTENCY_CONFLICT',
+    )
+
+    const staleReopen = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: reopenUrl,
+        payload: {
+          ...reopenPayload,
+          commandId: 'e2-http-reopen-stale',
+        },
+      },
+    )
+
+    equal(staleReopen.statusCode, 409)
+    equal(
+      (staleReopen.json() as { message: string }).message,
+      'STALE_INCIDENT_STATE',
+    )
+
+    const lifecycleBeforeGrantRevoke = fixture.database.prepare(
+      'SELECT current_state, version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?',
+    ).get(
+      conflict.offlineOperationId,
+      incident.sale_item_id,
+    ) as { current_state: string; version: number }
+
+    const eventCountBeforeGrantRevoke = (
+      fixture.database.prepare(
+        'SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=?',
+      ).get(
+        conflict.offlineOperationId,
+        incident.sale_item_id,
+      ) as { count: number }
+    ).count
+
+    await fixture.access.revoke(
+      'manager-1',
+      fixture.location.id,
+      fixture.context,
+    )
+
+    const deniedWithoutLocationGrant = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: resolveUrl,
+        payload: {
+          ...resolvePayload,
+          commandId: 'e2-http-resolve-without-location-grant',
+        },
+      },
+    )
+
+    equal(deniedWithoutLocationGrant.statusCode, 403)
+
+    const lifecycleAfterGrantRevoke = fixture.database.prepare(
+      'SELECT current_state, version FROM retail_offline_stock_conflict_incident_lifecycle WHERE offline_operation_id=? AND sale_item_id=?',
+    ).get(
+      conflict.offlineOperationId,
+      incident.sale_item_id,
+    ) as { current_state: string; version: number }
+
+    equal(
+      lifecycleAfterGrantRevoke.current_state,
+      lifecycleBeforeGrantRevoke.current_state,
+    )
+    equal(
+      lifecycleAfterGrantRevoke.version,
+      lifecycleBeforeGrantRevoke.version,
+    )
+
+    equal(
+      (
+        fixture.database.prepare(
+          'SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_incident_events WHERE offline_operation_id=? AND sale_item_id=?',
+        ).get(
+          conflict.offlineOperationId,
+          incident.sale_item_id,
+        ) as { count: number }
+      ).count,
+      eventCountBeforeGrantRevoke,
+    )
+  })
+})
 test('D.2A Sale HTTP returns the exact conflict code with zero Sale effects',async()=>{await withOfflineSyncFixture(async fixture=>{const permit=fixture.permits[0]!,conflict=offlineEnvelope(fixture,permit,{offlineOperationId:'d2a-http-conflict',proposedSaleId:'d2a-http-conflict-sale',lines:[{id:'d2a-http-conflict-item',productId:fixture.product.id,quantity:6,unitPriceMinor:100}],cashAllocation:{id:'d2a-http-conflict-payment',method:'cash',amountMinor:600,ordinal:0},subtotalMinor:600,payableTotalMinor:600});equal((await postOffline(fixture,signedOfflinePayload(conflict,fixture.pair.privateKey))).statusCode,409);const materialized=await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,payload:{offlineOperationId:conflict.offlineOperationId,commandId:'d2a-http-materialize'}});equal(materialized.statusCode,201);const before=offlineEffects(fixture),response=await postOnline(fixture,{clientOperationId:'d2a-http-sale',saleId:'d2a-http-sale',lines:[{id:'d2a-http-sale-item',productId:fixture.product.id,quantity:1}],allocations:[{id:'d2a-http-sale-payment',method:'cash',amountMinor:100,ordinal:0}]});equal(response.statusCode,409);equal((response.json()as {message:string}).message,'RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED');assertNoOfflineEffects(fixture,before);equal((fixture.database.prepare("SELECT COUNT(*) AS count FROM retail_sales WHERE id='d2a-http-sale'").get()as{count:number}).count,0)})})
 
 test('D.2A Transfer dispatch HTTP returns the exact conflict code with zero outbound effects',async()=>{await withOfflineSyncFixture(async fixture=>{const permit=fixture.permits[0]!,conflict=offlineEnvelope(fixture,permit,{offlineOperationId:'d2a-transfer-conflict',proposedSaleId:'d2a-transfer-conflict-sale',lines:[{id:'d2a-transfer-conflict-item',productId:fixture.product.id,quantity:6,unitPriceMinor:100}],cashAllocation:{id:'d2a-transfer-conflict-payment',method:'cash',amountMinor:600,ordinal:0},subtotalMinor:600,payableTotalMinor:600});await postOffline(fixture,signedOfflinePayload(conflict,fixture.pair.privateKey));await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,payload:{offlineOperationId:conflict.offlineOperationId,commandId:'d2a-transfer-materialize'}});await fixture.inventory.recordMovement({productId:fixture.product.id,locationId:fixture.location.id,quantityDelta:10,type:'goods_receipt',sourceType:'test',sourceId:'d2a-transfer-restock',sourceLineId:'d2a-transfer-restock'},fixture.context);const created=await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/transfers`,payload:{destinationLocationId:fixture.otherLocation.id,lines:[{productId:fixture.product.id,quantity:1}]}}),transfer=(created.json()as {transfer:{id:string}}).transfer;equal(created.statusCode,201);const response=await request(fixture.app,fixture.session,{method:'POST',url:`/api/v1/retail/locations/${fixture.location.id}/transfers/${transfer.id}/dispatch`,payload:{}});equal(response.statusCode,409);equal((response.json()as {message:string}).message,'RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED');equal((fixture.database.prepare('SELECT status FROM retail_transfers WHERE id=?').get(transfer.id)as {status:string}).status,'draft');equal((fixture.database.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_transfer_dispatched' AND source_id=?").get(transfer.id)as {count:number}).count,0)})})
@@ -387,6 +858,203 @@ test('D.2B Offline Sync HTTP returns exact unresolved conflict code with zero ef
       ).count,
       0,
     )
+  })
+})
+test('11.4E Fixture U resolved conflict unblocks sufficient Offline Sync and reopen blocks it again', async () => {
+  await withOfflineSyncFixture(async (fixture) => {
+    const conflictPermit = fixture.permits[17]!
+    const resolvedPermit = fixture.permits[18]!
+    const reopenedPermit = fixture.permits[19]!
+
+    const conflict = offlineEnvelope(fixture, conflictPermit, {
+      offlineOperationId: 'e2-u-conflict',
+      proposedSaleId: 'e2-u-conflict-sale',
+      lines: [{
+        id: 'e2-u-conflict-line',
+        productId: fixture.product.id,
+        quantity: 6,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'e2-u-conflict-payment',
+        method: 'cash',
+        amountMinor: 600,
+        ordinal: 0,
+      },
+      subtotalMinor: 600,
+      payableTotalMinor: 600,
+    })
+
+    const conflictResponse = await postOffline(
+      fixture,
+      signedOfflinePayload(conflict, fixture.pair.privateKey),
+    )
+
+    equal(conflictResponse.statusCode, 409)
+    equal(
+      (conflictResponse.json() as { message: string }).message,
+      'VERIFIED_OFFLINE_STOCK_CONFLICT',
+    )
+
+    const materialized = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/materialize`,
+        payload: {
+          offlineOperationId: conflict.offlineOperationId,
+          commandId: 'e2-u-materialize',
+        },
+      },
+    )
+
+    equal(materialized.statusCode, 201)
+
+    const incident = fixture.database.prepare(
+      'SELECT sale_item_id FROM retail_offline_stock_conflict_incidents WHERE offline_operation_id=?',
+    ).get(conflict.offlineOperationId) as { sale_item_id: string }
+
+    await fixture.inventory.recordMovement(
+      {
+        productId: fixture.product.id,
+        locationId: fixture.location.id,
+        quantityDelta: 10,
+        type: 'goods_receipt',
+        sourceType: 'test',
+        sourceId: 'e2-u-restock',
+        sourceLineId: 'e2-u-restock',
+      },
+      fixture.context,
+    )
+
+    const lifecycle =
+      new SqliteRetailOfflineStockConflictLifecycleRepository(fixture.file)
+
+    try {
+      await lifecycle.review(
+        fixture.location.id,
+        {
+          offlineOperationId: conflict.offlineOperationId,
+          saleItemId: incident.sale_item_id,
+          commandId: 'e2-u-review',
+          expectedCurrentState: 'open',
+          targetState: 'under_review',
+          actorUserId: 'admin-1',
+        },
+      )
+    } finally {
+      lifecycle.close()
+    }
+
+    const resolveResponse = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/resolve`,
+        payload: {
+          offlineOperationId: conflict.offlineOperationId,
+          saleItemId: incident.sale_item_id,
+          commandId: 'e2-u-resolve',
+          expectedCurrentState: 'under_review',
+          disposition: 'corrected',
+          reason: 'Fixture U corrective review completed',
+          evidence: 'e2-u-resolution-evidence',
+          correctiveRecord: {
+            type: 'inventory_adjustment',
+            id: 'e2-u-corrective-record',
+          },
+        },
+      },
+    )
+
+    equal(resolveResponse.statusCode, 200)
+
+    const resolvedEnvelope = offlineEnvelope(fixture, resolvedPermit, {
+      offlineOperationId: 'e2-u-after-resolve',
+      proposedSaleId: 'e2-u-after-resolve-sale',
+      lines: [{
+        id: 'e2-u-after-resolve-line',
+        productId: fixture.product.id,
+        quantity: 1,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'e2-u-after-resolve-payment',
+        method: 'cash',
+        amountMinor: 100,
+        ordinal: 0,
+      },
+      subtotalMinor: 100,
+      payableTotalMinor: 100,
+    })
+
+    const resolvedSync = await postOffline(
+      fixture,
+      signedOfflinePayload(resolvedEnvelope, fixture.pair.privateKey),
+    )
+
+    equal(resolvedSync.statusCode, 201)
+    equal(permitEvidenceCount(fixture, resolvedPermit.id), 1)
+
+    const reopenResponse = await request(
+      fixture.app,
+      fixture.session,
+      {
+        method: 'POST',
+        url: `/api/v1/retail/locations/${fixture.location.id}/offline-stock-conflicts/reopen`,
+        payload: {
+          offlineOperationId: conflict.offlineOperationId,
+          saleItemId: incident.sale_item_id,
+          commandId: 'e2-u-reopen',
+          expectedCurrentState: 'resolved',
+          reason: 'Fixture U requires further review',
+        },
+      },
+    )
+
+    equal(reopenResponse.statusCode, 200)
+
+    const reopenedEnvelope = offlineEnvelope(fixture, reopenedPermit, {
+      offlineOperationId: 'e2-u-after-reopen',
+      proposedSaleId: 'e2-u-after-reopen-sale',
+      lines: [{
+        id: 'e2-u-after-reopen-line',
+        productId: fixture.product.id,
+        quantity: 1,
+        unitPriceMinor: 100,
+      }],
+      cashAllocation: {
+        id: 'e2-u-after-reopen-payment',
+        method: 'cash',
+        amountMinor: 100,
+        ordinal: 0,
+      },
+      subtotalMinor: 100,
+      payableTotalMinor: 100,
+    })
+
+    const beforeBlocked = offlineEffects(fixture)
+    const verificationBeforeBlocked = conflictVerificationTotal(fixture)
+
+    const blockedResponse = await postOffline(
+      fixture,
+      signedOfflinePayload(reopenedEnvelope, fixture.pair.privateKey),
+    )
+
+    equal(blockedResponse.statusCode, 409)
+    equal(
+      (blockedResponse.json() as { message: string }).message,
+      'RETAIL_PRODUCT_LOCATION_CONFLICT_BLOCKED',
+    )
+
+    assertNoOfflineEffects(fixture, beforeBlocked)
+    equal(
+      conflictVerificationTotal(fixture),
+      verificationBeforeBlocked,
+    )
+    equal(permitEvidenceCount(fixture, reopenedPermit.id), 0)
   })
 })
 test('D.2B Fixture V preserves authority expiry precedence over unresolved blocking', async () => {
