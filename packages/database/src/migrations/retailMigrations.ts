@@ -769,4 +769,22 @@ const retailOfflineStockConflictResolution = createSqlMigration('045_retail_offl
   CREATE TRIGGER retail_offline_stock_conflict_resolution_evidence_no_delete BEFORE DELETE ON retail_offline_stock_conflict_resolution_evidence BEGIN SELECT RAISE(ABORT,'Retail Offline Stock Conflict resolution evidence is immutable.'); END;
 `)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization, retailOfflineStockConflictLifecycle, retailOfflineStockConflictResolution] as const
+const retailOfflineOperationalFoundation = createSqlMigration('046_retail_offline_operational_foundation_v1', `
+  CREATE TABLE retail_offline_operational_command_receipts (
+    command_id TEXT PRIMARY KEY,
+    command_type TEXT NOT NULL CHECK(command_type IN ('terminal_enroll','terminal_key_rotate','terminal_revoke','authority_issue','authority_revoke')),
+    location_id TEXT NOT NULL REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    actor_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    payload_hash TEXT NOT NULL,
+    result_entity_type TEXT NOT NULL,
+    result_entity_id TEXT NOT NULL,
+    result_key_version INTEGER,
+    result_snapshot_json TEXT,
+    accepted_at TEXT NOT NULL
+  );
+  CREATE INDEX retail_offline_operational_command_receipts_location_idx ON retail_offline_operational_command_receipts(location_id,accepted_at,command_id);
+  CREATE TRIGGER retail_offline_operational_command_receipts_no_update BEFORE UPDATE ON retail_offline_operational_command_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline operational command receipts are immutable.'); END;
+  CREATE TRIGGER retail_offline_operational_command_receipts_no_delete BEFORE DELETE ON retail_offline_operational_command_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline operational command receipts are immutable.'); END;
+`)
+
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization, retailOfflineStockConflictLifecycle, retailOfflineStockConflictResolution, retailOfflineOperationalFoundation] as const

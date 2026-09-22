@@ -68,6 +68,7 @@ test('initializeDatabase prepares every migration on a fresh database', () => {
       '043_retail_offline_stock_conflict_materialization_v1',
       '044_retail_offline_stock_conflict_lifecycle_v1',
       '045_retail_offline_stock_conflict_resolution_v1',
+      '046_retail_offline_operational_foundation_v1',
     ].join(','))
   })
 })
@@ -105,7 +106,7 @@ test('initializeDatabase adopts an exact legacy database and closes its connecti
 
     const renamed = `${filename}.closed`
     renameSync(filename, renamed)
-    equal(migrationIds(renamed).length, 25)
+    equal(migrationIds(renamed).length, 26)
   })
 })
 
@@ -148,6 +149,21 @@ test('migration 037 registers its Sale completion schema, constraints, and trigg
       const triggers=(database.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as Array<{name:string}>).map((row)=>row.name)
       for(const trigger of ['retail_sales_no_update','retail_sales_no_delete','retail_sale_items_no_update','retail_sale_items_no_delete','retail_payment_allocations_no_update','retail_payment_allocations_no_delete'])equal(triggers.includes(trigger),true)
       deepEqual((database.prepare('SELECT id FROM schema_migrations WHERE id=?').all(migration) as Array<{id:string}>).map((row)=>row.id),[migration])
+    } finally { database.close() }
+  })
+})
+
+test('migration 046 registers immutable offline operational command receipts exactly once', () => {
+  withDatabaseFile((filename) => {
+    initializeDatabase(filename); initializeDatabase(filename)
+    const database=new DatabaseSync(filename), migration='046_retail_offline_operational_foundation_v1'
+    try {
+      equal(migrationIds(filename).filter(id=>id===migration).length,1)
+      equal(migrationIds(filename).indexOf(migration),migrationIds(filename).indexOf('045_retail_offline_stock_conflict_resolution_v1')+1)
+      const columns=(database.prepare('PRAGMA table_info(retail_offline_operational_command_receipts)').all() as Array<{name:string}>).map(row=>row.name)
+      for(const column of ['command_id','command_type','location_id','actor_user_id','payload_hash','result_entity_type','result_entity_id','result_key_version','result_snapshot_json','accepted_at'])equal(columns.includes(column),true)
+      const triggers=(database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'retail_offline_operational_command_receipts%'").all() as Array<{name:string}>).map(row=>row.name)
+      deepEqual(triggers.sort(),['retail_offline_operational_command_receipts_no_delete','retail_offline_operational_command_receipts_no_update'])
     } finally { database.close() }
   })
 })
