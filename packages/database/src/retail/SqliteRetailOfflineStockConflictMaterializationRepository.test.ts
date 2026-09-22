@@ -996,3 +996,116 @@ test('reopen rolls back its event when the projection update fails',async()=>{
     f.close();
   }
 })
+test('read model lists location incidents and returns immutable lifecycle detail',async()=>{
+  const f=await conflictFixture([{stock:1,quantity:2}],'read-model');
+  try {
+    await f.materializer.materialize(
+      f.location.id,
+      {offlineOperationId:'read-model',commandId:'read-model-materialize'},
+      f.manager
+    );
+
+    const lifecycle=new SqliteRetailOfflineStockConflictLifecycleRepository(f.file);
+    const item=f.envelope.lines[0]!.id;
+
+    await lifecycle.review(f.location.id,{
+      offlineOperationId:'read-model',
+      saleItemId:item,
+      commandId:'read-model-review',
+      expectedCurrentState:'open',
+      targetState:'under_review',
+      actorUserId:'manager-1'
+    });
+
+    await lifecycle.resolve(f.location.id,{
+      offlineOperationId:'read-model',
+      saleItemId:item,
+      commandId:'read-model-resolve',
+      expectedCurrentState:'under_review',
+      disposition:'confirmed',
+      reason:'count verified',
+      evidence:'signed recount',
+      correctiveRecord:{type:'reconciliation',id:'read-model-reconciliation'},
+      actorUserId:'manager-1'
+    });
+
+    await lifecycle.reopen(f.location.id,{
+      offlineOperationId:'read-model',
+      saleItemId:item,
+      commandId:'read-model-reopen',
+      expectedCurrentState:'resolved',
+      reason:'new evidence requires review',
+      actorUserId:'manager-1'
+    });
+
+    const beforeState=await lifecycle.getCurrentState('read-model',item);
+    const beforeEvents=await lifecycle.listEvents('read-model',item);
+
+    const list=await lifecycle.list(f.location.id);
+    const listed=list.find(
+      row=>row.offlineOperationId==='read-model'&&row.saleItemId===item
+    );
+
+    equal(Boolean(listed),true);
+    equal(listed!.productId,f.products[0]!.id);
+    equal(listed!.saleId,f.envelope.proposedSaleId);
+    equal(listed!.currentState,'under_review');
+    equal(listed!.version,4);
+    equal(listed!.observedOnHandQuantity,1);
+    equal(listed!.soldQuantity,2);
+    equal(listed!.resultingOnHandQuantity,-1);
+    equal(listed!.initialDeficitQuantity,1);
+    equal(listed!.materializationDeficitQuantity,1);
+
+    const sorted=[...list].sort((a,b)=>
+      b.openedAt.localeCompare(a.openedAt)||
+      a.offlineOperationId.localeCompare(b.offlineOperationId)||
+      a.saleItemId.localeCompare(b.saleItemId)
+    );
+    deepEqual(list,sorted);
+
+    const detail=await lifecycle.find(f.location.id,'read-model',item);
+    equal(Boolean(detail),true);
+    deepEqual(detail!.incident,listed);
+
+    deepEqual(
+      detail!.events.map(event=>event.eventType),
+      ['review_started','resolved','reopened']
+    );
+    deepEqual(
+      detail!.events.map(event=>[event.previousState,event.resultingState]),
+      [
+        ['open','under_review'],
+        ['under_review','resolved'],
+        ['resolved','under_review']
+      ]
+    );
+
+    equal(detail!.resolutionEvidence.length,1);
+    const resolvedEvent=detail!.events.find(event=>event.eventType==='resolved')!;
+    deepEqual(detail!.resolutionEvidence[0],{
+      eventId:resolvedEvent.eventId,
+      disposition:'confirmed',
+      reason:'count verified',
+      evidence:'signed recount',
+      correctiveRecordType:'reconciliation',
+      correctiveRecordId:'read-model-reconciliation'
+    });
+
+    deepEqual(
+      await lifecycle.find('other-location','read-model',item),
+      undefined
+    );
+    deepEqual(
+      await lifecycle.find(f.location.id,'missing-operation',item),
+      undefined
+    );
+
+    deepEqual(await lifecycle.getCurrentState('read-model',item),beforeState);
+    deepEqual(await lifecycle.listEvents('read-model',item),beforeEvents);
+
+    lifecycle.close();
+  } finally {
+    f.close();
+  }
+})
