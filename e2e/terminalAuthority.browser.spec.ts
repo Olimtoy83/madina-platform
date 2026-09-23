@@ -52,7 +52,7 @@ async function mountReservation(page: Page) {
   })
 }
 
-test('v1 identity upgrades to v2 without losing the non-extractable signing key', async ({ page }) => {
+test('v1 identity upgrades to current offline database without losing the non-extractable signing key', async ({ page }) => {
   await reset(page)
   const before = await page.evaluate(async () => {
     const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
@@ -67,18 +67,18 @@ test('v1 identity upgrades to v2 without losing the non-extractable signing key'
     const loaded = await identity.loadTerminalIdentity()
     if (!loaded) throw new Error('migration lost identity')
     const signed = await loaded.signOfflineEnvelope(input)
-    const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('madina-crm:retail-offline-terminal-identity:v1', 2); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('madina-crm:retail-offline-terminal-identity:v1'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })
     const raw = await new Promise<any>((resolve, reject) => { const r = db.transaction('identity', 'readonly').objectStore('identity').get('current'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })
     const stores = Array.from(db.objectStoreNames)
     db.close()
     return { publicKey: loaded.publicKey, terminalId: loaded.terminalId, keyVersion: loaded.currentKeyVersion, extractable: raw.privateKey.extractable, stores, signed }
   }, envelope)
   expect(after).toMatchObject({ publicKey: before, terminalId: 'terminal-1', keyVersion: 1, extractable: false })
-  expect(after.stores).toEqual(expect.arrayContaining(['identity', 'offlineAuthorities', 'offlinePermits', 'offlineMeta']))
+  expect(after.stores).toEqual(expect.arrayContaining(['identity', 'offlineAuthorities', 'offlinePermits', 'offlineMeta', 'offlineSales']))
   expect(verifyRetailOfflineEnvelope({ envelope, payloadHash: after.signed.payloadHash, signature: after.signed.signature, keyAlgorithm: 'ed25519-spki-der-base64-v1', publicKey: before }).payloadHash).toBe(after.signed.payloadHash)
 })
 
-test('v1 pending enrollment survives v2 upgrade with its exact command and SPKI', async ({ page }) => {
+test('v1 pending enrollment survives current offline database upgrade with its exact command and SPKI', async ({ page }) => {
   await reset(page)
   const original = await page.evaluate(async () => {
     const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
@@ -137,7 +137,7 @@ test('Authority installation validates immutable snapshot, complete permits, rel
   expect(await page.evaluate(async () => import('/src/shared/offline/offlineAuthorityLedger.ts').then(m => m.installOfflineAuthority('location-1', 'authority-1', 'user-1')).then(() => false, () => true))).toBe(true)
   await mockAuthority(page, valid)
   const lost = await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('madina-crm:retail-offline-terminal-identity:v1', 2); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('madina-crm:retail-offline-terminal-identity:v1'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error) })
     await new Promise<void>((resolve, reject) => { const tx = db.transaction('offlinePermits', 'readwrite'); tx.objectStore('offlinePermits').delete(['authority-1', 0]); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
     db.close()
     const ledger = await import('/src/shared/offline/offlineAuthorityLedger.ts')

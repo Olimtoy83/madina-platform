@@ -1,24 +1,26 @@
 import { useRef } from 'react'
+import { canonicalizeRetailOfflineEnvelope, RETAIL_OFFLINE_SIGNATURE_PREFIX, type RetailOfflineEnvelope } from '@madina/retail'
 import { requestJson } from '../api/httpClient'
 import { useAuth } from '../../context/useAuth'
 import { reconcileTerminal } from './terminalProvisioning'
 import { loadPendingTerminalOperation, loadTerminalIdentity, type TerminalIdentity } from './terminalIdentity'
-import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, openOfflineRetailDatabase, permitStoreName } from './offlineRetailDatabase'
+import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, openOfflineRetailDatabase, permitStoreName, saleStoreName } from './offlineRetailDatabase'
 
 type ServerStatus = 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
 type Permit = { permitId: string; sequence: number; status: ServerStatus }
 export type AuthoritySnapshot = { authorityId: string; authorityVersion: number; terminalId: string; terminalKeyVersion: number; userId: string; locationId: string; issuedAt: string; expiresAt: string; currencyCode: string; currencyExponent: number; permitCount: number; productPrices: Array<{ productId: string; unitPriceMinor: number }> }
-type AuthorityRecord = { snapshot: AuthoritySnapshot; knownRevoked: boolean }
-type PermitRecord = { authorityId: string; permitId: string; sequence: number; serverStatus: ServerStatus; localState: 'AVAILABLE' | 'RESERVED'; operationId?: string }
-type Metadata = { version: 1; terminalId: string; locationId: string; authorityIds: string[]; lastObservedMs: number; knownTerminalUnsafe: boolean }
-type IdentityMarker = { terminalId?: unknown; locationId?: unknown; currentKeyVersion?: unknown; publicKey?: unknown; pending?: unknown; offlineStateEverInstalled?: unknown; [key: string]: unknown }
-type State = { identity: IdentityMarker | undefined; meta: Metadata | undefined; authorities: AuthorityRecord[]; permits: PermitRecord[] }
+export type AuthorityRecord = { snapshot: AuthoritySnapshot; knownRevoked: boolean }
+export type PermitRecord = { authorityId: string; permitId: string; sequence: number; serverStatus: ServerStatus; localState: 'AVAILABLE' | 'RESERVED' | 'CONSUMED_LOCAL'; operationId?: string; saleId?: string }
+export type Metadata = { version: 1; terminalId: string; locationId: string; authorityIds: string[]; lastObservedMs: number; knownTerminalUnsafe: boolean; saleOperationIds?: string[] }
+export type IdentityMarker = { terminalId?: unknown; locationId?: unknown; currentKeyVersion?: unknown; publicKey?: unknown; pending?: unknown; offlineStateEverInstalled?: unknown; offlineSaleEverPrepared?: unknown; [key: string]: unknown }
+export type OfflineSaleRecord = { state: 'PREPARED'; intent: { authorityId: string; lines: Array<{ productId: string; quantity: number }> }; envelope: RetailOfflineEnvelope; publicKey: string; authoritySnapshot: AuthoritySnapshot } | { state: 'COMMITTED_LOCAL'; intent: { authorityId: string; lines: Array<{ productId: string; quantity: number }> }; envelope: RetailOfflineEnvelope; publicKey: string; authoritySnapshot: AuthoritySnapshot; canonicalPayload: string; payloadHash: string; signature: string; committedAt: string }
+export type State = { identity: IdentityMarker | undefined; meta: Metadata | undefined; authorities: AuthorityRecord[]; permits: PermitRecord[]; sales: OfflineSaleRecord[]; saleKeys: IDBValidKey[] }
 export class OfflineAuthorityError extends Error {}
 
-const validId = (value: unknown): value is string => typeof value === 'string' && value.trim() === value && value.length > 0
-const integer = (value: unknown, minimum: number): value is number => Number.isSafeInteger(value) && (value as number) >= minimum
+export const validId = (value: unknown): value is string => typeof value === 'string' && value.trim() === value && value.length > 0
+export const integer = (value: unknown, minimum: number): value is number => Number.isSafeInteger(value) && (value as number) >= minimum
 const fail = (message: string): never => { throw new OfflineAuthorityError(message) }
-const time = (value: unknown): number => {
+export const time = (value: unknown): number => {
   if (typeof value !== 'string') return fail('Authority timestamp is invalid.')
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== value) return fail('Authority timestamp is invalid.')
@@ -62,12 +64,12 @@ function samePermits(a: Permit[], b: Permit[]): boolean { return JSON.stringify(
 
 function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T): Promise<T> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([identityStoreName, authorityStoreName, permitStoreName, metadataStoreName], mode)
-    const requests = [tx.objectStore(identityStoreName).get(identityRecordKey), tx.objectStore(metadataStoreName).get(metadataRecordKey), tx.objectStore(authorityStoreName).getAll(), tx.objectStore(permitStoreName).getAll()]
+    const tx = db.transaction([identityStoreName, authorityStoreName, permitStoreName, metadataStoreName, saleStoreName], mode)
+    const requests = [tx.objectStore(identityStoreName).get(identityRecordKey), tx.objectStore(metadataStoreName).get(metadataRecordKey), tx.objectStore(authorityStoreName).getAll(), tx.objectStore(permitStoreName).getAll(), tx.objectStore(saleStoreName).getAll(), tx.objectStore(saleStoreName).getAllKeys()]
     let remaining = requests.length, result: T, failure: unknown
     requests.forEach(request => { request.onsuccess = () => {
       if (--remaining) return
-      try { result = decide({ identity: requests[0]!.result as IdentityMarker | undefined, meta: requests[1]!.result as Metadata | undefined, authorities: requests[2]!.result as AuthorityRecord[], permits: requests[3]!.result as PermitRecord[] }, tx) }
+      try { result = decide({ identity: requests[0]!.result as IdentityMarker | undefined, meta: requests[1]!.result as Metadata | undefined, authorities: requests[2]!.result as AuthorityRecord[], permits: requests[3]!.result as PermitRecord[], sales: requests[4]!.result as OfflineSaleRecord[], saleKeys: requests[5]!.result as IDBValidKey[] }, tx) }
       catch (error) { failure = error; tx.abort() }
     } })
     tx.oncomplete = () => resolve(result)
@@ -75,15 +77,15 @@ function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: 
     tx.onerror = () => reject(new OfflineAuthorityError('Offline storage transaction failed.', { cause: tx.error }))
   })
 }
-async function inDatabase<T>(mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T): Promise<T> {
+export async function inDatabase<T>(mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T): Promise<T> {
   const db = await openOfflineRetailDatabase()
   try { return await stateTransaction(db, mode, decide) } finally { db.close() }
 }
-function checked(state: State, terminal: TerminalIdentity): Metadata | undefined {
-  const { identity, meta, authorities, permits: ledger } = state
+export function checked(state: State, terminal: TerminalIdentity): Metadata | undefined {
+  const { identity, meta, authorities, permits: ledger, sales, saleKeys } = state
   if (!identity || identity.terminalId !== terminal.terminalId || identity.locationId !== terminal.locationId || identity.publicKey !== terminal.publicKey || identity.currentKeyVersion !== terminal.currentKeyVersion) return fail('Terminal identity changed.')
   if (!meta) {
-    if (identity.offlineStateEverInstalled !== undefined || authorities.length || ledger.length) return fail('OFFLINE_STATE_LOST')
+    if (identity.offlineStateEverInstalled !== undefined || identity.offlineSaleEverPrepared !== undefined || authorities.length || ledger.length || sales.length) return fail('OFFLINE_STATE_LOST')
     return undefined
   }
   if (identity.offlineStateEverInstalled !== true || meta.version !== 1 || meta.terminalId !== terminal.terminalId || meta.locationId !== terminal.locationId || !Array.isArray(meta.authorityIds) || !meta.authorityIds.length || !integer(meta.lastObservedMs, 0) || typeof meta.knownTerminalUnsafe !== 'boolean') return fail('OFFLINE_STATE_LOST')
@@ -100,15 +102,28 @@ function checked(state: State, terminal: TerminalIdentity): Metadata | undefined
     if (own.length !== x.permitCount) return fail('OFFLINE_STATE_LOST')
     for (let i = 0; i < own.length; i++) {
       const p = own[i]!
-      if (!validId(p.permitId) || permitIds.has(p.permitId) || p.sequence !== i || !status(p.serverStatus) || (p.localState !== 'AVAILABLE' && p.localState !== 'RESERVED') || (p.localState === 'RESERVED' ? !validId(p.operationId) : p.operationId !== undefined)) return fail('OFFLINE_STATE_LOST')
+      if (!validId(p.permitId) || permitIds.has(p.permitId) || p.sequence !== i || !status(p.serverStatus) || !['AVAILABLE', 'RESERVED', 'CONSUMED_LOCAL'].includes(p.localState) || (p.localState === 'AVAILABLE' ? p.operationId !== undefined || p.saleId !== undefined : !validId(p.operationId)) || (p.localState === 'CONSUMED_LOCAL' ? !validId(p.saleId) : p.saleId !== undefined)) return fail('OFFLINE_STATE_LOST')
       if (p.operationId) { if (operationIds.has(p.operationId)) return fail('OFFLINE_STATE_LOST'); operationIds.add(p.operationId) }
       permitIds.add(p.permitId)
     }
   }
   if (ledger.length !== authorities.reduce((n, a) => n + a.snapshot.permitCount, 0)) return fail('OFFLINE_STATE_LOST')
+  if (identity.offlineSaleEverPrepared === true) {
+    if (!Array.isArray(meta.saleOperationIds) || !meta.saleOperationIds.length || meta.saleOperationIds.length !== sales.length || new Set(meta.saleOperationIds).size !== sales.length || meta.saleOperationIds.some(id => !validId(id))) return fail('OFFLINE_STATE_LOST')
+  } else if (identity.offlineSaleEverPrepared !== undefined || meta.saleOperationIds !== undefined || sales.length) return fail('OFFLINE_STATE_LOST')
+  if (saleKeys.length !== sales.length) return fail('OFFLINE_STATE_LOST')
+  for (const [index, sale] of sales.entries()) {
+    if (!sale || (sale.state !== 'PREPARED' && sale.state !== 'COMMITTED_LOCAL') || !sale.envelope || saleKeys[index] !== sale.envelope.offlineOperationId || !meta.saleOperationIds?.includes(sale.envelope.offlineOperationId) || !validId(sale.publicKey) || !sale.authoritySnapshot || !sale.intent || sale.intent.authorityId !== sale.envelope.authorityId || !Array.isArray(sale.intent.lines) || sale.intent.lines.length !== sale.envelope.lines.length) return fail('OFFLINE_STATE_LOST')
+    try { canonicalizeRetailOfflineEnvelope(sale.envelope) } catch { return fail('OFFLINE_STATE_LOST') }
+    const authority = authorities.find(a => a.snapshot.authorityId === sale.envelope.authorityId)
+    const permit = ledger.find(p => p.authorityId === sale.envelope.authorityId && p.permitId === sale.envelope.permitId)
+    if (!authority || JSON.stringify(authority.snapshot) !== JSON.stringify(sale.authoritySnapshot) || sale.envelope.authorityVersion !== authority.snapshot.authorityVersion || sale.envelope.terminalId !== authority.snapshot.terminalId || sale.envelope.terminalKeyVersion !== authority.snapshot.terminalKeyVersion || sale.envelope.userId !== authority.snapshot.userId || sale.envelope.locationId !== authority.snapshot.locationId || sale.envelope.currencyCode !== authority.snapshot.currencyCode || sale.envelope.currencyExponent !== authority.snapshot.currencyExponent || sale.envelope.proposedSaleId !== sale.envelope.offlineOperationId || sale.intent.lines.some((line, index) => line.productId !== sale.envelope.lines[index]?.productId || line.quantity !== sale.envelope.lines[index]?.quantity || authority.snapshot.productPrices.find(price => price.productId === line.productId)?.unitPriceMinor !== sale.envelope.lines[index]?.unitPriceMinor) || !permit || permit.sequence !== sale.envelope.permitSequence || permit.operationId !== sale.envelope.offlineOperationId || permit.saleId !== (sale.state === 'COMMITTED_LOCAL' ? sale.envelope.proposedSaleId : undefined) || permit.localState !== (sale.state === 'COMMITTED_LOCAL' ? 'CONSUMED_LOCAL' : 'RESERVED')) return fail('OFFLINE_STATE_LOST')
+    if (sale.state === 'COMMITTED_LOCAL' && (sale.canonicalPayload !== canonicalizeRetailOfflineEnvelope(sale.envelope) || !/^[a-f0-9]{64}$/.test(sale.payloadHash) || typeof sale.signature !== 'string' || !sale.signature.startsWith(RETAIL_OFFLINE_SIGNATURE_PREFIX))) return fail('OFFLINE_STATE_LOST')
+  }
+  for (const permit of ledger) if (permit.localState === 'CONSUMED_LOCAL' && !sales.some(sale => sale.state === 'COMMITTED_LOCAL' && sale.envelope.offlineOperationId === permit.operationId)) return fail('OFFLINE_STATE_LOST')
   return meta
 }
-async function terminalFor(locationId: string, allowPendingRetry = false): Promise<TerminalIdentity> {
+export async function terminalFor(locationId: string, allowPendingRetry = false): Promise<TerminalIdentity> {
   if (!validId(locationId)) return fail('Location is invalid.')
   const value = await loadTerminalIdentity()
   const pending = await loadPendingTerminalOperation()
@@ -169,6 +184,19 @@ export async function getAuthorizedProduct(locationId: string, authorityId: stri
   return (await loadOfflineAuthority(locationId, authorityId))?.productPrices.find(p => p.productId === productId)
 }
 export type ReservedPermit = { authorityId: string; permitId: string; sequence: number; operationId: string }
+export function eligibleForNew(state: State, meta: Metadata, terminal: TerminalIdentity, authorityId: string, userId: string): { authority: AuthorityRecord; now: number; permit: PermitRecord } {
+  if (meta.knownTerminalUnsafe) return fail('Terminal is known unsafe.')
+  const authority = state.authorities.find(a => a.snapshot.authorityId === authorityId)
+  if (!authority || authority.snapshot.userId !== userId) return fail('Authority is not eligible for this user.')
+  if (state.identity?.pending !== undefined) return fail('Terminal provisioning is pending.')
+  if (authority.knownRevoked) return fail('Authority is known revoked.')
+  if (authority.snapshot.terminalKeyVersion !== terminal.currentKeyVersion) return fail('Authority signing key is unavailable for new work.')
+  const now = Date.now()
+  if (now < meta.lastObservedMs || now < time(authority.snapshot.issuedAt) || now >= time(authority.snapshot.expiresAt)) return fail('Authority local time is not eligible.')
+  const permit = state.permits.filter(p => p.authorityId === authorityId && p.localState === 'AVAILABLE' && p.serverStatus === 'AVAILABLE').sort((a, b) => a.sequence - b.sequence)[0]
+  if (!permit) return fail('Authority permits are exhausted.')
+  return { authority, now, permit }
+}
 async function reserveForUser(locationId: string, authorityId: string, operationId: string, userId: string | undefined): Promise<ReservedPermit> {
   if (!validId(authorityId) || !validId(operationId) || !validId(userId)) return fail('A proven current user and stable operation are required.')
   const terminal = await terminalFor(locationId, true)
@@ -178,19 +206,13 @@ async function reserveForUser(locationId: string, authorityId: string, operation
     if (meta.knownTerminalUnsafe) return fail('Terminal is known unsafe.')
     const authority = state.authorities.find(a => a.snapshot.authorityId === authorityId)
     if (!authority || authority.snapshot.userId !== userId) return fail('Authority is not eligible for this user.')
-    const prior = state.permits.find(p => p.localState === 'RESERVED' && p.operationId === operationId)
+    const prior = state.permits.find(p => p.operationId === operationId)
     if (prior) {
       if (prior.authorityId !== authorityId) return fail('Operation is bound to another Authority.')
+      if (prior.localState !== 'RESERVED') return fail('Operation permit is already consumed locally.')
       return { authorityId, permitId: prior.permitId, sequence: prior.sequence, operationId }
     }
-    if (state.identity?.pending !== undefined) return fail('Terminal provisioning is pending.')
-    if (authority.knownRevoked) return fail('Authority is known revoked.')
-    // Historical authorities remain cached after rotation, but a new operation cannot be signed with a discarded historical private key.
-    if (authority.snapshot.terminalKeyVersion !== terminal.currentKeyVersion) return fail('Authority signing key is unavailable for new work.')
-    const now = Date.now()
-    if (now < meta.lastObservedMs || now < time(authority.snapshot.issuedAt) || now >= time(authority.snapshot.expiresAt)) return fail('Authority local time is not eligible.')
-    const next = state.permits.filter(p => p.authorityId === authorityId && p.localState === 'AVAILABLE' && p.serverStatus === 'AVAILABLE').sort((a, b) => a.sequence - b.sequence)[0]
-    if (!next) return fail('Authority permits are exhausted.')
+    const { now, permit: next } = eligibleForNew(state, meta, terminal, authorityId, userId)
     tx.objectStore(permitStoreName).put({ ...next, localState: 'RESERVED', operationId } satisfies PermitRecord, [authorityId, next.sequence])
     tx.objectStore(metadataStoreName).put({ ...meta, lastObservedMs: now } satisfies Metadata, metadataRecordKey)
     return { authorityId, permitId: next.permitId, sequence: next.sequence, operationId }
