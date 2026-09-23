@@ -1,24 +1,17 @@
 import { RETAIL_OFFLINE_SIGNATURE_ALGORITHM, exportRetailOfflineTerminalPublicKey, signRetailOfflineEnvelope, type RetailOfflineEnvelope, type RetailOfflineSignedEnvelope } from '@madina/retail'
+import { identityRecordKey as recordKey, identityStoreName as storeName, openOfflineRetailDatabase } from './offlineRetailDatabase'
 
-const databaseName = 'madina-crm:retail-offline-terminal-identity:v1'
-const storeName = 'identity'
-const recordKey = 'current'
 type Pending =
   | { kind: 'enrollment'; commandId: string; locationId: string; publicKey: string }
   | { kind: 'rotation'; commandId: string; locationId: string; terminalId: string; privateKey: CryptoKey; publicKey: string; expectedCurrentKeyVersion: number }
-type StoredIdentity = { version: 1; publicKeyAlgorithm: typeof RETAIL_OFFLINE_SIGNATURE_ALGORITHM; publicKey: string; privateKey: CryptoKey; terminalId?: string; locationId?: string; currentKeyVersion?: number; pending?: Pending }
+type StoredIdentity = { version: 1; publicKeyAlgorithm: typeof RETAIL_OFFLINE_SIGNATURE_ALGORITHM; publicKey: string; privateKey: CryptoKey; terminalId?: string; locationId?: string; currentKeyVersion?: number; pending?: Pending; offlineStateEverInstalled?: true }
 export type TerminalIdentityState = 'KEY_GENERATED' | 'ENROLLED'
 export interface TerminalIdentity { readonly version: 1; readonly state: TerminalIdentityState; readonly publicKeyAlgorithm: typeof RETAIL_OFFLINE_SIGNATURE_ALGORITHM; readonly publicKey: string; readonly terminalId?: string; readonly locationId?: string; readonly currentKeyVersion?: number; signOfflineEnvelope(envelope: RetailOfflineEnvelope): Promise<RetailOfflineSignedEnvelope> }
 export type PendingTerminalOperation = { readonly kind: Pending['kind']; readonly commandId: string; readonly locationId: string; readonly publicKey: string; readonly expectedCurrentKeyVersion?: number }
 export class TerminalIdentityError extends Error {}
 
 function database(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(databaseName, 1)
-    request.onupgradeneeded = () => request.result.createObjectStore(storeName)
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(new TerminalIdentityError('Retail Offline Terminal identity storage is unavailable.', { cause: request.error }))
-  })
+  return openOfflineRetailDatabase().catch(error => { throw new TerminalIdentityError('Retail Offline Terminal identity storage is unavailable.', { cause: error }) })
 }
 function read(db: IDBDatabase): Promise<StoredIdentity | undefined> {
   return new Promise((resolve, reject) => {
