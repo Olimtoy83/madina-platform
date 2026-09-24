@@ -16,7 +16,7 @@ async function mock(page: Page, data: Fixture, userId = 'user-1', terminalRevoke
     globalThis.fetch = async url => {
       const path = String(url)
       if (path.endsWith('/auth/me')) return new Response(JSON.stringify({ user: { id: userId, username: userId, role: 'manager' } }), { headers: { 'Content-Type': 'application/json' } })
-      if (path.includes('/offline-terminals')) return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: terminalRevoked } }), { headers: { 'Content-Type': 'application/json' } })
+      if (path.includes('/offline-terminals')) return new Response(JSON.stringify({ terminal: { ...(path.endsWith('/offline-terminals') ? { id: 'terminal-1' } : { terminalId: 'terminal-1' }), locationId: 'location-1', currentKeyVersion: 1, revoked: terminalRevoked } }), { headers: { 'Content-Type': 'application/json' } })
       return new Response(JSON.stringify(path.endsWith('/permits') ? { permits: data.permits } : { authority: data.authority }), { headers: { 'Content-Type': 'application/json' } })
     }
   }, { data, userId, terminalRevoked })

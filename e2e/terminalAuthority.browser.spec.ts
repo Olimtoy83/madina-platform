@@ -24,7 +24,7 @@ async function mockAuthority(page: Page, data: ReturnType<typeof fixture>, userI
     globalThis.fetch = async url => {
       const path = String(url)
       if (path.endsWith('/auth/me')) return new Response(JSON.stringify({ user: { id: userId, username: userId, role } }), { headers: { 'Content-Type': 'application/json' } })
-      if (path.includes('/offline-terminals/')) return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: terminalVersion, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
+      if (path.includes('/offline-terminals/')) return new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: terminalVersion, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
       if (path.endsWith('/permits')) return new Response(JSON.stringify({ permits: data.permits }), { headers: { 'Content-Type': 'application/json' } })
       return new Response(JSON.stringify({ authority: data.authority }), { headers: { 'Content-Type': 'application/json' } })
     }
@@ -316,7 +316,7 @@ test('user, time, revocation, rotation and identity loss gate new reservations w
   expect(rollback).toBe(true)
 
   const rotated = await page.evaluate(async () => {
-    globalThis.fetch = async (url, init) => new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: init?.method === 'POST' ? 2 : 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
+    globalThis.fetch = async (url, init) => new Response(JSON.stringify({ terminal: { ...(init?.method === 'POST' ? { id: 'terminal-1' } : { terminalId: 'terminal-1' }), locationId: 'location-1', currentKeyVersion: init?.method === 'POST' ? 2 : 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
     const value = await import('/src/shared/offline/terminalProvisioning.ts').then(m => m.beginTerminalKeyRotation('location-1'))
     const ledger = await import('/src/shared/offline/offlineAuthorityLedger.ts')
     const cached = await ledger.loadOfflineAuthority('location-1', 'authority-1')
@@ -346,7 +346,7 @@ test('confirmed terminal revocation durably disables new local permit reservatio
   await mountReservation(page)
   await page.evaluate(data => {
     globalThis.fetch = async url => String(url).includes('/offline-terminals/')
-      ? new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: true } }), { headers: { 'Content-Type': 'application/json' } })
+      ? new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: true } }), { headers: { 'Content-Type': 'application/json' } })
       : new Response(JSON.stringify(String(url).endsWith('/permits') ? { permits: data.permits } : { authority: data.authority }), { headers: { 'Content-Type': 'application/json' } })
   }, valid)
   expect(await page.evaluate(async () => import('/src/shared/offline/offlineAuthorityLedger.ts').then(m => m.installOfflineAuthority('location-1', 'authority-1', 'user-1')).then(() => false, () => true))).toBe(true)

@@ -10,7 +10,7 @@ async function setup(page: Page, commit = true, permitCount = 1) {
     globalThis.fetch = async url => {
       const path = String(url)
       if (path.endsWith('/auth/me')) return new Response(JSON.stringify({ user: { id: 'user-1', username: 'user-1', role: 'manager' } }), { headers: { 'Content-Type': 'application/json' } })
-      if (path.includes('/offline-terminals')) return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
+      if (path.includes('/offline-terminals')) return new Response(JSON.stringify({ terminal: { ...(path.endsWith('/offline-terminals') ? { id: 'terminal-1' } : { terminalId: 'terminal-1' }), locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
       return new Response(JSON.stringify(path.endsWith('/permits') ? { permits: authority.permits } : { authority }), { headers: { 'Content-Type': 'application/json' } })
     }
   }, permitCount)

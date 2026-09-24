@@ -16,7 +16,7 @@ async function visit(page: Page, role: 'admin' | 'manager' | 'operator' | 'viewe
       if (path.endsWith('/api/v1/clients')) return json({ clients: [] })
       if (path.endsWith('/api/v1/tasks')) return json({ tasks: [] })
       if (path.endsWith('/import')) return json({ imported: true, idempotent: false, created: 0, updated: 0 })
-      if (path.includes('/offline-terminals')) return json({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } })
+      if (path.includes('/offline-terminals')) return json({ terminal: { ...(path.endsWith('/offline-terminals') ? { id: 'terminal-1' } : { terminalId: 'terminal-1' }), locationId: 'location-1', currentKeyVersion: 1, revoked: false } })
       return json(path.endsWith('/permits') ? { permits: authority.permits } : { authority })
     }
   }, role)

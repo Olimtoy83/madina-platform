@@ -35,15 +35,27 @@ test('concurrent enrollment has one durable command and exact replay after reloa
     const stateAfterMalformed = await service.getTerminalProvisioningState()
     globalThis.fetch = async (_url, init) => { replay = JSON.parse(String(init?.body)); return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { status: 201, headers: { 'Content-Type': 'application/json' } }) }
     const value = await service.beginTerminalEnrollment('location-1')
-    globalThis.fetch = async () => new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
+    globalThis.fetch = async () => new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
     const stable = await service.reconcileTerminal('location-1')
+    const rejectedDetails = []
+    for (const terminal of [
+      { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false },
+      { terminalId: 'another-terminal', locationId: 'location-1', currentKeyVersion: 1, revoked: false },
+      { terminalId: 'terminal-1', locationId: 'another-location', currentKeyVersion: 1, revoked: false },
+      { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 2, revoked: false },
+      { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: 'false' },
+    ]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ terminal }), { headers: { 'Content-Type': 'application/json' } })
+      rejectedDetails.push(await service.reconcileTerminal('location-1'))
+    }
     globalThis.fetch = async () => { throw new TypeError('offline') }
     const unavailable = await service.reconcileTerminal('location-1')
-    return { malformedBody, replay, malformedRejected, stateAfterMalformed, terminalId: value.terminalId, locationId: value.locationId, keyVersion: value.currentKeyVersion, stable, unavailable }
+    return { malformedBody, replay, malformedRejected, stateAfterMalformed, terminalId: value.terminalId, locationId: value.locationId, keyVersion: value.currentKeyVersion, stable, rejectedDetails, unavailable }
   })
   expect(recovered.malformedBody).toEqual(concurrent.sent[0])
   expect(recovered.replay).toEqual(concurrent.sent[0])
   expect(recovered).toMatchObject({ malformedRejected: true, stateAfterMalformed: 'KEY_GENERATED', terminalId: 'terminal-1', locationId: 'location-1', keyVersion: 1, stable: 'ENROLLED', unavailable: 'UNAVAILABLE' })
+  expect(recovered.rejectedDetails).toEqual(Array(5).fill('SERVER_MISMATCH'))
 })
 
 test('pending enrollment rejects replaced active keypair and swapped pending SPKI before HTTP', async ({ page }) => {
@@ -103,7 +115,7 @@ test('rotation retains active key, replays after reload, and promotes the signin
     const enrolled = await service.beginTerminalEnrollment('location-1')
     let firstPost: unknown
     globalThis.fetch = async (url, init) => {
-      if (!init?.method || init.method === 'GET') return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
+      if (!init?.method || init.method === 'GET') return new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
       firstPost = { url: String(url), body: JSON.parse(String(init.body)) }
       throw new TypeError('response lost')
     }
@@ -124,7 +136,7 @@ test('rotation retains active key, replays after reload, and promotes the signin
     const service = await import('/src/shared/offline/terminalProvisioning.ts')
     let retry: unknown
     globalThis.fetch = async (url, init) => {
-      if (!init?.method || init.method === 'GET') return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 2, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
+      if (!init?.method || init.method === 'GET') return new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 2, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
       retry = { url: String(url), body: JSON.parse(String(init.body)) }
       return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 2, revoked: false } }), { headers: { 'Content-Type': 'application/json' } })
     }
@@ -136,7 +148,7 @@ test('rotation retains active key, replays after reload, and promotes the signin
     let postCount = 0
     globalThis.fetch = async (_url, init) => {
       if (init?.method === 'POST') postCount++
-      return new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 2, revoked: true } }), { headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 2, revoked: true } }), { headers: { 'Content-Type': 'application/json' } })
     }
     const revoked = await service.reconcileTerminal('location-1')
     const rotateRejected = await service.beginTerminalKeyRotation('location-1').then(() => false, () => true)
@@ -158,7 +170,7 @@ test('swapped pending rotation SPKI fails before HTTP and storage loss never reb
     const service = await import('/src/shared/offline/terminalProvisioning.ts')
     globalThis.fetch = async () => new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { status: 201, headers: { 'Content-Type': 'application/json' } })
     const active = await service.beginTerminalEnrollment('location-1')
-    globalThis.fetch = async (_url, init) => init?.method === 'POST' ? Promise.reject(new TypeError('response lost')) : Promise.resolve(new Response(JSON.stringify({ terminal: { id: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } }))
+    globalThis.fetch = async (_url, init) => init?.method === 'POST' ? Promise.reject(new TypeError('response lost')) : Promise.resolve(new Response(JSON.stringify({ terminal: { terminalId: 'terminal-1', locationId: 'location-1', currentKeyVersion: 1, revoked: false } }), { headers: { 'Content-Type': 'application/json' } }))
     await service.beginTerminalKeyRotation('location-1').catch(() => undefined)
     const other = await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
     const spki = await crypto.subtle.exportKey('spki', other.publicKey)
