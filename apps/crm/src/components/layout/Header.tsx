@@ -14,6 +14,7 @@ const pageTitles: Record<string, string> = {
   '/accounting': 'Учёт',
   '/tasks': 'Задачи',
   '/statistics': 'Статистика',
+  '/retail/offline-operations': 'Офлайн-операции',
 }
 
 interface HeaderProps {

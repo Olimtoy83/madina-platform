@@ -53,6 +53,12 @@ describe('CRM navigation', () => {
     expect(managerItems.some((item) => item.path === '/retail/pos')).toBe(true)
     expect(operatorItems.some((item) => item.path === '/retail/pos')).toBe(false)
     expect(viewerItems.some((item) => item.path === '/retail/pos')).toBe(false)
+    for (const items of [adminItems, managerItems]) {
+      const paths = items.map((item) => item.path)
+      expect(paths.indexOf('/retail/offline-operations')).toBe(paths.indexOf('/retail/pos') + 1)
+    }
+    expect(operatorItems.some((item) => item.path === '/retail/offline-operations')).toBe(false)
+    expect(viewerItems.some((item) => item.path === '/retail/offline-operations')).toBe(false)
   })
 
   it('does not render navigation before authentication is established', () => {
