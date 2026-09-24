@@ -112,6 +112,14 @@ export async function loadPendingTerminalOperation(): Promise<PendingTerminalOpe
   const db = await database()
   try { const value = await read(db); return value === undefined ? undefined : validatedPending(value) } finally { db.close() }
 }
+/** Validate an already-read identity from a caller's consistent readonly snapshot. */
+export async function inspectStoredTerminalIdentity(value: unknown): Promise<{ terminal: TerminalIdentity; pending?: PendingTerminalOperation } | undefined> {
+  if (value === undefined) return undefined
+  const stored = value as StoredIdentity
+  const terminal = await identity(stored)
+  const pending = await validatedPending(stored)
+  return { terminal, ...(pending ? { pending } : {}) }
+}
 export async function generateTerminalIdentity(): Promise<TerminalIdentity> {
   const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign', 'verify'])
   const value: StoredIdentity = { version: 1, publicKeyAlgorithm: RETAIL_OFFLINE_SIGNATURE_ALGORITHM, publicKey: await exportRetailOfflineTerminalPublicKey(pair.publicKey), privateKey: pair.privateKey }

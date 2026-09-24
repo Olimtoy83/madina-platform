@@ -64,20 +64,24 @@ function permits(raw: unknown, count: number): Permit[] {
 }
 function samePermits(a: Permit[], b: Permit[]): boolean { return JSON.stringify(a) === JSON.stringify(b) }
 
-function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T): Promise<T> {
+function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T, legacy = false): Promise<T> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([identityStoreName, authorityStoreName, permitStoreName, metadataStoreName, saleStoreName, syncStoreName], mode)
-    const requests = [tx.objectStore(identityStoreName).get(identityRecordKey), tx.objectStore(metadataStoreName).get(metadataRecordKey), tx.objectStore(authorityStoreName).getAll(), tx.objectStore(permitStoreName).getAll(), tx.objectStore(saleStoreName).getAll(), tx.objectStore(saleStoreName).getAllKeys(), tx.objectStore(syncStoreName).getAll(), tx.objectStore(syncStoreName).getAllKeys()]
+    const tx = db.transaction([identityStoreName, authorityStoreName, permitStoreName, metadataStoreName, saleStoreName, ...(!legacy ? [syncStoreName] : [])], mode)
+    const requests = [tx.objectStore(identityStoreName).get(identityRecordKey), tx.objectStore(metadataStoreName).get(metadataRecordKey), tx.objectStore(authorityStoreName).getAll(), tx.objectStore(permitStoreName).getAll(), tx.objectStore(saleStoreName).getAll(), tx.objectStore(saleStoreName).getAllKeys(), ...(!legacy ? [tx.objectStore(syncStoreName).getAll(), tx.objectStore(syncStoreName).getAllKeys()] : [])]
     let remaining = requests.length, result: T, failure: unknown
     requests.forEach(request => { request.onsuccess = () => {
       if (--remaining) return
-      try { result = decide({ identity: requests[0]!.result as IdentityMarker | undefined, meta: requests[1]!.result as Metadata | undefined, authorities: requests[2]!.result as AuthorityRecord[], permits: requests[3]!.result as PermitRecord[], sales: requests[4]!.result as OfflineSaleRecord[], saleKeys: requests[5]!.result as IDBValidKey[], sync: requests[6]!.result as OfflineSyncRecord[], syncKeys: requests[7]!.result as IDBValidKey[] }, tx) }
+      try { result = decide({ identity: requests[0]!.result as IdentityMarker | undefined, meta: requests[1]!.result as Metadata | undefined, authorities: requests[2]!.result as AuthorityRecord[], permits: requests[3]!.result as PermitRecord[], sales: requests[4]!.result as OfflineSaleRecord[], saleKeys: requests[5]!.result as IDBValidKey[], sync: legacy ? [] : requests[6]!.result as OfflineSyncRecord[], syncKeys: legacy ? [] : requests[7]!.result as IDBValidKey[] }, tx) }
       catch (error) { failure = error; tx.abort() }
     } })
     tx.oncomplete = () => resolve(result)
     tx.onabort = () => reject(failure ?? new OfflineAuthorityError('Offline storage transaction failed.'))
     tx.onerror = () => reject(new OfflineAuthorityError('Offline storage transaction failed.', { cause: tx.error }))
   })
+}
+/** Read one immutable observation; callers validate it after the transaction completes. */
+export function readOfflineStateSnapshot(db: IDBDatabase, legacy = false): Promise<State> {
+  return stateTransaction(db, 'readonly', state => state, legacy)
 }
 export async function inDatabase<T>(mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T): Promise<T> {
   const db = await openOfflineRetailDatabase()
