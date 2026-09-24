@@ -111,7 +111,7 @@ test('changed intent, invalid lines, and permit exhaustion fail closed', async (
   expect((await read(page)).sales).toEqual([committed])
 })
 
-test('actual v2 identity, Authority, permits and legacy RESERVED survive v3; legacy operation cannot become a Sale', async ({ page }) => {
+test('actual v2 identity, Authority, permits and legacy RESERVED survive v4; legacy operation cannot become a Sale', async ({ page }) => {
   await reset(page)
   const data = fixture(2)
   const before = await page.evaluate(async ({ name, data }) => {
@@ -141,6 +141,19 @@ test('actual v2 identity, Authority, permits and legacy RESERVED survive v3; leg
   expect(await page.evaluate(input => (globalThis as any).__commitSale(input).then(() => 'ACCEPTED', (error: Error) => error.message), { ...intent('legacy-op'), authorityId: 'authority-2' })).toBe('Operation is bound to another Authority.')
   const upgraded = await read(page)
   expect(upgraded.identity.publicKey).toBe(before.publicKey)
+  const upgrade = await page.evaluate(async () => {
+    const request = indexedDB.open('madina-crm:retail-offline-terminal-identity:v1')
+    return new Promise<{ version: number; stores: string[] }>((resolve, reject) => {
+      request.onsuccess = () => {
+        const database = request.result
+        const result = { version: database.version, stores: Array.from(database.objectStoreNames) }
+        database.close()
+        resolve(result)
+      }
+      request.onerror = () => reject(request.error)
+    })
+  })
+  expect(upgrade).toMatchObject({ version: 4, stores: expect.arrayContaining(['identity', 'offlineAuthorities', 'offlinePermits', 'offlineMeta', 'offlineSales', 'offlineSaleSync']) })
   expect(before.extractable).toBe(false)
   expect(upgraded.permits[0]).toMatchObject({ localState: 'RESERVED', operationId: 'legacy-op' })
   expect(upgraded.sales).toEqual([])

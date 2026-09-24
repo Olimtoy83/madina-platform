@@ -301,6 +301,39 @@ test('Offline stock-conflict materialization requires the narrow manager command
   })
 })
 
+test('Offline Sync HTTP returns distinct first, replay, conflict, and review outcomes without duplicate effects', async () => {
+  await withOfflineSyncFixture(async fixture => {
+    const accepted = signedOfflinePayload(offlineEnvelope(fixture, fixture.permits[0]!), fixture.pair.privateKey)
+    const first = await postOffline(fixture, accepted)
+    equal(first.statusCode, 201)
+    const replay = await postOffline(fixture, accepted)
+    equal(replay.statusCode, 200)
+    deepEqual(replay.json(), first.json())
+    const acceptedSaleId = accepted.envelope.proposedSaleId
+    equal((first.json() as { sale: { id: string } }).sale.id, acceptedSaleId)
+    equal((fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_sales WHERE id=?').get(acceptedSaleId) as { count: number }).count, 1)
+    equal((fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_sale_sync_receipts WHERE offline_operation_id=?').get(accepted.envelope.offlineOperationId) as { count: number }).count, 1)
+
+    const conflictEnvelope = offlineEnvelope(fixture, fixture.permits[1]!, { offlineOperationId: 'contract-conflict', proposedSaleId: 'contract-conflict-sale', lines: [{ id: 'contract-conflict-line', productId: fixture.product.id, quantity: 6, unitPriceMinor: 100 }], cashAllocation: { id: 'contract-conflict-payment', method: 'cash', amountMinor: 600, ordinal: 0 }, subtotalMinor: 600, payableTotalMinor: 600 })
+    const conflict = signedOfflinePayload(conflictEnvelope, fixture.pair.privateKey)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await postOffline(fixture, conflict)
+      equal(response.statusCode, 409)
+      equal((response.json() as { message: string }).message, 'VERIFIED_OFFLINE_STOCK_CONFLICT')
+    }
+    equal((fixture.database.prepare('SELECT COUNT(*) AS count FROM retail_offline_stock_conflict_verifications WHERE offline_operation_id=?').get(conflictEnvelope.offlineOperationId) as { count: number }).count, 1)
+    const changed = signedOfflinePayload({ ...conflictEnvelope, lines: [{ ...conflictEnvelope.lines[0]!, quantity: 7 }], cashAllocation: { ...conflictEnvelope.cashAllocation, amountMinor: 700 }, subtotalMinor: 700, payableTotalMinor: 700 }, fixture.pair.privateKey)
+    const incompatible = await postOffline(fixture, changed)
+    equal(incompatible.statusCode, 409)
+    equal((incompatible.json() as { message: string }).message, 'IDEMPOTENCY_CONFLICT')
+    const materializer = new SqliteRetailOfflineStockConflictMaterializationRepository(fixture.file)
+    try { await materializer.materialize(fixture.location.id, { offlineOperationId: conflictEnvelope.offlineOperationId, commandId: 'contract-materialize' }, fixture.context) } finally { materializer.close() }
+    const afterMaterialization = await postOffline(fixture, conflict)
+    equal(afterMaterialization.statusCode, 409)
+    equal((afterMaterialization.json() as { message: string }).message, 'RETAIL_OFFLINE_REVIEW_REQUIRED')
+  })
+})
+
 test('11.4E lifecycle HTTP resolves and reopens a materialized conflict through the manager boundary', async () => {
   await withOfflineSyncFixture(async (fixture) => {
     const conflict = offlineEnvelope(fixture, fixture.permits[10]!, {

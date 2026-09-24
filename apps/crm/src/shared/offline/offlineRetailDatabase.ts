@@ -4,12 +4,13 @@ export const authorityStoreName = 'offlineAuthorities'
 export const permitStoreName = 'offlinePermits'
 export const metadataStoreName = 'offlineMeta'
 export const saleStoreName = 'offlineSales'
+export const syncStoreName = 'offlineSaleSync'
 export const identityRecordKey = 'current'
 export const metadataRecordKey = 'state'
 
 export function openOfflineRetailDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(offlineRetailDatabaseName, 3)
+    const request = indexedDB.open(offlineRetailDatabaseName, 4)
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(identityStoreName)) db.createObjectStore(identityStoreName)
@@ -17,6 +18,7 @@ export function openOfflineRetailDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(permitStoreName)) db.createObjectStore(permitStoreName)
       if (!db.objectStoreNames.contains(metadataStoreName)) db.createObjectStore(metadataStoreName)
       if (!db.objectStoreNames.contains(saleStoreName)) db.createObjectStore(saleStoreName)
+      if (!db.objectStoreNames.contains(syncStoreName)) db.createObjectStore(syncStoreName)
     }
     request.onsuccess = () => { request.result.onversionchange = () => request.result.close(); resolve(request.result) }
     request.onerror = () => reject(request.error ?? new Error('Retail Offline storage is unavailable.'))

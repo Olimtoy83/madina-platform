@@ -4,17 +4,19 @@ import { requestJson } from '../api/httpClient'
 import { useAuth } from '../../context/useAuth'
 import { reconcileTerminal } from './terminalProvisioning'
 import { loadPendingTerminalOperation, loadTerminalIdentity, type TerminalIdentity } from './terminalIdentity'
-import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, openOfflineRetailDatabase, permitStoreName, saleStoreName } from './offlineRetailDatabase'
+import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, openOfflineRetailDatabase, permitStoreName, saleStoreName, syncStoreName } from './offlineRetailDatabase'
 
 type ServerStatus = 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
 type Permit = { permitId: string; sequence: number; status: ServerStatus }
 export type AuthoritySnapshot = { authorityId: string; authorityVersion: number; terminalId: string; terminalKeyVersion: number; userId: string; locationId: string; issuedAt: string; expiresAt: string; currencyCode: string; currencyExponent: number; permitCount: number; productPrices: Array<{ productId: string; unitPriceMinor: number }> }
 export type AuthorityRecord = { snapshot: AuthoritySnapshot; knownRevoked: boolean }
 export type PermitRecord = { authorityId: string; permitId: string; sequence: number; serverStatus: ServerStatus; localState: 'AVAILABLE' | 'RESERVED' | 'CONSUMED_LOCAL'; operationId?: string; saleId?: string }
-export type Metadata = { version: 1; terminalId: string; locationId: string; authorityIds: string[]; lastObservedMs: number; knownTerminalUnsafe: boolean; saleOperationIds?: string[] }
-export type IdentityMarker = { terminalId?: unknown; locationId?: unknown; currentKeyVersion?: unknown; publicKey?: unknown; pending?: unknown; offlineStateEverInstalled?: unknown; offlineSaleEverPrepared?: unknown; [key: string]: unknown }
+export type TerminalSyncOutcome = { operationId: string; kind: 'ACCEPTED' | 'STOCK_CONFLICT' | 'HARD_REJECTED' }
+export type Metadata = { version: 1; terminalId: string; locationId: string; authorityIds: string[]; lastObservedMs: number; knownTerminalUnsafe: boolean; saleOperationIds?: string[]; terminalSyncOutcomes?: TerminalSyncOutcome[] }
+export type IdentityMarker = { terminalId?: unknown; locationId?: unknown; currentKeyVersion?: unknown; publicKey?: unknown; pending?: unknown; offlineStateEverInstalled?: unknown; offlineSaleEverPrepared?: unknown; offlineSyncEverTerminal?: unknown; [key: string]: unknown }
 export type OfflineSaleRecord = { state: 'PREPARED'; intent: { authorityId: string; lines: Array<{ productId: string; quantity: number }> }; envelope: RetailOfflineEnvelope; publicKey: string; authoritySnapshot: AuthoritySnapshot } | { state: 'COMMITTED_LOCAL'; intent: { authorityId: string; lines: Array<{ productId: string; quantity: number }> }; envelope: RetailOfflineEnvelope; publicKey: string; authoritySnapshot: AuthoritySnapshot; canonicalPayload: string; payloadHash: string; signature: string; committedAt: string }
-export type State = { identity: IdentityMarker | undefined; meta: Metadata | undefined; authorities: AuthorityRecord[]; permits: PermitRecord[]; sales: OfflineSaleRecord[]; saleKeys: IDBValidKey[] }
+export type OfflineSyncRecord = { operationId: string; canonicalPayload: string; payloadHash: string; signature: string; publicKey: string; attemptCount: number; lastAttemptAt: number; nextAttemptAt: number; kind: 'RETRY_WAIT' | 'AUTH_HOLD' | 'ACCESS_HOLD' | 'REVIEW_HOLD' | 'ACCEPTED' | 'STOCK_CONFLICT' | 'HARD_REJECTED'; lastStatus?: number; lastMessage?: string; clientObservedAt?: string; serverSaleId?: string; conflictIncidentIds?: string[] }
+export type State = { identity: IdentityMarker | undefined; meta: Metadata | undefined; authorities: AuthorityRecord[]; permits: PermitRecord[]; sales: OfflineSaleRecord[]; saleKeys: IDBValidKey[]; sync: OfflineSyncRecord[]; syncKeys: IDBValidKey[] }
 export class OfflineAuthorityError extends Error {}
 
 export const validId = (value: unknown): value is string => typeof value === 'string' && value.trim() === value && value.length > 0
@@ -64,12 +66,12 @@ function samePermits(a: Permit[], b: Permit[]): boolean { return JSON.stringify(
 
 function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T): Promise<T> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([identityStoreName, authorityStoreName, permitStoreName, metadataStoreName, saleStoreName], mode)
-    const requests = [tx.objectStore(identityStoreName).get(identityRecordKey), tx.objectStore(metadataStoreName).get(metadataRecordKey), tx.objectStore(authorityStoreName).getAll(), tx.objectStore(permitStoreName).getAll(), tx.objectStore(saleStoreName).getAll(), tx.objectStore(saleStoreName).getAllKeys()]
+    const tx = db.transaction([identityStoreName, authorityStoreName, permitStoreName, metadataStoreName, saleStoreName, syncStoreName], mode)
+    const requests = [tx.objectStore(identityStoreName).get(identityRecordKey), tx.objectStore(metadataStoreName).get(metadataRecordKey), tx.objectStore(authorityStoreName).getAll(), tx.objectStore(permitStoreName).getAll(), tx.objectStore(saleStoreName).getAll(), tx.objectStore(saleStoreName).getAllKeys(), tx.objectStore(syncStoreName).getAll(), tx.objectStore(syncStoreName).getAllKeys()]
     let remaining = requests.length, result: T, failure: unknown
     requests.forEach(request => { request.onsuccess = () => {
       if (--remaining) return
-      try { result = decide({ identity: requests[0]!.result as IdentityMarker | undefined, meta: requests[1]!.result as Metadata | undefined, authorities: requests[2]!.result as AuthorityRecord[], permits: requests[3]!.result as PermitRecord[], sales: requests[4]!.result as OfflineSaleRecord[], saleKeys: requests[5]!.result as IDBValidKey[] }, tx) }
+      try { result = decide({ identity: requests[0]!.result as IdentityMarker | undefined, meta: requests[1]!.result as Metadata | undefined, authorities: requests[2]!.result as AuthorityRecord[], permits: requests[3]!.result as PermitRecord[], sales: requests[4]!.result as OfflineSaleRecord[], saleKeys: requests[5]!.result as IDBValidKey[], sync: requests[6]!.result as OfflineSyncRecord[], syncKeys: requests[7]!.result as IDBValidKey[] }, tx) }
       catch (error) { failure = error; tx.abort() }
     } })
     tx.oncomplete = () => resolve(result)
@@ -81,21 +83,21 @@ export async function inDatabase<T>(mode: IDBTransactionMode, decide: (state: St
   const db = await openOfflineRetailDatabase()
   try { return await stateTransaction(db, mode, decide) } finally { db.close() }
 }
-export function checked(state: State, terminal: TerminalIdentity): Metadata | undefined {
-  const { identity, meta, authorities, permits: ledger, sales, saleKeys } = state
-  if (!identity || identity.terminalId !== terminal.terminalId || identity.locationId !== terminal.locationId || identity.publicKey !== terminal.publicKey || identity.currentKeyVersion !== terminal.currentKeyVersion) return fail('Terminal identity changed.')
+export function checked(state: State, terminal?: TerminalIdentity): Metadata | undefined {
+  const { identity, meta, authorities, permits: ledger, sales, saleKeys, sync, syncKeys } = state
+  if (!identity || !validId(identity.terminalId) || !validId(identity.locationId) || !validId(identity.publicKey) || !integer(identity.currentKeyVersion, 1) || (terminal && (identity.terminalId !== terminal.terminalId || identity.locationId !== terminal.locationId || identity.publicKey !== terminal.publicKey || identity.currentKeyVersion !== terminal.currentKeyVersion))) return fail('Terminal identity changed.')
   if (!meta) {
-    if (identity.offlineStateEverInstalled !== undefined || identity.offlineSaleEverPrepared !== undefined || authorities.length || ledger.length || sales.length) return fail('OFFLINE_STATE_LOST')
+    if (identity.offlineStateEverInstalled !== undefined || identity.offlineSaleEverPrepared !== undefined || identity.offlineSyncEverTerminal !== undefined || authorities.length || ledger.length || sales.length || sync.length) return fail('OFFLINE_STATE_LOST')
     return undefined
   }
-  if (identity.offlineStateEverInstalled !== true || meta.version !== 1 || meta.terminalId !== terminal.terminalId || meta.locationId !== terminal.locationId || !Array.isArray(meta.authorityIds) || !meta.authorityIds.length || !integer(meta.lastObservedMs, 0) || typeof meta.knownTerminalUnsafe !== 'boolean') return fail('OFFLINE_STATE_LOST')
+  if (identity.offlineStateEverInstalled !== true || meta.version !== 1 || meta.terminalId !== identity.terminalId || meta.locationId !== identity.locationId || !Array.isArray(meta.authorityIds) || !meta.authorityIds.length || !integer(meta.lastObservedMs, 0) || typeof meta.knownTerminalUnsafe !== 'boolean') return fail('OFFLINE_STATE_LOST')
   const ids = new Set(meta.authorityIds)
   if (ids.size !== meta.authorityIds.length || authorities.length !== ids.size || authorities.some(record => !record || !ids.has(record.snapshot?.authorityId))) return fail('OFFLINE_STATE_LOST')
   const permitIds = new Set<string>()
   const operationIds = new Set<string>()
   for (const record of authorities) {
     const x = record.snapshot
-    if (!x || !validId(x.authorityId) || !validId(x.userId) || x.terminalId !== terminal.terminalId || x.locationId !== terminal.locationId || !integer(x.authorityVersion, 1) || !integer(x.terminalKeyVersion, 1) || x.terminalKeyVersion > terminal.currentKeyVersion! || !integer(x.permitCount, 1) || !/^[A-Z]{3}$/.test(x.currencyCode) || !integer(x.currencyExponent, 0) || x.currencyExponent > 9 || time(x.issuedAt) >= time(x.expiresAt) || typeof record.knownRevoked !== 'boolean' || !Array.isArray(x.productPrices) || !x.productPrices.length) return fail('OFFLINE_STATE_LOST')
+    if (!x || !validId(x.authorityId) || !validId(x.userId) || x.terminalId !== identity.terminalId || x.locationId !== identity.locationId || !integer(x.authorityVersion, 1) || !integer(x.terminalKeyVersion, 1) || x.terminalKeyVersion > identity.currentKeyVersion || !integer(x.permitCount, 1) || !/^[A-Z]{3}$/.test(x.currencyCode) || !integer(x.currencyExponent, 0) || x.currencyExponent > 9 || time(x.issuedAt) >= time(x.expiresAt) || typeof record.knownRevoked !== 'boolean' || !Array.isArray(x.productPrices) || !x.productPrices.length) return fail('OFFLINE_STATE_LOST')
     const products = new Set<string>()
     for (const p of x.productPrices) { if (!p || !validId(p.productId) || !integer(p.unitPriceMinor, 1) || products.has(p.productId)) return fail('OFFLINE_STATE_LOST'); products.add(p.productId) }
     const own = ledger.filter(p => p?.authorityId === x.authorityId).sort((a, b) => a.sequence - b.sequence)
@@ -121,6 +123,27 @@ export function checked(state: State, terminal: TerminalIdentity): Metadata | un
     if (sale.state === 'COMMITTED_LOCAL' && (sale.canonicalPayload !== canonicalizeRetailOfflineEnvelope(sale.envelope) || !/^[a-f0-9]{64}$/.test(sale.payloadHash) || typeof sale.signature !== 'string' || !sale.signature.startsWith(RETAIL_OFFLINE_SIGNATURE_PREFIX))) return fail('OFFLINE_STATE_LOST')
   }
   for (const permit of ledger) if (permit.localState === 'CONSUMED_LOCAL' && !sales.some(sale => sale.state === 'COMMITTED_LOCAL' && sale.envelope.offlineOperationId === permit.operationId)) return fail('OFFLINE_STATE_LOST')
+  const terminalKinds = new Set(['ACCEPTED', 'STOCK_CONFLICT', 'HARD_REJECTED'])
+  const holdKinds = new Set(['RETRY_WAIT', 'AUTH_HOLD', 'ACCESS_HOLD', 'REVIEW_HOLD'])
+  const terminalOutcomes = meta.terminalSyncOutcomes
+  if (identity.offlineSyncEverTerminal === true) {
+    if (!Array.isArray(terminalOutcomes) || !terminalOutcomes.length || new Set(terminalOutcomes.map(item => item?.operationId)).size !== terminalOutcomes.length || terminalOutcomes.some(item => !item || !validId(item.operationId) || !['ACCEPTED', 'STOCK_CONFLICT', 'HARD_REJECTED'].includes(item.kind))) return fail('OFFLINE_STATE_LOST')
+  } else if (identity.offlineSyncEverTerminal !== undefined || terminalOutcomes !== undefined) return fail('OFFLINE_STATE_LOST')
+  if (sync.length !== syncKeys.length) return fail('OFFLINE_STATE_LOST')
+  for (const [index, record] of sync.entries()) {
+    const sale = sales.find(item => item.envelope.offlineOperationId === record?.operationId)
+    if (!record || syncKeys[index] !== record.operationId || !sale || sale.state !== 'COMMITTED_LOCAL' || record.canonicalPayload !== sale.canonicalPayload || record.payloadHash !== sale.payloadHash || record.signature !== sale.signature || record.publicKey !== sale.publicKey || !integer(record.attemptCount, 0) || !integer(record.lastAttemptAt, 0) || !integer(record.nextAttemptAt, 0)) return fail('OFFLINE_STATE_LOST')
+    const terminal = terminalKinds.has(record.kind)
+    if (!terminal && !holdKinds.has(record.kind)) return fail('OFFLINE_STATE_LOST')
+    const marker = terminalOutcomes?.find(item => item.operationId === record.operationId)
+    if (terminal ? marker?.kind !== record.kind : marker !== undefined) return fail('OFFLINE_STATE_LOST')
+    if (terminal && (!record.clientObservedAt || Number.isNaN(new Date(record.clientObservedAt).getTime()))) return fail('OFFLINE_STATE_LOST')
+    if (!terminal && (record.clientObservedAt !== undefined || record.serverSaleId !== undefined || record.conflictIncidentIds !== undefined)) return fail('OFFLINE_STATE_LOST')
+    if (record.kind === 'ACCEPTED' && ((record.lastStatus !== 200 && record.lastStatus !== 201) || record.serverSaleId !== sale.envelope.proposedSaleId || record.lastMessage !== undefined || record.conflictIncidentIds !== undefined)) return fail('OFFLINE_STATE_LOST')
+    if (record.kind === 'STOCK_CONFLICT' && (record.lastStatus !== 409 || record.lastMessage !== 'VERIFIED_OFFLINE_STOCK_CONFLICT' || record.serverSaleId !== undefined || (record.conflictIncidentIds !== undefined && (!Array.isArray(record.conflictIncidentIds) || !record.conflictIncidentIds.length || new Set(record.conflictIncidentIds).size !== record.conflictIncidentIds.length || record.conflictIncidentIds.some(id => !sale.envelope.lines.some(line => line.id === id)))))) return fail('OFFLINE_STATE_LOST')
+    if (record.kind === 'HARD_REJECTED' && ((record.lastStatus !== 400 && record.lastStatus !== 409) || typeof record.lastMessage !== 'string' || !(record.lastMessage === 'IDEMPOTENCY_CONFLICT' && record.lastStatus === 409 || record.lastMessage.startsWith('Retail Offline envelope ') || record.lastMessage.startsWith('Retail Offline Envelope ')) || record.serverSaleId !== undefined || record.conflictIncidentIds !== undefined)) return fail('OFFLINE_STATE_LOST')
+  }
+  if (terminalOutcomes?.some(item => !sync.some(record => record.operationId === item.operationId))) return fail('OFFLINE_STATE_LOST')
   return meta
 }
 export async function terminalFor(locationId: string, allowPendingRetry = false): Promise<TerminalIdentity> {
