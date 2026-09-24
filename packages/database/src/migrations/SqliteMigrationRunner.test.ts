@@ -149,6 +149,11 @@ test('applies verified domain migrations to a fresh database', () => {
       '039_retail_sale_returns_v1',
       '040_retail_offline_authority_foundation_v1',
       '041_retail_offline_sale_sync_v1',
+      '042_retail_offline_stock_conflict_verification_v1',
+      '043_retail_offline_stock_conflict_materialization_v1',
+      '044_retail_offline_stock_conflict_lifecycle_v1',
+      '045_retail_offline_stock_conflict_resolution_v1',
+      '046_retail_offline_operational_foundation_v1',
     ].join(','))
   })
 })
