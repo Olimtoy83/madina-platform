@@ -15,6 +15,7 @@ import { ClientDetails } from '../../pages/Clients/ClientDetails'
 import { SalesReport } from '../../pages/SalesReport/SalesReport'
 import { RetailPos } from '../../pages/RetailPos/RetailPos'
 import { OfflineOperations } from '../../pages/OfflineOperations/OfflineOperations'
+import { TerminalSetup } from '../../pages/TerminalSetup/TerminalSetup'
 import { RetailAccessBoundary } from '../RetailAccessBoundary'
 import { RouteRecovery } from '../RouteRecovery'
 
@@ -90,6 +91,14 @@ export const router = createBrowserRouter([
         element: (
           <RetailAccessBoundary capability="retail:sales:read">
             <OfflineOperations />
+          </RetailAccessBoundary>
+        ),
+      },
+      {
+        path: 'retail/terminal-setup',
+        element: (
+          <RetailAccessBoundary capability="retail:offline-terminals:manage">
+            <TerminalSetup />
           </RetailAccessBoundary>
         ),
       },

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Badge, Button, Card, EmptyState } from '@madina/ui'
+import { Link } from 'react-router-dom'
 import { readLocalOfflineOperations, type LocalOperation, type LocalOperationState, type LocalOperationsProjection, type SafeResultClassification } from '../../shared/offline/offlineOperationsProjection'
 import './OfflineOperations.css'
 
@@ -80,6 +81,7 @@ export function OfflineOperations() {
       <Alert variant="info" title="Только этот браузер">
         Это не обзор всех терминалов: отсутствие локальных проблем не доказывает их исправность. Текущее состояние сервера может отличаться, особенно без сети.
       </Alert>
+      <p><Link to="/retail/terminal-setup">Подготовка этого браузера к офлайн-работе</Link></p>
       {loading || !observation ? (
         <p role="status" aria-live="polite">Читаем локальную диагностику…</p>
       ) : observation.state === 'OFFLINE_STATE_LOST' ? (

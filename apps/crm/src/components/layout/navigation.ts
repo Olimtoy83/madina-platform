@@ -45,6 +45,11 @@ export const navigationItems: readonly NavigationItem[] = [
     path: '/retail/offline-operations',
     retailCapability: 'retail:sales:read',
   },
+  {
+    label: 'Подготовка терминала',
+    path: '/retail/terminal-setup',
+    retailCapability: 'retail:offline-terminals:manage',
+  },
 ]
 
 export function getVisibleNavigationItems(
