@@ -108,6 +108,67 @@ export async function getRetailLocations(): Promise<RetailLocation[]> {
   return response.locations.map(toRetailLocation)
 }
 
+/** A location-scoped read: unlike the location list, this proves the current grant. */
+export async function getRetailLocation(locationId: string): Promise<RetailLocation> {
+  const response = await requestJson<{ location: RetailLocationResponse }>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}`,
+  )
+  return toRetailLocation(response.location)
+}
+
+export interface RetailOfflineTerminalDetail {
+  terminalId: string
+  locationId: string
+  currentKeyVersion: number
+  revoked: boolean
+}
+
+export interface RetailOfflineAuthorityPermit {
+  permitId: string
+  sequence: number
+  status: 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
+}
+
+export interface RetailOfflineAuthorityDetail {
+  authorityId: string
+  authorityVersion: number
+  terminalId: string
+  terminalKeyVersion: number
+  userId: string
+  locationId: string
+  issuedAt: string
+  expiresAt: string
+  currencyCode: string
+  currencyExponent: number
+  permitCount: number
+  revoked: boolean
+  productPrices: Array<{ productId: string; unitPriceMinor: number }>
+  permits: RetailOfflineAuthorityPermit[]
+  permitCounts: { available: number; conflictPending: number; accepted: number }
+  revocation?: { revokedAt: string; revokedByUserId: string; reason: string }
+}
+
+export async function getRetailOfflineTerminalDetail(locationId: string, terminalId: string): Promise<RetailOfflineTerminalDetail> {
+  const response = await requestJson<{ terminal: RetailOfflineTerminalDetail }>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/offline-terminals/${encodeURIComponent(terminalId)}`,
+  )
+  return response.terminal
+}
+
+export async function getRetailOfflineAuthorityDetail(locationId: string, authorityId: string): Promise<RetailOfflineAuthorityDetail> {
+  const response = await requestJson<{ authority: RetailOfflineAuthorityDetail }>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/offline-authorities/${encodeURIComponent(authorityId)}`,
+  )
+  return response.authority
+}
+
+export async function getRetailOfflineAuthorityPermits(locationId: string, authorityId: string): Promise<RetailOfflineAuthorityPermit[]> {
+  const response = await requestJson<{ permits: RetailOfflineAuthorityPermit[] }>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/offline-authorities/${encodeURIComponent(authorityId)}/permits`,
+  )
+  return response.permits
+}
+
 export async function getRetailProducts(
   search: string,
 ): Promise<RetailProduct[]> {

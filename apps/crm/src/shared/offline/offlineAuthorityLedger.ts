@@ -6,7 +6,7 @@ import { reconcileTerminal } from './terminalProvisioning'
 import { loadPendingTerminalOperation, loadTerminalIdentity, type TerminalIdentity } from './terminalIdentity'
 import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, openOfflineRetailDatabase, permitStoreName, saleStoreName, syncStoreName } from './offlineRetailDatabase'
 
-type ServerStatus = 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
+export type ServerStatus = 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
 type Permit = { permitId: string; sequence: number; status: ServerStatus }
 export type AuthoritySnapshot = { authorityId: string; authorityVersion: number; terminalId: string; terminalKeyVersion: number; userId: string; locationId: string; issuedAt: string; expiresAt: string; currencyCode: string; currencyExponent: number; permitCount: number; productPrices: Array<{ productId: string; unitPriceMinor: number }> }
 export type AuthorityRecord = { snapshot: AuthoritySnapshot; knownRevoked: boolean }
@@ -63,6 +63,14 @@ function permits(raw: unknown, count: number): Permit[] {
   return result
 }
 function samePermits(a: Permit[], b: Permit[]): boolean { return JSON.stringify(a) === JSON.stringify(b) }
+
+/** Validate both existing server reads without installing or refreshing local state. */
+export function inspectServerOfflineAuthority(detail: unknown, separatePermits: unknown): { snapshot: AuthoritySnapshot; revoked: boolean; permits: Permit[] } {
+  const parsed = snapshot(detail)
+  const fresh = permits(separatePermits, parsed.value.permitCount)
+  if (!samePermits(parsed.permits, fresh)) return fail('Authority permit evidence is inconsistent.')
+  return { snapshot: parsed.value, revoked: parsed.revoked, permits: fresh }
+}
 
 function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T, legacy = false): Promise<T> {
   return new Promise((resolve, reject) => {
