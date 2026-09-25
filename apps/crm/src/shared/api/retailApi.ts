@@ -129,6 +129,45 @@ export interface RetailOfflineAuthorityPermit {
   status: 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
 }
 
+export interface RetailOfflineAuthoritySummary {
+  authorityId: string
+  authorityVersion: number
+  terminalId: string
+  terminalKeyVersion: number
+  userId: string
+  locationId: string
+  issuedAt: string
+  expiresAt: string
+  currencyCode: string
+  currencyExponent: number
+  permitCount: number
+  revoked: boolean
+}
+
+export async function getRetailOfflineAuthorities(locationId: string): Promise<RetailOfflineAuthoritySummary[]> {
+  const response = await requestJson<{ authorities: unknown }>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/offline-authorities`,
+  )
+  if (!response || !Array.isArray(response.authorities)) throw new Error('Retail Offline Authority list is invalid.')
+  const ids = new Set<string>()
+  return response.authorities.map(raw => {
+    if (!raw || typeof raw !== 'object') throw new Error('Retail Offline Authority list is invalid.')
+    const value = raw as Record<string, unknown>
+    const id = value.authorityId
+    const validId = (item: unknown): item is string => typeof item === 'string' && item.length > 0 && item.trim() === item
+    const positive = (item: unknown): item is number => Number.isSafeInteger(item) && (item as number) > 0
+    const iso = (item: unknown): item is string => typeof item === 'string' && !Number.isNaN(new Date(item).getTime()) && new Date(item).toISOString() === item
+    if (!validId(id) || ids.has(id) || !validId(value.terminalId) || !validId(value.userId) || !validId(value.locationId)
+      || !positive(value.authorityVersion) || !positive(value.terminalKeyVersion) || !positive(value.permitCount)
+      || !iso(value.issuedAt) || !iso(value.expiresAt) || Date.parse(value.issuedAt) >= Date.parse(value.expiresAt)
+      || typeof value.currencyCode !== 'string' || !/^[A-Z]{3}$/.test(value.currencyCode)
+      || !Number.isSafeInteger(value.currencyExponent) || (value.currencyExponent as number) < 0 || (value.currencyExponent as number) > 9
+      || typeof value.revoked !== 'boolean') throw new Error('Retail Offline Authority list is invalid.')
+    ids.add(id)
+    return value as unknown as RetailOfflineAuthoritySummary
+  })
+}
+
 export interface RetailOfflineAuthorityDetail {
   authorityId: string
   authorityVersion: number

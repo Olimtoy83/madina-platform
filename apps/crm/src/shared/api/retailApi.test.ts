@@ -4,6 +4,7 @@ import {
   completeRetailReturn,
   getRetailCompletedSale,
   getRetailLocations,
+  getRetailOfflineAuthorities,
   getRetailProductByBarcode,
   getRetailProductPrice,
   getRetailProducts,
@@ -23,6 +24,18 @@ afterEach(() => {
 })
 
 describe('retailApi', () => {
+  it('validates the typed offline Authority list and rejects malformed or duplicate summaries', async () => {
+    const valid = { authorityId: 'authority-1', authorityVersion: 1, terminalId: 'terminal-1', terminalKeyVersion: 1, userId: 'user-1', locationId: 'location-1', issuedAt: '2026-09-01T00:00:00.000Z', expiresAt: '2026-10-01T00:00:00.000Z', currencyCode: 'USD', currencyExponent: 2, permitCount: 2, revoked: false }
+    const fetchMock = vi.fn().mockResolvedValue(response({ authorities: [valid] }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(getRetailOfflineAuthorities('location / 1')).resolves.toEqual([valid])
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/retail/locations/location%20%2F%201/offline-authorities')
+    for (const authorities of [[valid, valid], [{ ...valid, terminalKeyVersion: 0 }], [{ ...valid, expiresAt: 'invalid' }], [{ ...valid, currencyCode: 'bad' }]]) {
+      fetchMock.mockResolvedValueOnce(response({ authorities }))
+      await expect(getRetailOfflineAuthorities('location-1')).rejects.toThrow('Retail Offline Authority list is invalid.')
+    }
+  })
+
   const completionPayload: RetailSaleCompletionRequest = {
     clientOperationId: 'operation-1',
     saleId: 'sale-1',

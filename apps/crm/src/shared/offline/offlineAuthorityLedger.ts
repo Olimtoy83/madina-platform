@@ -1,10 +1,14 @@
 import { useRef } from 'react'
 import { canonicalizeRetailOfflineEnvelope, RETAIL_OFFLINE_SIGNATURE_PREFIX, type RetailOfflineEnvelope } from '@madina/retail'
-import { requestJson } from '../api/httpClient'
+import type { AuthContextValue } from '../../context/AuthContext'
+import { getCurrentUser } from '../api/authApi'
+import { HttpError, requestJson } from '../api/httpClient'
+import { getRetailLocation, getRetailOfflineAuthorities, getRetailOfflineTerminalDetail, type RetailOfflineAuthoritySummary } from '../api/retailApi'
+import { canRetail } from '../auth/retailPermissions'
 import { useAuth } from '../../context/useAuth'
 import { reconcileTerminal } from './terminalProvisioning'
-import { loadPendingTerminalOperation, loadTerminalIdentity, type TerminalIdentity } from './terminalIdentity'
-import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, openOfflineRetailDatabase, permitStoreName, saleStoreName, syncStoreName } from './offlineRetailDatabase'
+import { inspectStoredTerminalIdentity, loadPendingTerminalOperation, loadTerminalIdentity, TerminalIdentityError, type TerminalIdentity } from './terminalIdentity'
+import { authorityStoreName, identityRecordKey, identityStoreName, metadataRecordKey, metadataStoreName, offlineRetailDatabaseName, openOfflineRetailDatabase, permitStoreName, saleStoreName, syncStoreName } from './offlineRetailDatabase'
 
 export type ServerStatus = 'AVAILABLE' | 'CONSUMED_CONFLICT_PENDING' | 'CONSUMED_ACCEPTED'
 type Permit = { permitId: string; sequence: number; status: ServerStatus }
@@ -18,6 +22,12 @@ export type OfflineSaleRecord = { state: 'PREPARED'; intent: { authorityId: stri
 export type OfflineSyncRecord = { operationId: string; canonicalPayload: string; payloadHash: string; signature: string; publicKey: string; attemptCount: number; lastAttemptAt: number; nextAttemptAt: number; kind: 'RETRY_WAIT' | 'AUTH_HOLD' | 'ACCESS_HOLD' | 'REVIEW_HOLD' | 'ACCEPTED' | 'STOCK_CONFLICT' | 'HARD_REJECTED'; lastStatus?: number; lastMessage?: string; clientObservedAt?: string; serverSaleId?: string; conflictIncidentIds?: string[] }
 export type State = { identity: IdentityMarker | undefined; meta: Metadata | undefined; authorities: AuthorityRecord[]; permits: PermitRecord[]; sales: OfflineSaleRecord[]; saleKeys: IDBValidKey[]; sync: OfflineSyncRecord[]; syncKeys: IDBValidKey[] }
 export class OfflineAuthorityError extends Error {}
+
+export type InstallableOfflineAuthority = { authorityId: string; expiresAt: string; terminalId: string; terminalKeyVersion: number; availablePermitCount: number }
+export type InstallableOfflineAuthorityResult =
+  | { status: 'OK'; authorities: InstallableOfflineAuthority[] }
+  | { status: 'AUTH_REQUIRED' | 'ACCESS_DENIED' | 'IDENTITY_MISSING' | 'IDENTITY_INVALID' | 'LOCAL_STATE_INVALID' | 'SERVER_UNAVAILABLE' | 'SERVER_DATA_INVALID'; authorities: [] }
+type DiscoverySession = Pick<AuthContextValue, 'user' | 'isLoading' | 'error'>
 
 export const validId = (value: unknown): value is string => typeof value === 'string' && value.trim() === value && value.length > 0
 export const integer = (value: unknown, minimum: number): value is number => Number.isSafeInteger(value) && (value as number) >= minimum
@@ -70,6 +80,125 @@ export function inspectServerOfflineAuthority(detail: unknown, separatePermits: 
   const fresh = permits(separatePermits, parsed.value.permitCount)
   if (!samePermits(parsed.permits, fresh)) return fail('Authority permit evidence is inconsistent.')
   return { snapshot: parsed.value, revoked: parsed.revoked, permits: fresh }
+}
+
+type ValidatedServerAuthority = ReturnType<typeof inspectServerOfflineAuthority>
+class TerminalServerStateError extends OfflineAuthorityError {
+  readonly state: Awaited<ReturnType<typeof reconcileTerminal>>
+  constructor(state: Awaited<ReturnType<typeof reconcileTerminal>>) { super('Terminal server state is not usable.'); this.state = state }
+}
+
+/** Shared Authority evidence and browser binding check; terminal preflight is owned by each caller. */
+async function fetchValidatedAuthority(locationId: string, authorityId: string, userId: string, terminal: TerminalIdentity): Promise<ValidatedServerAuthority> {
+  const root = `/api/v1/retail/locations/${encodeURIComponent(locationId)}/offline-authorities/${encodeURIComponent(authorityId)}`
+  const detail = await requestJson<{ authority: unknown }>(root)
+  const separate = await requestJson<{ permits: unknown }>(`${root}/permits`)
+  const parsed = inspectServerOfflineAuthority(detail?.authority, separate?.permits)
+  if (parsed.snapshot.authorityId !== authorityId || parsed.snapshot.locationId !== locationId || parsed.snapshot.terminalId !== terminal.terminalId || parsed.snapshot.userId !== userId || parsed.snapshot.terminalKeyVersion > terminal.currentKeyVersion!) return fail('Authority binding or permit evidence is invalid.')
+  return parsed
+}
+
+/** Existing new-install policy. The candidate path adds current-key/currency checks separately. */
+function newInstallEligible(state: State, prior: Metadata | undefined, terminal: TerminalIdentity, parsed: ValidatedServerAuthority, now: number): boolean {
+  return !parsed.revoked && parsed.permits.every(permit => permit.status === 'AVAILABLE')
+    && parsed.permits.every(permit => !state.permits.some(existing => existing.permitId === permit.permitId))
+    && now >= time(parsed.snapshot.issuedAt) && now < time(parsed.snapshot.expiresAt)
+    && (!prior || now >= prior.lastObservedMs) && !prior?.knownTerminalUnsafe
+    && parsed.snapshot.terminalKeyVersion <= terminal.currentKeyVersion!
+}
+
+function sameSummary(summary: RetailOfflineAuthoritySummary, parsed: ValidatedServerAuthority): boolean {
+  const value = parsed.snapshot
+  return summary.authorityId === value.authorityId && summary.authorityVersion === value.authorityVersion
+    && summary.terminalId === value.terminalId && summary.terminalKeyVersion === value.terminalKeyVersion
+    && summary.userId === value.userId && summary.locationId === value.locationId
+    && summary.issuedAt === value.issuedAt && summary.expiresAt === value.expiresAt
+    && summary.currencyCode === value.currencyCode && summary.currencyExponent === value.currencyExponent
+    && summary.permitCount === value.permitCount
+}
+
+/** Abort upgrades, including creation of an absent profile. */
+function openExistingOfflineDatabase(): Promise<IDBDatabase | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(offlineRetailDatabaseName)
+    let absent = false
+    request.onupgradeneeded = event => { absent = (event as IDBVersionChangeEvent).oldVersion === 0; request.transaction!.abort() }
+    request.onerror = () => absent ? resolve(undefined) : reject(request.error)
+    request.onblocked = () => reject(new Error('Offline database is blocked.'))
+    request.onsuccess = () => resolve(request.result)
+  })
+}
+
+type DiscoveryLocal = { state: State; terminal: TerminalIdentity; meta: Metadata | undefined }
+async function readDiscoveryLocal(): Promise<DiscoveryLocal | 'IDENTITY_MISSING'> {
+  const db = await openExistingOfflineDatabase()
+  if (!db) return 'IDENTITY_MISSING'
+  try {
+    const stores = [authorityStoreName, identityStoreName, metadataStoreName, permitStoreName, saleStoreName, syncStoreName]
+    if (db.version !== 4 || Array.from(db.objectStoreNames).sort().join('|') !== stores.sort().join('|')) throw new OfflineAuthorityError('Offline storage schema is invalid.')
+    const state = await readOfflineStateSnapshot(db)
+    const inspected = await inspectStoredTerminalIdentity(state.identity)
+    if (!inspected) {
+      if (state.meta || state.authorities.length || state.permits.length || state.sales.length || state.saleKeys.length || state.sync.length || state.syncKeys.length) throw new OfflineAuthorityError('Offline state exists without identity.')
+      return 'IDENTITY_MISSING'
+    }
+    if (inspected.terminal.state !== 'ENROLLED' || inspected.pending) throw new OfflineAuthorityError('Terminal is not ready for Authority installation.')
+    return { state, terminal: inspected.terminal, meta: checked(state, inspected.terminal) }
+  } finally { db.close() }
+}
+
+const discoveryFailure = (status: Exclude<InstallableOfflineAuthorityResult['status'], 'OK'>): InstallableOfflineAuthorityResult => ({ status, authorities: [] })
+function onlineFailure(error: unknown): InstallableOfflineAuthorityResult {
+  if (error instanceof HttpError && error.status === 401) return discoveryFailure('AUTH_REQUIRED')
+  if (error instanceof HttpError && error.status === 403) return discoveryFailure('ACCESS_DENIED')
+  return discoveryFailure(error instanceof HttpError || error instanceof TypeError ? 'SERVER_UNAVAILABLE' : 'SERVER_DATA_INVALID')
+}
+
+/** Online observation only; never creates a profile, installs an Authority, or reserves a permit. */
+export async function listInstallableOfflineAuthorities(locationId: string, auth: DiscoverySession): Promise<InstallableOfflineAuthorityResult> {
+  if (auth.isLoading || auth.error || !auth.user) return discoveryFailure('AUTH_REQUIRED')
+  let userId: string
+  let currencyCode: string
+  let currencyExponent: number
+  try {
+    const principal = await getCurrentUser()
+    if (!principal || principal.id !== auth.user.id) return discoveryFailure('AUTH_REQUIRED')
+    if (!canRetail(principal, 'retail:offline-terminals:manage')) return discoveryFailure('ACCESS_DENIED')
+    const location = await getRetailLocation(locationId)
+    if (!location || location.id !== locationId || location.status !== 'active' || location.type !== 'store' || !location.currencyCode || !Number.isSafeInteger(location.currencyExponent)) return discoveryFailure('ACCESS_DENIED')
+    userId = principal.id
+    currencyCode = location.currencyCode
+    currencyExponent = location.currencyExponent!
+  } catch (error) { return onlineFailure(error) }
+  let local: DiscoveryLocal | 'IDENTITY_MISSING'
+  try { local = await readDiscoveryLocal() }
+  catch (error) { return discoveryFailure(error instanceof TerminalIdentityError ? 'IDENTITY_INVALID' : 'LOCAL_STATE_INVALID') }
+  if (local === 'IDENTITY_MISSING') return discoveryFailure('IDENTITY_MISSING')
+  if (local.terminal.locationId !== locationId || local.meta?.knownTerminalUnsafe) return discoveryFailure('LOCAL_STATE_INVALID')
+  // Only server reads follow the verified local snapshot. Never call a creating identity opener here.
+  try {
+    const terminal = await getRetailOfflineTerminalDetail(locationId, local.terminal.terminalId!)
+    if (!terminal || terminal.terminalId !== local.terminal.terminalId || terminal.locationId !== locationId
+      || !integer(terminal.currentKeyVersion, 1) || typeof terminal.revoked !== 'boolean') return discoveryFailure('SERVER_DATA_INVALID')
+    if (terminal.revoked || terminal.currentKeyVersion !== local.terminal.currentKeyVersion) return discoveryFailure('LOCAL_STATE_INVALID')
+  } catch (error) { return onlineFailure(error) }
+  let summaries: RetailOfflineAuthoritySummary[]
+  try { summaries = await getRetailOfflineAuthorities(locationId) }
+  catch (error) { return onlineFailure(error) }
+  const compatible: InstallableOfflineAuthority[] = []
+  for (const summary of summaries) {
+    if (summary.userId !== userId || summary.terminalId !== local.terminal.terminalId || summary.locationId !== locationId
+      || summary.terminalKeyVersion !== local.terminal.currentKeyVersion || summary.revoked
+      || summary.currencyCode !== currencyCode || summary.currencyExponent !== currencyExponent
+      || local.state.authorities.some(item => item.snapshot.authorityId === summary.authorityId)) continue
+    let parsed: ValidatedServerAuthority
+    try { parsed = await fetchValidatedAuthority(locationId, summary.authorityId, userId, local.terminal) }
+    catch (error) { return onlineFailure(error) }
+    if (!sameSummary(summary, parsed)) return discoveryFailure('SERVER_DATA_INVALID')
+    if (parsed.snapshot.terminalKeyVersion !== local.terminal.currentKeyVersion || parsed.revoked || parsed.snapshot.currencyCode !== currencyCode || parsed.snapshot.currencyExponent !== currencyExponent) continue
+    if (newInstallEligible(local.state, local.meta, local.terminal, parsed, Date.now())) compatible.push({ authorityId: parsed.snapshot.authorityId, expiresAt: parsed.snapshot.expiresAt, terminalId: parsed.snapshot.terminalId, terminalKeyVersion: parsed.snapshot.terminalKeyVersion, availablePermitCount: parsed.permits.length })
+  }
+  return { status: 'OK', authorities: compatible.sort((a, b) => a.authorityId.localeCompare(b.authorityId)) }
 }
 
 function stateTransaction<T>(db: IDBDatabase, mode: IDBTransactionMode, decide: (state: State, tx: IDBTransaction) => T, legacy = false): Promise<T> {
@@ -176,20 +305,17 @@ export async function installOfflineAuthority(locationId: string, authorityId: s
       const meta = checked(state, terminal)
       if (meta) tx.objectStore(metadataStoreName).put({ ...meta, knownTerminalUnsafe: true } satisfies Metadata, metadataRecordKey)
     })
-    return fail('Terminal server state is not usable.')
+    throw new TerminalServerStateError(terminalState)
   }
-  const root = `/api/v1/retail/locations/${encodeURIComponent(locationId)}/offline-authorities/${encodeURIComponent(authorityId)}`
-  const detail = await requestJson<{ authority: unknown }>(root)
-  const separate = await requestJson<{ permits: unknown }>(`${root}/permits`)
-  const parsed = snapshot(detail?.authority)
-  const fresh = permits(separate?.permits, parsed.value.permitCount)
-  if (!samePermits(parsed.permits, fresh) || parsed.value.authorityId !== authorityId || parsed.value.locationId !== locationId || parsed.value.terminalId !== terminal.terminalId || parsed.value.userId !== expectedUserId || parsed.value.terminalKeyVersion > terminal.currentKeyVersion!) return fail('Authority binding or permit evidence is invalid.')
+  let parsed: ValidatedServerAuthority
+  parsed = await fetchValidatedAuthority(locationId, authorityId, expectedUserId, terminal)
+  const fresh = parsed.permits
   return inDatabase('readwrite', (state, tx) => {
     const prior = checked(state, terminal)
     const existing = state.authorities.find(a => a.snapshot.authorityId === authorityId)
     if (existing) {
       if (!prior) return fail('OFFLINE_STATE_LOST')
-      if (JSON.stringify(existing.snapshot) !== JSON.stringify(parsed.value)) return fail('Authority immutable snapshot changed.')
+      if (JSON.stringify(existing.snapshot) !== JSON.stringify(parsed.snapshot)) return fail('Authority immutable snapshot changed.')
       const local = state.permits.filter(p => p.authorityId === authorityId).sort((a, b) => a.sequence - b.sequence)
       if (local.some((p, i) => p.permitId !== fresh[i]!.permitId)) return fail('Authority permit identity changed.')
       if (parsed.revoked && !existing.knownRevoked) tx.objectStore(authorityStoreName).put({ ...existing, knownRevoked: true }, authorityId)
@@ -197,16 +323,14 @@ export async function installOfflineAuthority(locationId: string, authorityId: s
       tx.objectStore(metadataStoreName).put({ ...prior, lastObservedMs: Math.max(prior.lastObservedMs, Date.now()) } satisfies Metadata, metadataRecordKey)
       return existing.snapshot
     }
-    if (parsed.revoked || fresh.some(p => p.status !== 'AVAILABLE') || fresh.some(p => state.permits.some(existingPermit => existingPermit.permitId === p.permitId))) return fail('Revoked Authority or invalid server permits cannot be newly installed.')
     const now = Date.now()
-    if (now < time(parsed.value.issuedAt) || now >= time(parsed.value.expiresAt) || (prior && now < prior.lastObservedMs)) return fail('Authority local time is not eligible.')
-    if (prior?.knownTerminalUnsafe) return fail('Terminal is known unsafe.')
+    if (!newInstallEligible(state, prior, terminal, parsed, now)) return fail('Authority is not eligible for new installation.')
     const meta: Metadata = prior ? { ...prior, authorityIds: [...prior.authorityIds, authorityId].sort(), lastObservedMs: now } : { version: 1, terminalId: terminal.terminalId!, locationId, authorityIds: [authorityId], lastObservedMs: now, knownTerminalUnsafe: false }
     tx.objectStore(identityStoreName).put({ ...state.identity, offlineStateEverInstalled: true }, identityRecordKey)
-    tx.objectStore(authorityStoreName).put({ snapshot: parsed.value, knownRevoked: false } satisfies AuthorityRecord, authorityId)
+    tx.objectStore(authorityStoreName).put({ snapshot: parsed.snapshot, knownRevoked: false } satisfies AuthorityRecord, authorityId)
     fresh.forEach(p => tx.objectStore(permitStoreName).put({ authorityId, permitId: p.permitId, sequence: p.sequence, serverStatus: p.status, localState: 'AVAILABLE' } satisfies PermitRecord, [authorityId, p.sequence]))
     tx.objectStore(metadataStoreName).put(meta, metadataRecordKey)
-    return parsed.value
+    return parsed.snapshot
   })
 }
 
