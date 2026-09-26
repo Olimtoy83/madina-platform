@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
 import {
   getRetailLocations,
@@ -16,6 +17,10 @@ import { useAuth } from '../../context/useAuth'
 import { canRetail } from '../../shared/auth/retailPermissions'
 import { Alert, Button, Card, EmptyState, Input, Spinner } from '@madina/ui'
 import { usePendingCommand } from '../../shared/usePendingCommand'
+import { useCommitOfflineSale, type OfflineSaleIntent } from '../../shared/offline/offlineLocalSale'
+import { loadOfflineAuthority } from '../../shared/offline/offlineAuthorityLedger'
+import { readLocalOfflineOperations } from '../../shared/offline/offlineOperationsProjection'
+import { checkTerminalReadiness, type TerminalReadiness } from '../../shared/offline/terminalReadiness'
 import {
   addPosCartLine,
   calculatePosCartTotals,
@@ -75,6 +80,7 @@ type RecoveryRetryState = 'idle' | 'retrying' | 'failed' | 'cleanup-failed' | 's
 type DiscountMode = 'amount' | 'percent'
 type ReturnLookupState = 'idle' | 'loading' | 'loaded' | 'not-found' | 'denied' | 'error'
 type ReturnSubmissionState = 'idle' | 'submitting' | 'unknown-result' | 'rejected' | 'cleanup-failed' | 'succeeded'
+type OfflineAttempt = { key: string; locationId: string; authorityId: string; intent: OfflineSaleIntent; totalMinor: number; currencyCode: string; currencyExponent: number; quantity: number }
 
 type CurrencyConfiguredLocation = RetailLocation & {
   currencyCode: string
@@ -150,7 +156,9 @@ function getRecoveryGateMessage(
 }
 
 export function RetailPos() {
-  const { user } = useAuth()
+  const auth = useAuth()
+  const { user } = auth
+  const commitOfflineSale = useCommitOfflineSale()
   const canApplyDiscount = canRetail(user, 'retail:sales:discount')
   const canReturnSales = canRetail(user, 'retail:sales:return')
   const [locations, setLocations] = useState<RetailLocation[]>([])
@@ -200,7 +208,30 @@ export function RetailPos() {
   const submissionOwnerUserId = useRef<string | undefined>(undefined)
   const returnLookupGeneration = useRef(0)
   const returnSubmissionGeneration = useRef(0)
+  const offlineReadGeneration = useRef(0)
+  const offlineBusyRef = useRef(false)
+  const offlineContextRef = useRef('')
+  const offlineAttemptRef = useRef<OfflineAttempt | undefined>(undefined)
+  const offlineHoldRef = useRef(false)
+  const [offlineReadiness, setOfflineReadiness] = useState<{ locationId: string; userId?: string; value: TerminalReadiness }>()
+  const [offlineReadinessLoading, setOfflineReadinessLoading] = useState(false)
+  const [offlineBusy, setOfflineBusy] = useState(false)
+  const [offlineConfirmation, setOfflineConfirmation] = useState<OfflineAttempt>()
+  const [offlineError, setOfflineError] = useState<string>()
+  const [offlineHold, setOfflineHold] = useState(false)
+  const [offlineSuccess, setOfflineSuccess] = useState<string>()
   const { isPending, run: runPendingCommand } = usePendingCommand()
+
+  const invalidateOffline = useCallback(() => {
+    offlineReadGeneration.current += 1
+    offlineContextRef.current = ''
+    setOfflineReadiness(undefined)
+    setOfflineReadinessLoading(false)
+    setOfflineConfirmation(undefined)
+    setOfflineError(undefined)
+    setOfflineSuccess(undefined)
+    if (!offlineHoldRef.current) offlineAttemptRef.current = undefined
+  }, [])
 
   const resetPriceReadiness = useCallback(() => {
     priceRequestGeneration.current += 1
@@ -237,6 +268,7 @@ export function RetailPos() {
   }, [])
 
   const loadLocations = useCallback(async () => {
+    invalidateOffline()
     setLoadState('loading')
     setLocations([])
     setSelectedLocationId(undefined)
@@ -259,7 +291,7 @@ export function RetailPos() {
     } catch {
       setLoadState('error')
     }
-  }, [resetProductLookup, resetReturnWorkflow])
+  }, [invalidateOffline, resetProductLookup, resetReturnWorkflow])
 
   useEffect(() => {
     void loadLocations()
@@ -316,7 +348,25 @@ export function RetailPos() {
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
   )
+  useEffect(() => {
+    const locationId = selectedLocationId
+    const generation = ++offlineReadGeneration.current
+    if (!locationId) return
+    void Promise.resolve().then(() => { if (offlineReadGeneration.current === generation) setOfflineReadinessLoading(true) })
+    void checkTerminalReadiness(locationId, { user: auth.user, isLoading: auth.isLoading, error: auth.error })
+      .then(value => {
+        if (offlineReadGeneration.current === generation && selectedLocationId === locationId) setOfflineReadiness({ locationId, userId: auth.user?.id, value })
+      })
+      .catch(() => {
+        if (offlineReadGeneration.current === generation) setOfflineReadiness(undefined)
+      })
+      .finally(() => { if (offlineReadGeneration.current === generation) setOfflineReadinessLoading(false) })
+    return () => { if (offlineReadGeneration.current === generation) offlineReadGeneration.current += 1 }
+  }, [selectedLocationId, auth.user, auth.isLoading, auth.error])
   const cartTotals = calculatePosCartTotals(cartLines)
+  const currentOfflineReadiness = offlineReadiness && offlineReadiness.locationId === selectedLocationId && offlineReadiness.userId === user?.id ? offlineReadiness.value : undefined
+  const offlineContextKey = JSON.stringify({ locationId: selectedLocationId, userId: user?.id, cartLines, checkoutAttempt, paymentAllocations, authorityId: currentOfflineReadiness?.authorityId })
+  useLayoutEffect(() => { offlineContextRef.current = offlineContextKey }, [offlineContextKey])
   const cartLineTotals = cartTotals.status === 'ready'
     ? new Map(cartTotals.lineTotals.map((line) => [line.productId, line.lineTotalMinor]))
     : undefined
@@ -435,7 +485,8 @@ export function RetailPos() {
   }
 
   function selectLocation(locationId: string) {
-    if (isSubmitting || returnSubmissionState === 'submitting') return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current || returnSubmissionState === 'submitting') return
+    invalidateOffline()
     const hadCartLines = cartLines.length > 0
     setSelectedLocationId(locationId || undefined)
     resetProductLookup()
@@ -452,12 +503,13 @@ export function RetailPos() {
   }
 
   function selectProduct(product: RetailProduct) {
+    if (offlineBusyRef.current || offlineHoldRef.current) return
     resetPriceReadiness()
     setSelectedProduct(product)
   }
 
   function addSelectedProductToCart() {
-    if (isSubmitting) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current) return
     if (!selectedLocation
       || !selectedProduct
       || selectedProduct.status !== 'active'
@@ -485,7 +537,7 @@ export function RetailPos() {
   }
 
   function incrementCartLine(productId: string) {
-    if (isSubmitting) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current) return
     const result = incrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
@@ -496,7 +548,7 @@ export function RetailPos() {
   }
 
   function decrementCartLine(productId: string) {
-    if (isSubmitting) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current) return
     const result = decrementPosCartLine(cartLines, productId)
     setCartLines(result.lines)
     setCartError(result.error ? getCartErrorMessage(result.error) : undefined)
@@ -507,7 +559,7 @@ export function RetailPos() {
   }
 
   function updateDiscountInput(productId: string, value: string) {
-    if (isSubmitting || !canApplyDiscount) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current || !canApplyDiscount) return
 
     setDiscountInputs((current) => ({
       ...current,
@@ -516,12 +568,12 @@ export function RetailPos() {
   }
 
   function updateDiscountMode(productId: string, mode: DiscountMode) {
-    if (isSubmitting || !canApplyDiscount) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current || !canApplyDiscount) return
     setDiscountModes((current) => ({ ...current, [productId]: mode }))
   }
 
   function applyCartLineDiscount(line: PosCartLine) {
-    if (isSubmitting || !canApplyDiscount) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current || !canApplyDiscount) return
 
     const input = discountInputs[line.productId] ?? ''
     const mode = discountModes[line.productId]
@@ -574,7 +626,7 @@ export function RetailPos() {
   }
 
   function removeCartLineDiscount(productId: string) {
-    if (isSubmitting || !canApplyDiscount) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current || !canApplyDiscount) return
 
     const result = setPosCartLineDiscount(
       cartLines,
@@ -602,7 +654,7 @@ export function RetailPos() {
   }
 
   function removeCartLine(productId: string) {
-    if (isSubmitting) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current) return
     setCartLines(removePosCartLine(cartLines, productId))
     setDiscountInputs((current) => {
       const { [productId]: _removed, ...rest } = current
@@ -620,7 +672,7 @@ export function RetailPos() {
   }
 
   function clearCart() {
-    if (isSubmitting) return
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current) return
     setCartLines(clearPosCart())
     setDiscountInputs({})
     setDiscountModes({})
@@ -632,7 +684,7 @@ export function RetailPos() {
   }
 
   function prepareCheckoutAttempt() {
-    if (isSubmitting
+    if (isSubmitting || offlineBusyRef.current || offlineHoldRef.current
       || !isCheckoutPreparationAllowed
       || !selectedLocation
       || cartTotals.status !== 'ready') return
@@ -663,7 +715,98 @@ export function RetailPos() {
     : undefined
   const isSubmitting = submissionKey !== undefined && isPending(submissionKey)
 
+  function offlineGate(): { locationId: string; authorityId: string; totalMinor: number; currencyCode: string; currencyExponent: number; quantity: number } | undefined {
+    if (!user || !selectedLocation || !hasCurrencyConfiguration(selectedLocation) || !checkoutAttempt || checkoutAttempt.locationId !== selectedLocation.id
+      || !isCheckoutPreparationAllowed || recoveryGate.status !== 'clear' || submissionState === 'submitting' || submissionState === 'blocked'
+      || isSubmitting || offlineHoldRef.current || cartTotals.status !== 'ready' || !cartLines.length
+      || !paymentAllocations || paymentAllocations.length !== 1 || paymentAllocations[0]?.method !== 'cash'
+      || paymentSummary?.status !== 'exact' || paymentSummary.targetMinor !== cartTotals.payableTotalMinor
+      || paymentSummary.allocatedMinor !== cartTotals.payableTotalMinor || cartLines.some(line => line.discountAmountMinor !== undefined || line.discountPercentBasisPoints !== undefined)
+      || checkoutAttempt.lines.length !== cartLines.length || checkoutAttempt.lines.some(line => !cartLines.some(cart => cart.productId === line.productId && cart.quantity === line.quantity && line.discountAmountMinor === undefined))
+      || currentOfflineReadiness?.status !== 'READY' || !currentOfflineReadiness.serverVerified
+      || currentOfflineReadiness.requestedLocationId !== selectedLocation.id || !currentOfflineReadiness.authorityId) return undefined
+    return { locationId: selectedLocation.id, authorityId: currentOfflineReadiness.authorityId, totalMinor: cartTotals.payableTotalMinor,
+      currencyCode: selectedLocation.currencyCode, currencyExponent: selectedLocation.currencyExponent,
+      quantity: cartLines.reduce((sum, line) => sum + line.quantity, 0) }
+  }
+
+  async function validateOfflinePrices(locationId: string, authorityId: string, currencyCode: string, currencyExponent: number, lines: readonly PosCartLine[]): Promise<boolean> {
+    const authority = await loadOfflineAuthority(locationId, authorityId)
+    if (!authority || authority.locationId !== locationId || authority.userId !== user?.id
+      || authority.currencyCode !== currencyCode || authority.currencyExponent !== currencyExponent) return false
+    return lines.every(line => line.currencyCode === currencyCode && line.currencyExponent === currencyExponent
+      && Number.isSafeInteger(line.quantity) && line.quantity > 0
+      && authority.productPrices.some(price => price.productId === line.productId && price.unitPriceMinor === line.unitPriceMinor))
+  }
+
+  async function prepareOfflineSale() {
+    if (offlineBusyRef.current) return
+    const gate = offlineGate()
+    if (!gate) { setOfflineError('Офлайн-продажа недоступна: проверьте готовность терминала, корзину, оплату и незавершённые продажи.'); return }
+    offlineBusyRef.current = true; setOfflineBusy(true); setOfflineError(undefined); setOfflineSuccess(undefined)
+    const key = offlineContextKey
+    const lines = cartLines.map(line => ({ ...line }))
+    try {
+      const pricesMatch = await validateOfflinePrices(gate.locationId, gate.authorityId, gate.currencyCode, gate.currencyExponent, lines)
+      if (offlineContextRef.current !== key) return
+      if (!pricesMatch) {
+        setOfflineError('Цена товара отличается от офлайн-разрешения. Подключитесь к сети и обновите данные.'); return
+      }
+      const prior = offlineAttemptRef.current
+      const attempt: OfflineAttempt = prior?.key === key ? prior : {
+        key, locationId: gate.locationId, authorityId: gate.authorityId,
+        intent: { operationId: crypto.randomUUID(), authorityId: gate.authorityId, lines: lines.map(line => ({ productId: line.productId, quantity: line.quantity })) },
+        totalMinor: gate.totalMinor, currencyCode: gate.currencyCode, currencyExponent: gate.currencyExponent, quantity: gate.quantity,
+      }
+      offlineAttemptRef.current = attempt
+      setOfflineConfirmation(attempt)
+    } catch {
+      if (offlineContextRef.current === key) setOfflineError('Офлайн-разрешение не удалось безопасно проверить. Корзина сохранена.')
+    } finally { offlineBusyRef.current = false; setOfflineBusy(false) }
+  }
+
+  async function confirmOfflineSale() {
+    if (offlineBusyRef.current || !offlineConfirmation || offlineConfirmation.key !== offlineContextRef.current) return
+    const attempt = offlineConfirmation
+    const gate = offlineGate()
+    if (!gate || gate.locationId !== attempt.locationId || gate.authorityId !== attempt.authorityId || offlineAttemptRef.current?.intent.operationId !== attempt.intent.operationId) {
+      setOfflineConfirmation(undefined); setOfflineError('Контекст продажи изменился. Повторите проверку офлайн-продажи.'); return
+    }
+    offlineBusyRef.current = true; setOfflineBusy(true); setOfflineError(undefined)
+    try {
+      const pricesMatch = await validateOfflinePrices(attempt.locationId, attempt.authorityId, attempt.currencyCode, attempt.currencyExponent, cartLines)
+      if (offlineContextRef.current !== attempt.key) { setOfflineConfirmation(undefined); return }
+      if (!pricesMatch) {
+        setOfflineConfirmation(undefined)
+        setOfflineError('Цена или состав корзины изменились. Офлайн-продажа не сохранена.'); return
+      }
+      const committed = await commitOfflineSale(attempt.intent)
+      if (committed.state !== 'COMMITTED_LOCAL' || committed.envelope.offlineOperationId !== attempt.intent.operationId) throw new Error('Local commit not confirmed.')
+      completeOfflineSale(attempt.intent.operationId)
+    } catch {
+      const projection = await readLocalOfflineOperations()
+      const local = 'operations' in projection ? projection.operations.find(item => item.operationId === attempt.intent.operationId) : undefined
+      if (local || projection.state !== 'ENROLLED') {
+        offlineHoldRef.current = true; setOfflineHold(true)
+        setOfflineError('Локальный исход требует безопасной проверки. Не создавайте новую продажу; откройте Офлайн-операции.')
+      } else setOfflineError('Офлайн-продажа не подтверждена. Корзина сохранена; повторите тот же шаг.')
+      setOfflineConfirmation(undefined)
+    } finally { offlineBusyRef.current = false; setOfflineBusy(false) }
+  }
+
+  function completeOfflineSale(operationId: string) {
+    offlineAttemptRef.current = undefined
+    setOfflineConfirmation(undefined)
+    setOfflineError(undefined)
+    setCartLines(clearPosCart())
+    setDiscountInputs({}); setDiscountModes({})
+    setCheckoutAttempt(undefined); setPaymentAllocations(undefined)
+    setCartError(undefined); setCartNotice(undefined)
+    setOfflineSuccess(operationId)
+  }
+
   async function submitSale() {
+    if (offlineBusyRef.current || offlineHoldRef.current || offlineConfirmation) return
     if (!user
       || !checkoutAttempt
       || !paymentAllocations
@@ -967,6 +1110,14 @@ export function RetailPos() {
           Продажа подтверждена сервером.
         </Alert>
       )}
+      {offlineSuccess && (
+        <Alert variant="info" title="Сохранено офлайн на этом устройстве">
+          <p>Операция {offlineSuccess} сохранена локально и будет отправлена после восстановления связи. Серверное принятие пока не подтверждено.</p>
+          <p><Link to="/retail/offline-operations">Открыть Офлайн-операции</Link></p>
+        </Alert>
+      )}
+      {offlineError && <Alert variant="warning" title="Офлайн-продажа не подтверждена">{offlineError}</Alert>}
+      {offlineHold && <p><Link to="/retail/offline-operations">Проверить Офлайн-операции</Link></p>}
 
       {loadState === 'loading' && (
         <p className="retail-pos__status" aria-live="polite">
@@ -998,7 +1149,7 @@ export function RetailPos() {
             id="retail-pos-location"
             value={selectedLocationId ?? ''}
             onChange={(event) => selectLocation(event.target.value)}
-            disabled={isSubmitting}
+            disabled={isSubmitting || offlineBusy || offlineHold}
           >
             <option value="">Выберите торговую точку</option>
             {locations.map((location) => (
@@ -1232,7 +1383,7 @@ export function RetailPos() {
                     </p>
                   )}
                 {canAddSelectedProduct && (
-                  <Button type="button" onClick={addSelectedProductToCart} disabled={isSubmitting}>
+                  <Button type="button" onClick={addSelectedProductToCart} disabled={isSubmitting || offlineBusy || offlineHold}>
                     Добавить в корзину
                   </Button>
                 )}
@@ -1256,7 +1407,7 @@ export function RetailPos() {
               <div className="retail-pos__cart-header">
                 <h2>Корзина</h2>
                 {cartLines.length > 0 && (
-                  <Button type="button" variant="secondary" onClick={clearCart} disabled={isSubmitting}>
+                  <Button type="button" variant="secondary" onClick={clearCart} disabled={isSubmitting || offlineBusy || offlineHold}>
                     Очистить
                   </Button>
                 )}
@@ -1321,7 +1472,7 @@ export function RetailPos() {
                                   event.target.value as DiscountMode,
                                 )}
                                 aria-label={`Режим скидки для ${line.name}`}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || offlineBusy || offlineHold}
                               >
                                 <option value="amount">Сумма</option>
                                 <option value="percent">%</option>
@@ -1340,14 +1491,14 @@ export function RetailPos() {
                                   ?? (line.discountPercentBasisPoints === undefined ? 'amount' : 'percent')) === 'amount'
                                   ? `Сумма скидки для ${line.name}`
                                   : `Процент скидки для ${line.name}`}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || offlineBusy || offlineHold}
                               />
 
                               <Button
                                 type="button"
                                 variant="secondary"
                                 onClick={() => applyCartLineDiscount(line)}
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || offlineBusy || offlineHold}
                               >
                                 {line.discountAmountMinor === undefined
                                   ? 'Применить скидку'
@@ -1359,7 +1510,7 @@ export function RetailPos() {
                                   type="button"
                                   variant="secondary"
                                   onClick={() => removeCartLineDiscount(line.productId)}
-                                  disabled={isSubmitting}
+                                  disabled={isSubmitting || offlineBusy || offlineHold}
                                 >
                                   Убрать скидку
                                 </Button>
@@ -1372,7 +1523,7 @@ export function RetailPos() {
                             type="button"
                             variant="secondary"
                             onClick={() => decrementCartLine(line.productId)}
-                            disabled={isSubmitting || line.quantity === 1}
+                            disabled={isSubmitting || offlineBusy || offlineHold || line.quantity === 1}
                             aria-label={`Уменьшить количество ${line.name}`}
                           >
                             −
@@ -1384,7 +1535,7 @@ export function RetailPos() {
                             type="button"
                             variant="secondary"
                             onClick={() => incrementCartLine(line.productId)}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || offlineBusy || offlineHold}
                             aria-label={`Увеличить количество ${line.name}`}
                           >
                             +
@@ -1393,7 +1544,7 @@ export function RetailPos() {
                             type="button"
                             variant="danger"
                             onClick={() => removeCartLine(line.productId)}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || offlineBusy || offlineHold}
                           >
                             Удалить
                           </Button>
@@ -1445,7 +1596,7 @@ export function RetailPos() {
                     <Button
                       type="button"
                       onClick={prepareCheckoutAttempt}
-                      disabled={isSubmitting || !isCheckoutPreparationAllowed}
+                      disabled={isSubmitting || offlineBusy || offlineHold || !isCheckoutPreparationAllowed}
                     >
                       Перейти к оплате
                     </Button>
@@ -1483,7 +1634,7 @@ export function RetailPos() {
                             event.target.value as PosPaymentMethod,
                           ),
                         )}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || offlineBusy || offlineHold}
                       >
                         <option value="cash">Наличные</option>
                         <option value="card">Карта</option>
@@ -1505,7 +1656,7 @@ export function RetailPos() {
                             event.target.value,
                           ),
                         )}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || offlineBusy || offlineHold}
                         aria-label={`Сумма оплаты ${index + 1}`}
                       />
                       {paymentAllocations.length > 1 && (
@@ -1515,7 +1666,7 @@ export function RetailPos() {
                           onClick={() => setPaymentAllocations(
                             removePosPaymentAllocation(paymentAllocations, allocation.id),
                           )}
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || offlineBusy || offlineHold}
                         >
                           Удалить
                         </Button>
@@ -1528,7 +1679,7 @@ export function RetailPos() {
                     onClick={() => setPaymentAllocations(
                       addPosPaymentAllocation(paymentAllocations, () => crypto.randomUUID()),
                     )}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || offlineBusy || offlineHold}
                   >
                     Добавить оплату
                   </Button>
@@ -1568,7 +1719,7 @@ export function RetailPos() {
                   {paymentSummary.status === 'exact' && (
                     <>
                       <p>Сумма оплаты совпадает с текущей суммой корзины.</p>
-                      <Button type="button" onClick={() => void submitSale()} disabled={isSubmitting}>
+                      <Button type="button" onClick={() => void submitSale()} disabled={isSubmitting || offlineBusy || offlineHold || !!offlineConfirmation}>
                         {isSubmitting ? 'Завершаем продажу…' : 'Завершить продажу'}
                       </Button>
                     </>
@@ -1582,6 +1733,23 @@ export function RetailPos() {
                       )}
                     </p>
                   )}
+                  <div className="retail-pos__offline-action">
+                    <h3>Офлайн-продажа</h3>
+                    <p>Доступна только для полной оплаты наличными без скидки. Состояние сети — подсказка, не подтверждение исхода продажи.</p>
+                    {offlineReadinessLoading && <p role="status">Проверяем готовность терминала…</p>}
+                    {currentOfflineReadiness?.status !== 'READY' && !offlineReadinessLoading && <p>Терминал не подтверждён готовым для этой торговой точки. Подготовьте его при наличии связи.</p>}
+                    <Button type="button" variant="secondary" onClick={() => void prepareOfflineSale()}
+                      disabled={offlineBusy || offlineHold || isSubmitting || !!offlineConfirmation || currentOfflineReadiness?.status !== 'READY' || !isCheckoutPreparationAllowed}>
+                      {offlineBusy ? 'Проверяем офлайн-продажу…' : 'Сохранить офлайн'}
+                    </Button>
+                    {offlineConfirmation?.key === offlineContextKey && <Card>
+                      <h4>Подтверждение офлайн-продажи</h4>
+                      <p>Позиций: {offlineConfirmation.quantity}. Сумма: {formatUnitPrice(offlineConfirmation.totalMinor, offlineConfirmation.currencyCode, offlineConfirmation.currencyExponent)}.</p>
+                      <p>Продажа будет сохранена на этом устройстве и отправлена после восстановления связи. Серверное принятие пока не подтверждается.</p>
+                      <Button type="button" onClick={() => void confirmOfflineSale()} disabled={offlineBusy}>Подтвердить сохранение офлайн</Button>
+                      <Button type="button" variant="secondary" onClick={() => setOfflineConfirmation(undefined)} disabled={offlineBusy}>Отмена</Button>
+                    </Card>}
+                  </div>
                   <p>
                     Итоговую сумму продажи определит сервер при завершении.
                   </p>
