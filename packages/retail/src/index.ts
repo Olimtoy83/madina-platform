@@ -121,6 +121,7 @@ export type RetailCapability =
   | 'retail:sales:discount'
   | 'retail:sales:return'
   | 'retail:inventory:read'
+  | 'retail:inventory:opening:manage'
   | 'retail:reconciliation:read'
   | 'retail:reconciliation:manage'
   | 'retail:goods-receipts:read'
@@ -131,7 +132,7 @@ export type RetailCapability =
   | 'retail:offline-stock-conflicts:materialize'
 
 export const retailCapabilitiesByBaseRole = {
-  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:prices:read', 'retail:prices:manage', 'retail:sales:read', 'retail:sales:manage', 'retail:sales:discount', 'retail:sales:return', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage', 'retail:transfers:read', 'retail:transfers:manage', 'retail:offline-terminals:manage', 'retail:offline-stock-conflicts:materialize'],
+  admin: ['retail:locations:read', 'retail:locations:manage', 'retail:access:manage', 'retail:products:read', 'retail:products:manage', 'retail:products:import', 'retail:prices:read', 'retail:prices:manage', 'retail:sales:read', 'retail:sales:manage', 'retail:sales:discount', 'retail:sales:return', 'retail:inventory:read', 'retail:inventory:opening:manage', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage', 'retail:transfers:read', 'retail:transfers:manage', 'retail:offline-terminals:manage', 'retail:offline-stock-conflicts:materialize'],
   manager: ['retail:locations:read', 'retail:products:read', 'retail:prices:read', 'retail:prices:manage', 'retail:sales:read', 'retail:sales:manage', 'retail:sales:discount', 'retail:sales:return', 'retail:inventory:read', 'retail:reconciliation:read', 'retail:reconciliation:manage', 'retail:goods-receipts:read', 'retail:goods-receipts:manage', 'retail:transfers:read', 'retail:transfers:manage', 'retail:offline-terminals:manage', 'retail:offline-stock-conflicts:materialize'],
   operator: [],
   viewer: [],

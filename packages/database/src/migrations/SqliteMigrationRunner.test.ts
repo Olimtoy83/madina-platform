@@ -154,6 +154,7 @@ test('applies verified domain migrations to a fresh database', () => {
       '044_retail_offline_stock_conflict_lifecycle_v1',
       '045_retail_offline_stock_conflict_resolution_v1',
       '046_retail_offline_operational_foundation_v1',
+      '047_retail_store_opening_stock_v1',
     ].join(','))
   })
 })

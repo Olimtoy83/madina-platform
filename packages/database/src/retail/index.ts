@@ -1,6 +1,7 @@
 export * from './SqliteRetailAccessRepository.js'
 export * from './SqliteRetailCatalogRepository.js'
 export * from './SqliteRetailInventoryRepository.js'
+export * from './SqliteRetailStoreOpeningRepository.js'
 export * from './SqliteRetailReconciliationRepository.js'
 export * from './SqliteRetailGoodsReceiptRepository.js'
 export * from './SqliteRetailTransferRepository.js'

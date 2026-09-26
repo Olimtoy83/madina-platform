@@ -1921,6 +1921,165 @@ test('Retail Transfer routes require both persisted Locations and reject request
   }
 })
 
+test('Store opening capability belongs only to admin', () => {
+  equal(hasRetailCapability('admin', 'retail:inventory:opening:manage'), true)
+  for (const role of ['manager', 'operator', 'viewer'] as const) equal(hasRetailCapability(role, 'retail:inventory:opening:manage'), false)
+})
+
+async function withStoreOpeningHttp(run: (fixture: {
+  app: FastifyInstance
+  database: DatabaseSync
+  sessions: Record<string, string>
+  access: SqliteRetailAccessRepository
+  catalog: SqliteRetailCatalogRepository
+  inventory: SqliteRetailInventoryRepository
+  storeId: string
+  ungrantedStoreId: string
+  inactiveStoreId: string
+  warehouseId: string
+  productId: string
+  otherProductId: string
+  url: string
+  payload: { clientOperationId: string; worksheetReference: string; lines: Array<{ productId: string; quantity: number }> }
+}) => Promise<void>): Promise<void> {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-opening-api-'))
+  const file = join(directory, 'madina.sqlite')
+  const previous = process.env.DATABASE_FILE
+  initializeDatabase(file)
+  const sessions = await seedSessions(file, [{ id: 'admin-1', role: 'admin' }, { id: 'manager-1', role: 'manager' }, { id: 'operator-1', role: 'operator' }, { id: 'viewer-1', role: 'viewer' }])
+  const access = new SqliteRetailAccessRepository(file)
+  const catalog = new SqliteRetailCatalogRepository(file)
+  const inventory = new SqliteRetailInventoryRepository(file)
+  const database = new DatabaseSync(file)
+  const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'opening-http-fixture' }
+  try {
+    const store = await access.createLocation({ code: 'OPENING-A', name: 'Opening A', type: 'store', status: 'active' }, context)
+    const ungrantedStore = await access.createLocation({ code: 'OPENING-B', name: 'Opening B', type: 'store', status: 'active' }, context)
+    const inactiveStore = await access.createLocation({ code: 'OPENING-C', name: 'Opening C', type: 'store', status: 'inactive' }, context)
+    const warehouse = await access.createLocation({ code: 'OPENING-W', name: 'Opening Warehouse', type: 'central_warehouse', status: 'active' }, context)
+    const product = await catalog.createProduct({ sourceId: 'OPENING-P', name: 'Opening P' }, context)
+    const otherProduct = await catalog.createProduct({ sourceId: 'OPENING-Q', name: 'Opening Q' }, context)
+    for (const userId of ['admin-1', 'manager-1', 'operator-1']) await access.grant(userId, store.id, context)
+    await access.grant('admin-1', warehouse.id, context)
+    process.env.DATABASE_FILE = file
+    const app = buildApp()
+    try {
+      await app.ready()
+      await run({ app, database, sessions, access, catalog, inventory, storeId: store.id, ungrantedStoreId: ungrantedStore.id, inactiveStoreId: inactiveStore.id, warehouseId: warehouse.id, productId: product.id, otherProductId: otherProduct.id, url: `/api/v1/retail/locations/${store.id}/inventory/opening`, payload: { clientOperationId: 'opening-http-1', worksheetReference: 'WORKSHEET-1', lines: [{ productId: product.id, quantity: 7 }, { productId: otherProduct.id, quantity: 3 }] } })
+    } finally { await app.close() }
+  } finally {
+    database.close(); inventory.close(); catalog.close(); access.close()
+    if (previous === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previous
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+function openingHttpEffects(database: DatabaseSync, locationId: string) {
+  const count = (sql: string, ...values: string[]) => (database.prepare(sql).get(...values) as { n: number }).n
+  return {
+    receipts: count('SELECT count(*) AS n FROM retail_store_opening_receipts WHERE location_id=?', locationId),
+    movements: count("SELECT count(*) AS n FROM retail_inventory_movements WHERE location_id=? AND source_type='retail_store_opening'", locationId),
+    balances: database.prepare('SELECT product_id,on_hand_quantity,updated_at FROM retail_inventory_balances WHERE location_id=? ORDER BY product_id').all(locationId),
+    commandAudits: count("SELECT count(*) AS n FROM audit_events WHERE action='retail.store_opening_initialized' AND json_extract(metadata_json,'$.locationId')=?", locationId),
+    movementAudits: count("SELECT count(*) AS n FROM audit_events WHERE action='retail.inventory_movement_recorded' AND json_extract(metadata_json,'$.locationId')=? AND json_extract(metadata_json,'$.sourceType')='retail_store_opening'", locationId),
+  }
+}
+
+test('Store opening HTTP enforces session, admin capability, grant, origin and strict payload before any mutation', async () => {
+  await withStoreOpeningHttp(async fixture => {
+    const { app, database, sessions, url, payload, storeId } = fixture
+    const before = openingHttpEffects(database, storeId)
+    const ungrantedBefore = openingHttpEffects(database, fixture.ungrantedStoreId)
+    equal((await app.inject({ method: 'POST', url, payload })).statusCode, 401)
+    for (const role of ['manager-1', 'operator-1', 'viewer-1']) equal((await request(app, sessions[role]!, { method: 'POST', url, payload })).statusCode, 403)
+    equal((await request(app, sessions['admin-1']!, { method: 'POST', url: `/api/v1/retail/locations/${fixture.ungrantedStoreId}/inventory/opening`, payload })).statusCode, 403)
+    equal((await app.inject({ method: 'POST', url, payload, headers: { cookie: `madina-session=${sessions['admin-1']}`, origin: 'https://untrusted.example' } })).statusCode, 403)
+    for (const invalid of [
+      { ...payload, lines: [] },
+      { ...payload, lines: [payload.lines[0], payload.lines[0]] },
+      ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map(quantity => ({ ...payload, lines: [{ productId: fixture.productId, quantity }] })),
+      { ...payload, actorUserId: 'manager-1' },
+      { ...payload, locationId: fixture.ungrantedStoreId },
+      { ...payload, movementType: 'opening' },
+      { ...payload, sourceType: 'injected' },
+      { ...payload, lines: [{ productId: fixture.productId, quantity: 1, sourceLineId: 'injected' }] },
+      { ...payload, balance: 100 },
+    ]) equal((await request(app, sessions['admin-1']!, { method: 'POST', url, payload: invalid })).statusCode, 400)
+    deepEqual(openingHttpEffects(database, storeId), before)
+    deepEqual(openingHttpEffects(database, fixture.ungrantedStoreId), ungrantedBefore)
+  })
+})
+
+test('Store opening HTTP returns immutable 201/200 results and distinct conflicts without duplicate effects', async () => {
+  await withStoreOpeningHttp(async fixture => {
+    const { app, database, sessions, url, payload, storeId } = fixture
+    const before = openingHttpEffects(database, storeId)
+    const created = await request(app, sessions['admin-1']!, { method: 'POST', url, payload })
+    equal(created.statusCode, 201)
+    const result = created.json() as { clientOperationId: string; locationId: string; worksheetReference: string; actorUserId: string; initializedAt: string; lines: Array<{ productId: string; quantity: number; movementId: string }> }
+    deepEqual(Object.keys(result).sort(), ['actorUserId', 'clientOperationId', 'initializedAt', 'lines', 'locationId', 'worksheetReference'])
+    equal(result.clientOperationId, payload.clientOperationId)
+    equal(result.locationId, storeId)
+    equal(result.actorUserId, 'admin-1')
+    equal(result.worksheetReference, payload.worksheetReference)
+    equal(Number.isNaN(Date.parse(result.initializedAt)), false)
+    deepEqual(result.lines.map(line => ({ productId: line.productId, quantity: line.quantity })), [...payload.lines].sort((a, b) => a.productId < b.productId ? -1 : 1))
+    for (const line of result.lines) equal((database.prepare('SELECT id FROM retail_inventory_movements WHERE id=? AND location_id=? AND product_id=? AND quantity_delta=? AND movement_type=? AND source_type=? AND source_id=? AND source_line_id=?').get(line.movementId, storeId, line.productId, line.quantity, 'opening', 'retail_store_opening', payload.clientOperationId, line.productId) as { id: string } | undefined)?.id, line.movementId)
+    const after = openingHttpEffects(database, storeId)
+    deepEqual(after, { receipts: 1, movements: 2, balances: after.balances, commandAudits: 1, movementAudits: 2 })
+    equal(after.balances.length, 2)
+    deepEqual(after.balances.map(row => row.on_hand_quantity).sort(), [3, 7])
+    deepEqual(before, { receipts: 0, movements: 0, balances: [], commandAudits: 0, movementAudits: 0 })
+
+    const replay = await request(app, sessions['admin-1']!, { method: 'POST', url, payload })
+    equal(replay.statusCode, 200)
+    deepEqual(replay.json(), result)
+    deepEqual(openingHttpEffects(database, storeId), after)
+    const changed = await request(app, sessions['admin-1']!, { method: 'POST', url, payload: { ...payload, lines: [{ ...payload.lines[0]!, quantity: 8 }, payload.lines[1]!] } })
+    equal(changed.statusCode, 409)
+    equal((changed.json() as { message: string }).message, 'IDEMPOTENCY_CONFLICT')
+    const second = await request(app, sessions['admin-1']!, { method: 'POST', url, payload: { ...payload, clientOperationId: 'opening-http-2' } })
+    equal(second.statusCode, 409)
+    equal((second.json() as { message: string }).message, 'OPENING_ALREADY_INITIALIZED')
+    deepEqual(openingHttpEffects(database, storeId), after)
+  })
+})
+
+test('Store opening HTTP rejects inactive locations, non-Store locations and invalid products without effects', async () => {
+  await withStoreOpeningHttp(async fixture => {
+    const { app, database, sessions, url, payload, storeId } = fixture
+    const before = openingHttpEffects(database, storeId)
+    const inactiveBefore = openingHttpEffects(database, fixture.inactiveStoreId)
+    const warehouseBefore = openingHttpEffects(database, fixture.warehouseId)
+    equal((await request(app, sessions['admin-1']!, { method: 'POST', url: `/api/v1/retail/locations/${fixture.inactiveStoreId}/inventory/opening`, payload })).statusCode, 403)
+    equal((await request(app, sessions['admin-1']!, { method: 'POST', url: `/api/v1/retail/locations/${fixture.warehouseId}/inventory/opening`, payload })).statusCode, 409)
+    const unknown = await request(app, sessions['admin-1']!, { method: 'POST', url, payload: { ...payload, lines: [{ productId: 'unknown', quantity: 1 }] } })
+    equal(unknown.statusCode, 404)
+    await fixture.catalog.updateProduct(fixture.otherProductId, { name: 'Opening Q', status: 'inactive' }, { actorType: 'user', actorUserId: 'admin-1', requestId: 'opening-http-product-inactive' })
+    const inactive = await request(app, sessions['admin-1']!, { method: 'POST', url, payload })
+    equal(inactive.statusCode, 409)
+    equal((inactive.json() as { message: string }).message, 'PRODUCT_INACTIVE')
+    deepEqual(openingHttpEffects(database, storeId), before)
+    deepEqual(openingHttpEffects(database, fixture.inactiveStoreId), inactiveBefore)
+    deepEqual(openingHttpEffects(database, fixture.warehouseId), warehouseBefore)
+  })
+})
+
+test('Store opening HTTP refuses issuance after durable Offline Authority without opening effects', async () => {
+  await withStoreOpeningHttp(async fixture => {
+    const { app, database, sessions, url, payload, storeId } = fixture
+    const before = openingHttpEffects(database, storeId)
+    database.prepare("INSERT INTO retail_offline_terminals(id,location_id,current_key_version,enrolled_by_user_id,enrolled_at,updated_at) VALUES('opening-terminal',?,1,'admin-1','2026-01-01','2026-01-01')").run(storeId)
+    database.prepare("INSERT INTO retail_offline_terminal_keys(terminal_id,key_version,key_algorithm,public_key,created_at,created_by_user_id) VALUES('opening-terminal',1,'Ed25519','test','2026-01-01','admin-1')").run()
+    database.prepare("INSERT INTO retail_offline_authorities(id,authority_version,terminal_id,terminal_key_version,user_id,location_id,issued_at,expires_at,currency_code,currency_exponent,payment_method,discounts_allowed,permit_count,issued_by_user_id) VALUES('opening-authority',1,'opening-terminal',1,'operator-1',?,'2026-01-01','2027-01-01','USD',2,'cash',0,1,'admin-1')").run(storeId)
+    const response = await request(app, sessions['admin-1']!, { method: 'POST', url, payload })
+    equal(response.statusCode, 409)
+    equal((response.json() as { message: string }).message, 'OPENING_HISTORY_NOT_PRISTINE')
+    deepEqual(openingHttpEffects(database, storeId), before)
+  })
+})
+
 test('offline stock-conflict read routes enforce manager location access and return immutable lifecycle detail',async()=>{
   await withOfflineSyncFixture(async fixture=>{
     const conflict=offlineEnvelope(fixture,fixture.permits[14]!,{offlineOperationId:'read-http-conflict',proposedSaleId:'read-http-sale',lines:[{id:'read-http-item',productId:fixture.product.id,quantity:6,unitPriceMinor:100}],cashAllocation:{id:'read-http-payment',method:'cash',amountMinor:600,ordinal:0},subtotalMinor:600,payableTotalMinor:600})

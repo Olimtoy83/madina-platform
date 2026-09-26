@@ -787,4 +787,17 @@ const retailOfflineOperationalFoundation = createSqlMigration('046_retail_offlin
   CREATE TRIGGER retail_offline_operational_command_receipts_no_delete BEFORE DELETE ON retail_offline_operational_command_receipts BEGIN SELECT RAISE(ABORT,'Retail Offline operational command receipts are immutable.'); END;
 `)
 
-export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization, retailOfflineStockConflictLifecycle, retailOfflineStockConflictResolution, retailOfflineOperationalFoundation] as const
+const retailStoreOpeningStock = createSqlMigration('047_retail_store_opening_stock_v1', `
+  CREATE TABLE retail_store_opening_receipts (
+    client_operation_id TEXT PRIMARY KEY CHECK(length(trim(client_operation_id)) > 0),
+    location_id TEXT NOT NULL UNIQUE REFERENCES retail_locations(id) ON DELETE RESTRICT,
+    actor_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    worksheet_reference TEXT NOT NULL CHECK(length(trim(worksheet_reference)) > 0),
+    payload_hash TEXT NOT NULL,
+    initialized_at TEXT NOT NULL
+  );
+  CREATE TRIGGER retail_store_opening_receipts_no_update BEFORE UPDATE ON retail_store_opening_receipts BEGIN SELECT RAISE(ABORT,'Retail Store Opening receipt is immutable.'); END;
+  CREATE TRIGGER retail_store_opening_receipts_no_delete BEFORE DELETE ON retail_store_opening_receipts BEGIN SELECT RAISE(ABORT,'Retail Store Opening receipt is immutable.'); END;
+`)
+
+export const retailMigrations = [retailAccessLocations, retailProductsBarcodes, retailInventoryLedger, retailInventoryReconciliation, retailGoodsReceipts, retailTransfers, retailSalesPaymentCompletion, retailSaleDiscounts, retailSaleReturns, retailOfflineAuthorityFoundation, retailOfflineSaleSync, retailOfflineStockConflictVerification, retailOfflineStockConflictMaterialization, retailOfflineStockConflictLifecycle, retailOfflineStockConflictResolution, retailOfflineOperationalFoundation, retailStoreOpeningStock] as const

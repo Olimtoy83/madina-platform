@@ -22,6 +22,7 @@ import {
   SqliteRetailAccessRepository,
   SqliteRetailCatalogRepository,
   SqliteRetailInventoryRepository,
+  SqliteRetailStoreOpeningRepository,
   SqliteRetailReconciliationRepository,
   SqliteRetailGoodsReceiptRepository,
   SqliteRetailTransferRepository,
@@ -103,6 +104,7 @@ export async function apiV1Routes(
   const retailAccessRepository = new SqliteRetailAccessRepository(databaseFile)
   const retailCatalogRepository = new SqliteRetailCatalogRepository(databaseFile)
   const retailInventoryRepository = new SqliteRetailInventoryRepository(databaseFile)
+  const retailStoreOpeningRepository = new SqliteRetailStoreOpeningRepository(databaseFile)
   const retailReconciliationRepository = new SqliteRetailReconciliationRepository(databaseFile)
   const retailGoodsReceiptRepository = new SqliteRetailGoodsReceiptRepository(databaseFile)
   const retailTransferRepository = new SqliteRetailTransferRepository(databaseFile)
@@ -125,6 +127,7 @@ export async function apiV1Routes(
     retailAccessRepository.close()
     retailCatalogRepository.close()
     retailInventoryRepository.close()
+    retailStoreOpeningRepository.close()
     retailReconciliationRepository.close()
     retailGoodsReceiptRepository.close()
     retailTransferRepository.close()
@@ -190,6 +193,7 @@ export async function apiV1Routes(
     retailAccessRepository,
     retailCatalogRepository,
     retailInventoryRepository,
+    retailStoreOpeningRepository,
     retailReconciliationRepository,
     retailGoodsReceiptRepository,
     retailTransferRepository,

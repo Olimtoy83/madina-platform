@@ -1,4 +1,5 @@
-import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailReconciliationRepository, SqliteRetailTransferRepository, SqliteRetailSaleRepository, SqliteRetailSaleReturnRepository, SqliteRetailOfflineSaleSyncRepository, SqliteRetailOfflineStockConflictMaterializationRepository, SqliteRetailOfflineStockConflictLifecycleRepository, SqliteRetailOfflineAuthorityRepository } from '@madina/database'
+import { StoreOpeningError } from '@madina/database'
+import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailStoreOpeningRepository, SqliteRetailReconciliationRepository, SqliteRetailTransferRepository, SqliteRetailSaleRepository, SqliteRetailSaleReturnRepository, SqliteRetailOfflineSaleSyncRepository, SqliteRetailOfflineStockConflictMaterializationRepository, SqliteRetailOfflineStockConflictLifecycleRepository, SqliteRetailOfflineAuthorityRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
 import type { FastifyPluginAsync } from 'fastify'
@@ -9,6 +10,7 @@ interface RetailRoutesOptions {
   retailAccessRepository?: SqliteRetailAccessRepository
   retailCatalogRepository?: SqliteRetailCatalogRepository
   retailInventoryRepository?: SqliteRetailInventoryRepository
+  retailStoreOpeningRepository?: SqliteRetailStoreOpeningRepository
   retailReconciliationRepository?: SqliteRetailReconciliationRepository
   retailGoodsReceiptRepository?: SqliteRetailGoodsReceiptRepository
   retailTransferRepository?: SqliteRetailTransferRepository
@@ -36,10 +38,11 @@ function hasRetailPermission(
 }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
-  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository || !options.retailSaleRepository || !options.retailSaleReturnRepository || !options.retailOfflineSaleSyncRepository || !options.retailOfflineStockConflictMaterializationRepository || !options.retailOfflineStockConflictLifecycleRepository || !options.retailOfflineAuthorityRepository) return
+  if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailStoreOpeningRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository || !options.retailSaleRepository || !options.retailSaleReturnRepository || !options.retailOfflineSaleSyncRepository || !options.retailOfflineStockConflictMaterializationRepository || !options.retailOfflineStockConflictLifecycleRepository || !options.retailOfflineAuthorityRepository) return
   const retailAccessRepository = options.retailAccessRepository
   const retailCatalogRepository = options.retailCatalogRepository
   const retailInventoryRepository = options.retailInventoryRepository
+  const retailStoreOpeningRepository = options.retailStoreOpeningRepository
   const retailReconciliationRepository = options.retailReconciliationRepository
   const retailGoodsReceiptRepository = options.retailGoodsReceiptRepository
   const retailTransferRepository = options.retailTransferRepository
@@ -99,6 +102,46 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
     return {
       balance: await retailInventoryRepository.findBalance(productId, locationId),
       movements: await retailInventoryRepository.listMovements(productId, locationId),
+    }
+  })
+
+  app.post('/locations/:locationId/inventory/opening', {
+    preHandler: [
+      requireRetailLocationAccess(app, retailAccessRepository, 'retail:inventory:opening:manage', request => (request.params as { locationId?: string }).locationId),
+      requireTrustedOrigin(),
+    ],
+  }, async (request, reply) => {
+    const body = request.body
+    const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+    const hasKeys = (value: Record<string, unknown>, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key))
+    const requiredText = (value: unknown) => typeof value === 'string' && value.length > 0 && value.trim() === value
+    if (!isObject(body) || !hasKeys(body, ['clientOperationId', 'worksheetReference', 'lines']) ||
+      !requiredText(body.clientOperationId) || !requiredText(body.worksheetReference) ||
+      !Array.isArray(body.lines) || body.lines.length === 0 ||
+      !body.lines.every((line: unknown) => isObject(line) && hasKeys(line, ['productId', 'quantity']) &&
+        requiredText(line.productId) && Number.isSafeInteger(line.quantity) && (line.quantity as number) > 0) ||
+      new Set(body.lines.map((line: { productId: string }) => line.productId)).size !== body.lines.length) {
+      return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Store Opening input is invalid.' })
+    }
+    const context = getAuthenticatedCommandContext(request)
+    if (context.actorType !== 'user' || !context.actorUserId) return reply.code(401).send({ statusCode: 401, error: 'Unauthorized', message: 'Authentication required.' })
+    try {
+      const { replayed, ...result } = await retailStoreOpeningRepository.initializeStoreOpeningStock({
+        clientOperationId: body.clientOperationId as string,
+        locationId: (request.params as { locationId: string }).locationId,
+        actorUserId: context.actorUserId,
+        worksheetReference: body.worksheetReference as string,
+        lines: body.lines as Array<{ productId: string; quantity: number }>,
+      }, context)
+      reply.code(replayed ? 200 : 201)
+      return result
+    } catch (error) {
+      if (!(error instanceof StoreOpeningError)) throw error
+      const statusCode = error.code === 'INVALID_COMMAND' ? 400 :
+        error.code === 'LOCATION_NOT_FOUND' || error.code === 'PRODUCT_NOT_FOUND' ? 404 :
+          error.code === 'OPENING_EVIDENCE_INVALID' ? 500 : 409
+      const label = statusCode === 400 ? 'Bad Request' : statusCode === 404 ? 'Not Found' : statusCode === 500 ? 'Internal Server Error' : 'Conflict'
+      return reply.code(statusCode).send({ statusCode, error: label, message: statusCode === 500 ? 'Retail Store Opening evidence is invalid.' : error.code })
     }
   })
 
