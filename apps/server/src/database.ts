@@ -100,6 +100,23 @@ export function getDatabaseFile(
   )
 }
 
+export function getBootstrapDatabaseFile(
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  if (environment.NODE_ENV?.trim() !== 'production') {
+    return getDatabaseFile(environment)
+  }
+
+  const databaseFile = requiredString(environment.DATABASE_FILE, 'DATABASE_FILE')
+  if (!isAbsolute(databaseFile)) {
+    throw new ServerConfigurationError(
+      'DATABASE_FILE must be an absolute filesystem path in production.',
+    )
+  }
+
+  return databaseFile
+}
+
 export function ensureDatabaseDirectory(databaseFile: string): void {
   mkdirSync(
     dirname(databaseFile),

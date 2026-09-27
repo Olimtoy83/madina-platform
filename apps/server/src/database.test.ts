@@ -2,8 +2,10 @@ import {
   equal,
   throws,
 } from 'node:assert/strict'
+import { join } from 'node:path'
 import test from 'node:test'
 import {
+  getBootstrapDatabaseFile,
   getServerConfiguration,
   ServerConfigurationError,
 } from './database.js'
@@ -57,5 +59,28 @@ test('production configuration requires a loopback server host', () => {
       DATABASE_FILE: 'C:\\madina-data\\madina.sqlite',
     }),
     ServerConfigurationError,
+  )
+})
+
+test('production bootstrap requires an explicit absolute database path', () => {
+  for (const databaseFile of [undefined, '', '   ', 'data/madina.sqlite']) {
+    throws(
+      () => getBootstrapDatabaseFile({
+        NODE_ENV: 'production',
+        DATABASE_FILE: databaseFile,
+      }),
+      ServerConfigurationError,
+    )
+  }
+})
+
+test('production bootstrap preserves the explicit absolute database path', () => {
+  const databaseFile = join(process.cwd(), 'data', 'selected.sqlite')
+  equal(
+    getBootstrapDatabaseFile({
+      NODE_ENV: 'production',
+      DATABASE_FILE: databaseFile,
+    }),
+    databaseFile,
   )
 })
