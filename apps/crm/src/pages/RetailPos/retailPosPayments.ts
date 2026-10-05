@@ -99,6 +99,26 @@ export function addPosPaymentAllocation(
   return [...allocations, { id, method: 'cash', amountText: '' }]
 }
 
+export function canAddPosPaymentAllocation(
+  allocations: readonly PosPaymentAllocation[],
+  targetMinor: number,
+  currencyExponent: number,
+): boolean {
+  const summary = summarizePosPayments(allocations, targetMinor, currencyExponent)
+  return summary.status !== 'exact' && summary.status !== 'overpaid'
+}
+
+export function addPosPaymentAllocationIfNeeded(
+  allocations: readonly PosPaymentAllocation[],
+  targetMinor: number,
+  currencyExponent: number,
+  createId: () => string,
+): PosPaymentAllocation[] {
+  return canAddPosPaymentAllocation(allocations, targetMinor, currencyExponent)
+    ? addPosPaymentAllocation(allocations, createId)
+    : [...allocations]
+}
+
 export function updatePosPaymentAllocationMethod(
   allocations: readonly PosPaymentAllocation[],
   id: string,

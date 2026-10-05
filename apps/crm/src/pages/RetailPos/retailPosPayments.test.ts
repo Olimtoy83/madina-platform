@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   addPosPaymentAllocation,
+  addPosPaymentAllocationIfNeeded,
+  canAddPosPaymentAllocation,
   createDefaultPosPaymentAllocations,
   parsePosPaymentAmount,
   removePosPaymentAllocation,
@@ -98,6 +100,45 @@ describe('retail POS payment allocations', () => {
 
     expect(duplicateMethod.map((item) => item.method)).toEqual(['cash', 'cash'])
     expect(new Set(duplicateMethod.map((item) => item.id)).size).toBe(2)
+  })
+
+  it('allows another allocation while a positive balance remains', () => {
+    const partial = [{ ...allocation, amountText: '100.00' }]
+
+    expect(canAddPosPaymentAllocation(partial, 12345, 2)).toBe(true)
+    expect(addPosPaymentAllocationIfNeeded(partial, 12345, 2, sequentialIds('payment-2')))
+      .toEqual([
+        ...partial,
+        { id: 'payment-2', method: 'cash', amountText: '' },
+      ])
+  })
+
+  it('prevents a redundant allocation after exact payment and allows it again after removal', () => {
+    const exact = [{ ...allocation, amountText: '123.45' }]
+    let createIdCalls = 0
+    const createId = () => {
+      createIdCalls += 1
+      return 'payment-2'
+    }
+
+    expect(canAddPosPaymentAllocation(exact, 12345, 2)).toBe(false)
+    expect(addPosPaymentAllocationIfNeeded(exact, 12345, 2, createId)).toEqual(exact)
+    expect(createIdCalls).toBe(0)
+
+    const reduced = updatePosPaymentAllocationAmount(exact, 'payment-1', '100.00')
+    expect(canAddPosPaymentAllocation(reduced, 12345, 2)).toBe(true)
+    expect(addPosPaymentAllocationIfNeeded(reduced, 12345, 2, createId)).toEqual([
+      ...reduced,
+      { id: 'payment-2', method: 'cash', amountText: '' },
+    ])
+  })
+
+  it('does not add another allocation after overpayment', () => {
+    const overpaid = [{ ...allocation, amountText: '124.00' }]
+
+    expect(canAddPosPaymentAllocation(overpaid, 12345, 2)).toBe(false)
+    expect(addPosPaymentAllocationIfNeeded(overpaid, 12345, 2, () => 'payment-2'))
+      .toEqual(overpaid)
   })
 
   it('rejects duplicate generated IDs and does not remove the final allocation', () => {

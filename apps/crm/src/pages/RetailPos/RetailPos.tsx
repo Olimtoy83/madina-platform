@@ -35,7 +35,8 @@ import {
 } from './retailPosCart'
 import { createPosCheckoutAttempt, type PosCheckoutAttempt } from './retailPosCheckout'
 import {
-  addPosPaymentAllocation,
+  addPosPaymentAllocationIfNeeded,
+  canAddPosPaymentAllocation,
   createDefaultPosPaymentAllocations,
   removePosPaymentAllocation,
   parsePosPaymentAmount,
@@ -711,10 +712,35 @@ export function RetailPos() {
       selectedLocation.currencyExponent,
     )
     : undefined
+  const canAddPaymentAllocation = Boolean(
+    paymentAllocations
+      && selectedLocation
+      && hasCurrencyConfiguration(selectedLocation)
+      && cartTotals.status === 'ready'
+      && canAddPosPaymentAllocation(
+        paymentAllocations,
+        cartTotals.payableTotalMinor,
+        selectedLocation.currencyExponent,
+      ),
+  )
   const submissionKey = checkoutAttempt
     ? `retail-pos-submission:${checkoutAttempt.clientOperationId}`
     : undefined
   const isSubmitting = submissionKey !== undefined && isPending(submissionKey)
+
+  function addPaymentAllocation() {
+    if (!paymentAllocations
+      || !selectedLocation
+      || !hasCurrencyConfiguration(selectedLocation)
+      || cartTotals.status !== 'ready') return
+
+    setPaymentAllocations(addPosPaymentAllocationIfNeeded(
+      paymentAllocations,
+      cartTotals.payableTotalMinor,
+      selectedLocation.currencyExponent,
+      () => crypto.randomUUID(),
+    ))
+  }
 
   function offlineGate(): { locationId: string; authorityId: string; totalMinor: number; currencyCode: string; currencyExponent: number; quantity: number } | undefined {
     if (!user || !selectedLocation || !hasCurrencyConfiguration(selectedLocation) || !checkoutAttempt || checkoutAttempt.locationId !== selectedLocation.id
@@ -1697,10 +1723,8 @@ export function RetailPos() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => setPaymentAllocations(
-                      addPosPaymentAllocation(paymentAllocations, () => crypto.randomUUID()),
-                    )}
-                    disabled={isSubmitting || offlineBusy || offlineHold}
+                    onClick={addPaymentAllocation}
+                    disabled={isSubmitting || offlineBusy || offlineHold || !canAddPaymentAllocation}
                   >
                     Добавить оплату
                   </Button>
