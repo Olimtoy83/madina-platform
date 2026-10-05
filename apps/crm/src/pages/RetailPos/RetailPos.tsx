@@ -201,6 +201,7 @@ export function RetailPos() {
   const [returnRecoveryBlocked, setReturnRecoveryBlocked] = useState<'foreign-owner' | 'invalid' | 'storage-error'>()
   const [returnSubmissionState, setReturnSubmissionState] = useState<ReturnSubmissionState>('idle')
   const [returnSuccess, setReturnSuccess] = useState<RetailReturnCompletionResult>()
+  const [isReturnDisclosureOpen, setIsReturnDisclosureOpen] = useState(false)
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -908,6 +909,14 @@ export function RetailPos() {
       : []
   })
   const isReturnSubmitting = returnSubmissionState === 'submitting'
+  const requiresReturnAttention = Boolean(
+    pendingReturnRecovery
+      || returnRecoveryBlocked
+      || returnLookupState !== 'idle'
+      || returnSale
+      || returnSubmissionState !== 'idle'
+      || returnSuccess,
+  )
 
   function resetReturnForSaleId(value: string) {
     returnLookupGeneration.current += 1
@@ -1160,11 +1169,6 @@ export function RetailPos() {
             ))}
           </select>
 
-          {selectedLocation && (
-            <p className="retail-pos__selected" aria-live="polite">
-              Выбрана торговая точка: {selectedLocation.name} ({selectedLocation.code})
-            </p>
-          )}
         </section>
       )}
 
@@ -1185,10 +1189,16 @@ export function RetailPos() {
         <section className="retail-pos__workspace" aria-label="Рабочая область кассы">
           <div className="retail-pos__lookup" aria-label="Поиск товара">
             {canReturnSales && (
-              <Card className="retail-pos__return">
-                <h2>Возврат по завершённой продаже</h2>
-                <p>Возврат использует только сохранённые сервером данные продажи.</p>
-                {pendingReturnRecovery && user?.id === pendingReturnRecovery.ownerUserId && (
+              <details
+                className="retail-pos__return-disclosure"
+                open={requiresReturnAttention || isReturnDisclosureOpen}
+                onToggle={(event) => setIsReturnDisclosureOpen(event.currentTarget.open)}
+              >
+                <summary>Возврат по завершённой продаже</summary>
+                <Card className="retail-pos__return">
+                  <h2>Возврат по завершённой продаже</h2>
+                  <p>Возврат использует только сохранённые сервером данные продажи.</p>
+                  {pendingReturnRecovery && user?.id === pendingReturnRecovery.ownerUserId && (
                   <Alert variant="warning" title="Есть незавершённый возврат">
                     Сначала повторите сохранённый возврат с теми же данными. Новый возврат заблокирован.
                     <div className="retail-pos__return-actions">
@@ -1239,11 +1249,13 @@ export function RetailPos() {
                 {returnSubmissionState === 'unknown-result' && <Alert variant="warning" title="Результат возврата не подтверждён">Возврат сохранён для точного повторения. Не создавайте новый возврат.</Alert>}
                 {returnSubmissionState === 'rejected' && <Alert variant="warning" title="Возврат отклонён">Сервер отклонил возврат; данные продажи обновлены.</Alert>}
                 {returnSubmissionState === 'cleanup-failed' && <Alert variant="warning" title="Требуется безопасная проверка">Серверный результат получен, но локальную запись нельзя безопасно очистить.</Alert>}
-                {returnSuccess && <Alert variant="info" title="Возврат подтверждён сервером"><p>ID возврата: {returnSuccess.body.saleReturn.id}</p><p>Исходная продажа: {returnSuccess.body.saleReturn.original_sale_id}</p><p>Возвращённые позиции: {returnSuccess.body.items.map((item) => `${item.quantity} / ${formatUnitPrice(item.refunded_amount_minor, returnSale?.sale.currency_code ?? selectedLocation.currencyCode ?? 'USD', returnSale?.sale.currency_exponent ?? selectedLocation.currencyExponent ?? 2)}`).join(', ') || 'нет'}</p><p>Возвратные оплаты: {returnSuccess.body.refundAllocations.map((allocation) => `${allocation.method}: ${formatUnitPrice(allocation.amount_minor, returnSale?.sale.currency_code ?? selectedLocation.currencyCode ?? 'USD', returnSale?.sale.currency_exponent ?? selectedLocation.currencyExponent ?? 2)}`).join(', ') || 'нет'}</p></Alert>}
-              </Card>
+                  {returnSuccess && <Alert variant="info" title="Возврат подтверждён сервером"><p>ID возврата: {returnSuccess.body.saleReturn.id}</p><p>Исходная продажа: {returnSuccess.body.saleReturn.original_sale_id}</p><p>Возвращённые позиции: {returnSuccess.body.items.map((item) => `${item.quantity} / ${formatUnitPrice(item.refunded_amount_minor, returnSale?.sale.currency_code ?? selectedLocation.currencyCode ?? 'USD', returnSale?.sale.currency_exponent ?? selectedLocation.currencyExponent ?? 2)}`).join(', ') || 'нет'}</p><p>Возвратные оплаты: {returnSuccess.body.refundAllocations.map((allocation) => `${allocation.method}: ${formatUnitPrice(allocation.amount_minor, returnSale?.sale.currency_code ?? selectedLocation.currencyCode ?? 'USD', returnSale?.sale.currency_exponent ?? selectedLocation.currencyExponent ?? 2)}`).join(', ') || 'нет'}</p></Alert>}
+                </Card>
+              </details>
             )}
-            <Card>
-              <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
+            <Card className="retail-pos__product-entry">
+              <section className="retail-pos__product-entry-section" aria-label="Поиск товара">
+                <form className="retail-pos__lookup-form" onSubmit={searchProducts}>
                 <label htmlFor="retail-pos-product-search">Поиск товара</label>
                 <div className="retail-pos__lookup-controls">
                   <Input
@@ -1300,10 +1312,10 @@ export function RetailPos() {
                   ))}
                 </ul>
               )}
-            </Card>
+              </section>
 
-            <Card>
-              <form className="retail-pos__lookup-form" onSubmit={lookupBarcode}>
+              <section className="retail-pos__product-entry-section" aria-label="Поиск по штрихкоду">
+                <form className="retail-pos__lookup-form" onSubmit={lookupBarcode}>
                 <label htmlFor="retail-pos-barcode">Штрихкод</label>
                 <div className="retail-pos__lookup-controls">
                   <Input
@@ -1355,6 +1367,7 @@ export function RetailPos() {
                   </Button>
                 </div>
               )}
+              </section>
             </Card>
 
             {selectedProduct && (
@@ -1426,6 +1439,13 @@ export function RetailPos() {
                 />
               ) : (
                 <>
+                  {checkoutAttempt && (
+                    <div className="retail-pos__cart-payment-summary">
+                      <span>Позиций в корзине: {cartLines.reduce((total, line) => total + line.quantity, 0)}</span>
+                      <span>Редактирование корзины доступно до перехода к оплате.</span>
+                    </div>
+                  )}
+                  {!checkoutAttempt && (
                   <ul className="retail-pos__cart-lines">
                     {cartLines.map((line) => (
                       <li key={line.productId}>
@@ -1553,6 +1573,7 @@ export function RetailPos() {
                       </li>
                     ))}
                   </ul>
+                  )}
                   {cartTotals.status === 'ready' && (
                     <div className="retail-pos__cart-subtotal">
                       <span>Сумма без скидки:</span>
@@ -1590,9 +1611,9 @@ export function RetailPos() {
                     определит сервер при завершении.
                   </p>
                   {checkoutAttempt && isCheckoutPreparationAllowed ? (
-                    <Alert variant="info" title="Корзина подготовлена к оплате">
-                      Проверьте корзину перед следующим шагом оформления.
-                    </Alert>
+                    <p className="retail-pos__checkout-prepared" aria-live="polite">
+                      Корзина подготовлена к оплате.
+                    </p>
                   ) : cartTotals.status === 'ready' ? (
                     <Button
                       type="button"
@@ -1604,14 +1625,13 @@ export function RetailPos() {
                   ) : null}
                 </>
               )}
-            </Card>
             {checkoutAttempt
               && paymentAllocations
               && paymentSummary
               && selectedLocation
               && isCheckoutPreparationAllowed
               && hasCurrencyConfiguration(selectedLocation) && (
-                <Card className="retail-pos__payment">
+                <section className="retail-pos__payment" aria-label="Оплата">
                   <h2>Оплата</h2>
                   <p>
                     Текущая сумма к оплате: {formatUnitPrice(
@@ -1734,28 +1754,35 @@ export function RetailPos() {
                       )}
                     </p>
                   )}
-                  <div className="retail-pos__offline-action">
-                    <h3>Офлайн-продажа</h3>
-                    <p>Доступна только для полной оплаты наличными без скидки. Состояние сети — подсказка, не подтверждение исхода продажи.</p>
-                    {offlineReadinessLoading && <p role="status">Проверяем готовность терминала…</p>}
-                    {currentOfflineReadiness?.status !== 'READY' && !offlineReadinessLoading && <p>Терминал не подтверждён готовым для этой торговой точки. Подготовьте его при наличии связи.</p>}
-                    <Button type="button" variant="secondary" onClick={() => void prepareOfflineSale()}
-                      disabled={offlineBusy || offlineHold || isSubmitting || !!offlineConfirmation || currentOfflineReadiness?.status !== 'READY' || !isCheckoutPreparationAllowed}>
-                      {offlineBusy ? 'Проверяем офлайн-продажу…' : 'Сохранить офлайн'}
-                    </Button>
-                    {offlineConfirmation?.key === offlineContextKey && <Card>
-                      <h4>Подтверждение офлайн-продажи</h4>
-                      <p>Позиций: {offlineConfirmation.quantity}. Сумма: {formatUnitPrice(offlineConfirmation.totalMinor, offlineConfirmation.currencyCode, offlineConfirmation.currencyExponent)}.</p>
-                      <p>Продажа будет сохранена на этом устройстве и отправлена после восстановления связи. Серверное принятие пока не подтверждается.</p>
-                      <Button type="button" onClick={() => void confirmOfflineSale()} disabled={offlineBusy}>Подтвердить сохранение офлайн</Button>
-                      <Button type="button" variant="secondary" onClick={() => setOfflineConfirmation(undefined)} disabled={offlineBusy}>Отмена</Button>
-                    </Card>}
-                  </div>
+                  <details className="retail-pos__offline-action">
+                    <summary>
+                      {currentOfflineReadiness?.status === 'READY'
+                        ? 'Офлайн-продажа — дополнительная операция'
+                        : 'Офлайн-продажа — терминал не готов'}
+                    </summary>
+                    <div className="retail-pos__offline-action-content">
+                      <p>Доступна только для полной оплаты наличными без скидки. Состояние сети — подсказка, не подтверждение исхода продажи.</p>
+                      {offlineReadinessLoading && <p role="status">Проверяем готовность терминала…</p>}
+                      {currentOfflineReadiness?.status !== 'READY' && !offlineReadinessLoading && <p>Терминал не подтверждён готовым для этой торговой точки. Подготовьте его при наличии связи.</p>}
+                      <Button type="button" variant="secondary" onClick={() => void prepareOfflineSale()}
+                        disabled={offlineBusy || offlineHold || isSubmitting || !!offlineConfirmation || currentOfflineReadiness?.status !== 'READY' || !isCheckoutPreparationAllowed}>
+                        {offlineBusy ? 'Проверяем офлайн-продажу…' : 'Сохранить офлайн'}
+                      </Button>
+                      {offlineConfirmation?.key === offlineContextKey && <Card>
+                        <h4>Подтверждение офлайн-продажи</h4>
+                        <p>Позиций: {offlineConfirmation.quantity}. Сумма: {formatUnitPrice(offlineConfirmation.totalMinor, offlineConfirmation.currencyCode, offlineConfirmation.currencyExponent)}.</p>
+                        <p>Продажа будет сохранена на этом устройстве и отправлена после восстановления связи. Серверное принятие пока не подтверждается.</p>
+                        <Button type="button" onClick={() => void confirmOfflineSale()} disabled={offlineBusy}>Подтвердить сохранение офлайн</Button>
+                        <Button type="button" variant="secondary" onClick={() => setOfflineConfirmation(undefined)} disabled={offlineBusy}>Отмена</Button>
+                      </Card>}
+                    </div>
+                  </details>
                   <p>
                     Итоговую сумму продажи определит сервер при завершении.
                   </p>
-                </Card>
+                </section>
               )}
+            </Card>
           </div>
         </section>
       )}
