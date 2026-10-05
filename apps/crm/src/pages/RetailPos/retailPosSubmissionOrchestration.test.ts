@@ -2,9 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { createPendingCommandGuard } from '../../shared/usePendingCommand'
 import { HttpError } from '../../shared/api/httpClient'
 import { RETAIL_INSUFFICIENT_STOCK_CODE } from '../../shared/api/retailApi'
-import type { PosCheckoutAttempt } from './retailPosCheckout'
+import { createPosCheckoutAttempt, type PosCheckoutAttempt } from './retailPosCheckout'
 import { summarizePosPayments, type PosPaymentAllocation } from './retailPosPayments'
-import type { PendingPosSaleSubmission, PosCompletionPayload } from './retailPosSubmissionRecovery'
+import {
+  clearPendingPosSaleSubmission,
+  loadPendingPosSaleSubmission,
+  savePendingPosSaleSubmission,
+  type PendingPosSaleSubmission,
+  type PosCompletionPayload,
+  type PosSubmissionRecoveryStorage,
+} from './retailPosSubmissionRecovery'
 import {
   retryPendingPosSale,
   submitPosSale,
@@ -30,6 +37,22 @@ const payload: PosCompletionPayload = {
   saleId: 'sale-1',
   lines: [{ id: 'line-1', productId: 'product-1', quantity: 1 }],
   allocations: [{ id: 'payment-1', method: 'cash', amountMinor: 1000, ordinal: 0 }],
+}
+
+class MemoryStorage implements PosSubmissionRecoveryStorage {
+  private readonly values = new Map<string, string>()
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value)
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key)
+  }
 }
 
 function createSnapshot(): PendingPosSaleSubmission {
@@ -260,6 +283,90 @@ describe('retail POS submission orchestration', () => {
     resolveCompletion()
     await first
     expect(dependencies.complete).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps one prepared checkout identity and snapshot across same-tick Retail POS Finish re-entry', async () => {
+    const issuedIds = ['sale-prepared', 'operation-prepared', 'line-prepared', 'sale-next', 'operation-next', 'line-next']
+    const createId = vi.fn(() => issuedIds.shift()!)
+    const preparedAttempt = createPosCheckoutAttempt({
+      locationId: 'location-1',
+      cartLines: [{ productId: 'product-1', sourceId: 'PRODUCT-1', name: 'Product', baseUnit: 'piece', quantity: 1, unitPriceMinor: 1000, currencyCode: 'USD', currencyExponent: 2 }],
+      cartTotals: { status: 'ready', currencyCode: 'USD', currencyExponent: 2, lineTotals: [{ productId: 'product-1', lineTotalMinor: 1000 }], subtotalMinor: 1000, discountTotalMinor: 0, payableTotalMinor: 1000 },
+      createId,
+    })
+    const storage = new MemoryStorage()
+    let resolveCompletion!: () => void
+    const completion = new Promise<void>((resolve) => { resolveCompletion = resolve })
+    const complete = vi.fn(async () => {
+      await completion
+      return completionResult(201)
+    })
+    const saveSnapshot = vi.fn((snapshot: PendingPosSaleSubmission) => savePendingPosSaleSubmission(snapshot, storage))
+    const clearSnapshot = vi.fn((ownerUserId: string, clientOperationId: string) => clearPendingPosSaleSubmission(ownerUserId, clientOperationId, storage))
+    const dependencies = createDependencies({
+      createPayload: input => ({
+        clientOperationId: input.checkoutAttempt.clientOperationId,
+        saleId: input.checkoutAttempt.saleId,
+        lines: input.checkoutAttempt.lines.map(line => ({ ...line })),
+        allocations: [{ id: 'payment-1', method: 'cash', amountMinor: 1000, ordinal: 0 }],
+      }),
+      saveSnapshot,
+      clearSnapshot,
+      complete,
+    })
+    const guard = createPendingCommandGuard()
+    const payment = [{ id: 'payment-1', method: 'cash' as const, amountText: '10.00' }]
+    const paymentSummary = summarizePosPayments(payment, 1000, 2)
+
+    // This mirrors RetailPos.submitSale: the key is fixed by the prepared
+    // checkout attempt and the ref-backed guard claims it before awaiting POST.
+    const finish = async () => {
+      const key = `retail-pos-submission:${preparedAttempt.clientOperationId}`
+      if (!guard.begin(key)) return { started: false as const }
+      try {
+        return {
+          started: true as const,
+          outcome: await submitPosSale({
+            ownerUserId: 'user-1',
+            checkoutAttempt: preparedAttempt,
+            paymentAllocations: payment,
+            paymentSummary,
+            currencyExponent: 2,
+          }, dependencies),
+        }
+      } finally {
+        guard.finish(key)
+      }
+    }
+
+    const first = finish()
+    const second = finish()
+
+    await expect(second).resolves.toEqual({ started: false })
+    expect(complete).toHaveBeenCalledTimes(1)
+    expect(saveSnapshot).toHaveBeenCalledTimes(1)
+    expect(createId).toHaveBeenCalledTimes(3)
+    expect(loadPendingPosSaleSubmission('user-1', storage)).toMatchObject({
+      status: 'pending',
+      snapshot: { payload: { saleId: 'sale-prepared', clientOperationId: 'operation-prepared' } },
+    })
+
+    resolveCompletion()
+    await expect(first).resolves.toEqual({
+      started: true,
+      outcome: { status: 'succeeded', completionStatus: 201 },
+    })
+    expect(clearSnapshot).toHaveBeenCalledWith('user-1', 'operation-prepared')
+    expect(loadPendingPosSaleSubmission('user-1', storage)).toEqual({ status: 'none' })
+
+    const nextAttempt = createPosCheckoutAttempt({
+      locationId: 'location-1',
+      cartLines: [{ productId: 'product-1', sourceId: 'PRODUCT-1', name: 'Product', baseUnit: 'piece', quantity: 1, unitPriceMinor: 1000, currencyCode: 'USD', currencyExponent: 2 }],
+      cartTotals: { status: 'ready', currencyCode: 'USD', currencyExponent: 2, lineTotals: [{ productId: 'product-1', lineTotalMinor: 1000 }], subtotalMinor: 1000, discountTotalMinor: 0, payableTotalMinor: 1000 },
+      createId,
+    })
+    expect(nextAttempt.saleId).toBe('sale-next')
+    expect(nextAttempt.clientOperationId).toBe('operation-next')
   })
 
   it('does not clear a response that is not a new-sale 201 or exact-replay 200', async () => {
