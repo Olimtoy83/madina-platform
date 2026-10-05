@@ -841,6 +841,7 @@ export function RetailPos() {
 
     const outcome = result.value
     if (outcome.status === 'succeeded') {
+      resetProductLookup()
       setCartLines(clearPosCart())
       setDiscountInputs({})
       setDiscountModes({})
