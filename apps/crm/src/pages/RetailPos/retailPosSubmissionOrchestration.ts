@@ -2,6 +2,7 @@ import type {
   RetailSaleCompletionRequest,
   RetailSaleCompletionResult,
 } from '../../shared/api/retailApi'
+import { isRetailSaleInsufficientStockError } from '../../shared/api/retailApi'
 import type { CreatePosCompletionPayloadInput } from './retailPosCompletionPayload'
 import type {
   ClearPendingPosSaleSubmissionResult,
@@ -33,6 +34,7 @@ export interface PosSaleSubmissionDependencies {
 export type PosSaleSubmissionOutcome =
   | { status: 'assembly-error' }
   | { status: 'blocked'; reason: 'save-already-pending' | 'save-invalid' | 'save-storage-error' | 'request-failed' | 'clear-failed' | 'stale' }
+  | { status: 'rejected'; reason: 'insufficient-stock' }
   | { status: 'succeeded'; completionStatus: 200 | 201 }
 
 export type PosPendingSaleRetryDependencies = Pick<
@@ -42,7 +44,30 @@ export type PosPendingSaleRetryDependencies = Pick<
 
 export type PosPendingSaleRetryOutcome =
   | { status: 'blocked'; reason: 'request-failed' | 'clear-failed' | 'stale' }
+  | { status: 'rejected'; reason: 'insufficient-stock' }
   | { status: 'succeeded'; completionStatus: 200 | 201 }
+
+type PosConfirmedRejectionResolution =
+  | { status: 'blocked'; reason: 'clear-failed' | 'stale' }
+  | { status: 'rejected'; reason: 'insufficient-stock' }
+
+function clearConfirmedRejection(
+  snapshot: Readonly<PendingPosSaleSubmission>,
+  dependencies: Pick<PosSaleSubmissionDependencies, 'clearSnapshot' | 'isCurrent'>,
+): PosConfirmedRejectionResolution {
+  if (!dependencies.isCurrent()) return { status: 'blocked', reason: 'stale' }
+  try {
+    const cleared = dependencies.clearSnapshot(
+      snapshot.ownerUserId,
+      snapshot.payload.clientOperationId,
+    )
+    return cleared.status === 'cleared'
+      ? { status: 'rejected', reason: 'insufficient-stock' }
+      : { status: 'blocked', reason: 'clear-failed' }
+  } catch {
+    return { status: 'blocked', reason: 'clear-failed' }
+  }
+}
 
 function toSaveFailureOutcome(
   result: Exclude<SavePendingPosSaleSubmissionResult, { status: 'saved' }>,
@@ -97,7 +122,10 @@ export async function submitPosSale(
   let completion: RetailSaleCompletionResult
   try {
     completion = await dependencies.complete(snapshot.locationId, snapshot.payload)
-  } catch {
+  } catch (error) {
+    if (isRetailSaleInsufficientStockError(error)) {
+      return clearConfirmedRejection(snapshot, dependencies)
+    }
     return { status: 'blocked', reason: 'request-failed' }
   }
 
@@ -134,7 +162,10 @@ export async function retryPendingPosSale(
   let completion: RetailSaleCompletionResult
   try {
     completion = await dependencies.complete(snapshot.locationId, snapshot.payload)
-  } catch {
+  } catch (error) {
+    if (isRetailSaleInsufficientStockError(error)) {
+      return clearConfirmedRejection(snapshot, dependencies)
+    }
     return { status: 'blocked', reason: 'request-failed' }
   }
 

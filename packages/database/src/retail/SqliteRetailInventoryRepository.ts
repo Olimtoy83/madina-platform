@@ -22,6 +22,13 @@ export interface RecordRetailInventoryMovementInput {
   sourceLineId: string
 }
 
+export class RetailInsufficientStockError extends Error {
+  constructor() {
+    super('Retail Inventory movement would produce negative on-hand quantity.')
+    this.name = 'RetailInsufficientStockError'
+  }
+}
+
 const movementTypes: readonly RetailInventoryMovementType[] = [
   'opening', 'goods_receipt', 'transfer', 'sale', 'return', 'reconciliation_adjustment',
 ]
@@ -81,7 +88,7 @@ export function recordRetailInventoryMovement(database: DatabaseSync, input: Rec
   if (location.status !== 'active') throw new Error('Retail Location is inactive.')
   const balance = database.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id = ? AND location_id = ?').get(movement.productId, movement.locationId) as { on_hand_quantity: number } | undefined
   const next = (balance?.on_hand_quantity ?? 0) + movement.quantityDelta
-  if (next < 0) throw new Error('Retail Inventory movement would produce negative on-hand quantity.')
+  if (next < 0) throw new RetailInsufficientStockError()
   database.prepare('INSERT INTO retail_inventory_movements (id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(movement.id, movement.productId, movement.locationId, movement.quantityDelta, movement.type, movement.sourceType, movement.sourceId, movement.sourceLineId, movement.createdAt.toISOString())
   database.prepare('INSERT INTO retail_inventory_balances (product_id, location_id, on_hand_quantity, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(product_id, location_id) DO UPDATE SET on_hand_quantity = excluded.on_hand_quantity, updated_at = excluded.updated_at').run(movement.productId, movement.locationId, next, movement.createdAt.toISOString())
   appendAuditEvent(database, { id: randomUUID(), occurredAt: new Date(), actorType: context.actorType, actorUserId: context.actorUserId, requestId: context.requestId, domain: 'retail', entityType: 'retail_inventory_movement', entityId: movement.id, action: 'retail.inventory_movement_recorded', metadata: { productId: movement.productId, locationId: movement.locationId, quantityDelta: movement.quantityDelta, type: movement.type, sourceType: movement.sourceType, sourceId: movement.sourceId, sourceLineId: movement.sourceLineId } })

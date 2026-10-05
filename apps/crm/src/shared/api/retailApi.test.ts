@@ -8,6 +8,8 @@ import {
   getRetailProductByBarcode,
   getRetailProductPrice,
   getRetailProducts,
+  isRetailSaleInsufficientStockError,
+  RETAIL_INSUFFICIENT_STOCK_CODE,
   type RetailSaleCompletionRequest,
 } from './retailApi'
 import { HttpError } from './httpClient'
@@ -90,6 +92,19 @@ describe('retailApi', () => {
       message: 'IDEMPOTENCY_CONFLICT',
       body: { message: 'IDEMPOTENCY_CONFLICT' },
     })
+  })
+
+  it('recognizes only the structured insufficient-stock completion rejection', () => {
+    expect(isRetailSaleInsufficientStockError(new HttpError(409, 'stock', {
+      code: RETAIL_INSUFFICIENT_STOCK_CODE,
+    }))).toBe(true)
+    expect(isRetailSaleInsufficientStockError(new HttpError(409, 'stock', {
+      code: 'OTHER_CONFLICT',
+    }))).toBe(false)
+    expect(isRetailSaleInsufficientStockError(new HttpError(409, 'stock'))).toBe(false)
+    expect(isRetailSaleInsufficientStockError(new HttpError(500, 'stock', {
+      code: RETAIL_INSUFFICIENT_STOCK_CODE,
+    }))).toBe(false)
   })
 
   it('loads the encoded completed Retail Sale evidence without client-side monetary mapping', async () => {

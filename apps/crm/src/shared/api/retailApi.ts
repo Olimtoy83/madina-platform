@@ -1,6 +1,6 @@
 import type { RetailProductResponse } from '@madina/api'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
-import { requestJson, requestResponse } from './httpClient'
+import { HttpError, requestJson, requestResponse } from './httpClient'
 
 const retailLocationsUrl = '/api/v1/retail/locations'
 const retailProductsUrl = '/api/v1/retail/products'
@@ -98,6 +98,14 @@ export interface RetailReturnCompletionResult {
 export interface RetailSaleCompletionResult {
   status: 200 | 201
   body: RetailSaleCompletionResponse
+}
+
+export const RETAIL_INSUFFICIENT_STOCK_CODE = 'RETAIL_INSUFFICIENT_STOCK'
+
+export function isRetailSaleInsufficientStockError(error: unknown): boolean {
+  if (!(error instanceof HttpError) || error.status !== 409
+    || typeof error.body !== 'object' || error.body === null || Array.isArray(error.body)) return false
+  return (error.body as { code?: unknown }).code === RETAIL_INSUFFICIENT_STOCK_CODE
 }
 
 export async function getRetailLocations(): Promise<RetailLocation[]> {

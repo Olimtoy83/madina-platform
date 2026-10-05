@@ -76,7 +76,7 @@ import './RetailPos.css'
 type ProductSearchState = 'idle' | 'loading' | 'empty' | 'ready' | 'error'
 type BarcodeLookupState = 'idle' | 'loading' | 'found' | 'not-found' | 'unavailable' | 'error'
 type PriceState = 'idle' | 'loading' | 'ready' | 'missing' | 'currency-unavailable' | 'error'
-type SubmissionState = 'idle' | 'submitting' | 'assembly-error' | 'blocked' | 'cleanup-failed' | 'succeeded'
+type SubmissionState = 'idle' | 'submitting' | 'assembly-error' | 'insufficient-stock' | 'blocked' | 'cleanup-failed' | 'succeeded'
 type RecoveryRetryState = 'idle' | 'retrying' | 'failed' | 'cleanup-failed' | 'succeeded'
 type DiscountMode = 'amount' | 'percent'
 type ReturnLookupState = 'idle' | 'loading' | 'loaded' | 'not-found' | 'denied' | 'error'
@@ -744,7 +744,7 @@ export function RetailPos() {
 
   function offlineGate(): { locationId: string; authorityId: string; totalMinor: number; currencyCode: string; currencyExponent: number; quantity: number } | undefined {
     if (!user || !selectedLocation || !hasCurrencyConfiguration(selectedLocation) || !checkoutAttempt || checkoutAttempt.locationId !== selectedLocation.id
-      || !isCheckoutPreparationAllowed || recoveryGate.status !== 'clear' || submissionState === 'submitting' || submissionState === 'blocked'
+      || !isCheckoutPreparationAllowed || recoveryGate.status !== 'clear' || submissionState === 'submitting' || submissionState === 'insufficient-stock' || submissionState === 'blocked'
       || isSubmitting || offlineHoldRef.current || cartTotals.status !== 'ready' || !cartLines.length
       || !paymentAllocations || paymentAllocations.length !== 1 || paymentAllocations[0]?.method !== 'cash'
       || paymentSummary?.status !== 'exact' || paymentSummary.targetMinor !== cartTotals.payableTotalMinor
@@ -880,6 +880,16 @@ export function RetailPos() {
       return
     }
 
+    if (outcome.status === 'rejected') {
+      setPendingRecoverySnapshot(undefined)
+      setRecoveryGate({ status: 'clear', ownerUserId })
+      setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
+      setCartError('Недостаточно товара на остатке. Уменьшите количество и подготовьте оплату заново.')
+      setSubmissionState('insufficient-stock')
+      return
+    }
+
     setSubmissionState(outcome.status === 'assembly-error'
       ? 'assembly-error'
       : outcome.reason === 'clear-failed' ? 'cleanup-failed' : 'blocked')
@@ -916,6 +926,17 @@ export function RetailPos() {
       setPendingRecoverySnapshot(undefined)
       setRecoveryGate({ status: 'clear', ownerUserId })
       setRecoveryRetryState('succeeded')
+      return
+    }
+
+    if (result.value.status === 'rejected') {
+      setPendingRecoverySnapshot(undefined)
+      setRecoveryGate({ status: 'clear', ownerUserId })
+      setCheckoutAttempt(undefined)
+      setPaymentAllocations(undefined)
+      setCartError('Недостаточно товара на остатке. Уменьшите количество и подготовьте оплату заново.')
+      setSubmissionState('insufficient-stock')
+      setRecoveryRetryState('idle')
       return
     }
 
@@ -1129,6 +1150,11 @@ export function RetailPos() {
       {submissionState === 'assembly-error' && (
         <Alert variant="warning" title="Продажа не подготовлена">
           Не удалось безопасно подготовить продажу. Проверьте корзину и оплату.
+        </Alert>
+      )}
+      {submissionState === 'insufficient-stock' && (
+        <Alert variant="warning" title="Недостаточно товара на остатке">
+          Уменьшите количество в корзине и подготовьте оплату заново.
         </Alert>
       )}
       {submissionState === 'blocked' && (

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createPendingCommandGuard } from '../../shared/usePendingCommand'
+import { HttpError } from '../../shared/api/httpClient'
+import { RETAIL_INSUFFICIENT_STOCK_CODE } from '../../shared/api/retailApi'
 import type { PosCheckoutAttempt } from './retailPosCheckout'
 import { summarizePosPayments, type PosPaymentAllocation } from './retailPosPayments'
 import type { PendingPosSaleSubmission, PosCompletionPayload } from './retailPosSubmissionRecovery'
@@ -163,6 +165,32 @@ describe('retail POS submission orchestration', () => {
     expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
   })
 
+  it('clears only its matching snapshot after a confirmed insufficient-stock rejection', async () => {
+    const dependencies = createDependencies({
+      complete: vi.fn(async () => {
+        throw new HttpError(409, 'stock', { code: RETAIL_INSUFFICIENT_STOCK_CODE })
+      }),
+    })
+
+    await expect(submit(dependencies)).resolves.toEqual({
+      status: 'rejected',
+      reason: 'insufficient-stock',
+    })
+    expect(dependencies.complete).toHaveBeenCalledTimes(1)
+    expect(dependencies.clearSnapshot).toHaveBeenCalledWith('user-1', 'operation-1')
+  })
+
+  it('keeps a generic HTTP 409 in the fail-closed recovery path', async () => {
+    const dependencies = createDependencies({
+      complete: vi.fn(async () => {
+        throw new HttpError(409, 'other conflict', { code: 'OTHER_CONFLICT' })
+      }),
+    })
+
+    await expect(submit(dependencies)).resolves.toEqual({ status: 'blocked', reason: 'request-failed' })
+    expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
+  })
+
   it('does not clear or POST again when cleanup fails after server success', async () => {
     const dependencies = createDependencies({
       clearSnapshot: vi.fn(() => ({ status: 'storage-error' as const })),
@@ -290,6 +318,21 @@ describe('retail POS submission orchestration', () => {
     })
     await expect(retry(dependencies)).resolves.toEqual({ status: 'blocked', reason: 'request-failed' })
     expect(dependencies.clearSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('clears a pre-existing snapshot after a confirmed insufficient-stock rejection without retrying it', async () => {
+    const dependencies = createRetryDependencies({
+      complete: vi.fn(async () => {
+        throw new HttpError(409, 'stock', { code: RETAIL_INSUFFICIENT_STOCK_CODE })
+      }),
+    })
+
+    await expect(retry(dependencies)).resolves.toEqual({
+      status: 'rejected',
+      reason: 'insufficient-stock',
+    })
+    expect(dependencies.complete).toHaveBeenCalledTimes(1)
+    expect(dependencies.clearSnapshot).toHaveBeenCalledWith('user-1', 'operation-1')
   })
 
   it('does not clear a retry completion after owner change or unmount', async () => {

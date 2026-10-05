@@ -94,6 +94,28 @@ describe('retail POS checkout attempt', () => {
     })
   })
 
+  it('uses new Sale and client operation identities for a corrected checkout attempt', () => {
+    const createId = sequentialIds(
+      'sale-original', 'operation-original', 'line-original-a', 'line-original-b',
+      'sale-corrected', 'operation-corrected', 'line-corrected-a', 'line-corrected-b',
+    )
+    const original = createPosCheckoutAttempt({
+      locationId: 'location-1',
+      cartLines,
+      cartTotals: readyCartTotals,
+      createId,
+    })
+    const corrected = createPosCheckoutAttempt({
+      locationId: 'location-1',
+      cartLines: [{ ...cartLines[0]!, quantity: 1 }, cartLines[1]!],
+      cartTotals: readyCartTotals,
+      createId,
+    })
+
+    expect(corrected.saleId).not.toBe(original.saleId)
+    expect(corrected.clientOperationId).not.toBe(original.clientOperationId)
+  })
+
   it.each([
     { cartLines: [], cartTotals: { status: 'empty' as const } },
     { cartLines, cartTotals: { status: 'invalid-line' as const } },
