@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { hashSessionSecret } from '../packages/auth/dist/index.js'
+import { hashPassword, hashSessionSecret } from '../packages/auth/dist/index.js'
 import {
   initializeDatabase,
   SqliteAuthRepository,
@@ -17,12 +17,18 @@ import { createServer } from '../apps/crm/node_modules/vite/dist/node/index.js'
 const crmRoot = resolve(process.cwd(), 'apps/crm')
 const userId = 'offline-e2e-manager'
 const sessionSecret = 'offline-e2e-manager-session'
+const username = 'offline.e2e.manager'
+const password = 'offline e2e manager password'
+const initialSessionId = 'offline-e2e-session'
 
 export interface OfflineAcceptanceHarness {
   readonly url: string
   readonly database: DatabaseSync
   readonly sessionSecret: string
   readonly userId: string
+  readonly username: string
+  readonly password: string
+  revokeInitialSession(): Promise<void>
   readonly locationId: string
   readonly productId: string
   readonly inventory: SqliteRetailInventoryRepository
@@ -50,8 +56,13 @@ export async function withOfflineAcceptanceHarness<T>(run: (harness: OfflineAcce
     const auth = new SqliteAuthRepository(file)
     try {
       const now = new Date()
-      await auth.createUser({ id: userId, username: userId, normalizedUsername: userId, role: 'manager', status: 'active', sessionVersion: 1, createdAt: now, updatedAt: now })
-      await auth.createSession({ id: 'offline-e2e-session', userId, tokenHash: hashSessionSecret(sessionSecret), createdAt: now, lastSeenAt: now, expiresAt: new Date(now.getTime() + 86_400_000), sessionVersion: 1 })
+      await auth.createUser({ id: userId, username, normalizedUsername: username, role: 'manager', status: 'active', sessionVersion: 1, createdAt: now, updatedAt: now })
+      await auth.saveCredential({
+        userId,
+        ...await hashPassword(password),
+        passwordChangedAt: now,
+      })
+      await auth.createSession({ id: initialSessionId, userId, tokenHash: hashSessionSecret(sessionSecret), createdAt: now, lastSeenAt: now, expiresAt: new Date(now.getTime() + 86_400_000), sessionVersion: 1 })
     } finally {
       auth.close()
     }
@@ -81,7 +92,27 @@ export async function withOfflineAcceptanceHarness<T>(run: (harness: OfflineAcce
     const address = vite.httpServer?.address()
     if (!address || typeof address === 'string') throw new Error('Offline acceptance Vite server has no TCP address.')
 
-    return await run({ url: `http://127.0.0.1:${address.port}`, database, sessionSecret, userId, locationId: location.id, productId: product.id, inventory, offline, context })
+    return await run({
+      url: `http://127.0.0.1:${address.port}`,
+      database,
+      sessionSecret,
+      userId,
+      username,
+      password,
+      async revokeInitialSession() {
+        const sessionRepository = new SqliteAuthRepository(file)
+        try {
+          await sessionRepository.revokeSession(initialSessionId, new Date())
+        } finally {
+          sessionRepository.close()
+        }
+      },
+      locationId: location.id,
+      productId: product.id,
+      inventory,
+      offline,
+      context,
+    })
   } finally {
     await vite?.close()
     await app?.close()
