@@ -22,6 +22,8 @@ import { RetailInventory } from '../../pages/RetailInventory/RetailInventory'
 import { RetailGoodsReceipts } from '../../pages/RetailGoodsReceipts/RetailGoodsReceipts'
 import { RetailAccessBoundary } from '../RetailAccessBoundary'
 import { RouteRecovery } from '../RouteRecovery'
+import { navigationProfile } from '../navigationProfile'
+import { RetailWorkspaceHome } from '../RetailWorkspaceHome'
 
 
 export const router = createBrowserRouter([
@@ -36,7 +38,9 @@ export const router = createBrowserRouter([
       },
       {
         index: true,
-        element: <Dashboard />,
+        element: navigationProfile === 'sabono-retail'
+          ? <RetailWorkspaceHome />
+          : <Dashboard />,
       },
       {
         path: 'warehouse',

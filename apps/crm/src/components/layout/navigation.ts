@@ -1,6 +1,10 @@
 import type { Permission } from '@madina/auth/rbac'
 import type { AuthUserResponse } from '@madina/api'
 import type { RetailCapability } from '@madina/retail'
+import {
+  navigationProfile,
+  type NavigationProfile,
+} from '../../app/navigationProfile'
 import { can } from '../../shared/auth/permissions'
 import { canRetail } from '../../shared/auth/retailPermissions'
 
@@ -67,14 +71,44 @@ export const navigationItems: readonly NavigationItem[] = [
   },
 ]
 
+const sabonoRetailLabels: Readonly<Record<string, string>> = {
+  '/retail/pos': 'Касса',
+  '/retail/sales': 'Продажи',
+  '/retail/inventory': 'Остатки',
+  '/retail/goods-receipts': 'Поступления',
+}
+
+function itemsForProfile(
+  profile: NavigationProfile,
+): readonly NavigationItem[] {
+  if (profile === 'default') {
+    return navigationItems
+  }
+
+  return navigationItems
+    .filter((item) => Object.hasOwn(sabonoRetailLabels, item.path))
+    .map((item) => ({
+      ...item,
+      label: sabonoRetailLabels[item.path]!,
+    }))
+}
+
 export function getVisibleNavigationItems(
   user: AuthUserResponse | null,
+  profile: NavigationProfile = navigationProfile,
 ): readonly NavigationItem[] {
-  return navigationItems.filter((item) => {
+  return itemsForProfile(profile).filter((item) => {
     if (item.retailCapability !== undefined) {
       return canRetail(user, item.retailCapability)
     }
 
     return can(user, item.permission)
   })
+}
+
+export function getWorkspaceHomePath(
+  user: AuthUserResponse | null,
+  profile: NavigationProfile = navigationProfile,
+): string | undefined {
+  return getVisibleNavigationItems(user, profile)[0]?.path
 }
