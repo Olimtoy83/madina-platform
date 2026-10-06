@@ -1769,6 +1769,8 @@ test('Retail inventory reads require an active location grant and inventory capa
   const location = await access.createLocation({ code: 'STORE-A', name: 'Store A', type: 'store', status: 'active' }, context)
   const otherLocation = await access.createLocation({ code: 'STORE-B', name: 'Store B', type: 'store', status: 'active' }, context)
   const product = await catalog.createProduct({ sourceId: 'P-1', name: 'Product' }, context)
+  const zeroProduct = await catalog.createProduct({ sourceId: 'ZERO-1', name: 'Zero product' }, context)
+  await catalog.addBarcode(zeroProduct.id, 'ZERO-BARCODE', context)
   await inventory.recordMovement({ productId: product.id, locationId: location.id, quantityDelta: 6, type: 'opening', sourceType: 'test', sourceId: 'opening-1', sourceLineId: 'line-1' }, context)
   await access.grant('manager-1', location.id, context)
   process.env.DATABASE_FILE = databaseFile
@@ -1786,6 +1788,21 @@ test('Retail inventory reads require an active location grant and inventory capa
     const history = await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${location.id}/inventory/products/${product.id}/movements` })
     equal(history.statusCode, 200)
     equal((history.json() as { movements: unknown[] }).movements.length, 1)
+    const listUrl = `/api/v1/retail/locations/${location.id}/inventory`
+    equal((await app.inject({ method: 'GET', url: listUrl })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'GET', url: listUrl })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${otherLocation.id}/inventory` })).statusCode, 403)
+    const inventoryPage = await request(app, sessions['manager-1']!, { method: 'GET', url: `${listUrl}?search=ZERO-BARCODE&limit=1` })
+    equal(inventoryPage.statusCode, 200)
+    const items = (inventoryPage.json() as {inventory:{items:Array<{productId:string;onHandQuantity:number}>}}).inventory.items
+    equal(items[0]?.productId, zeroProduct.id); equal(items[0]?.onHandQuantity, 0)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `${listUrl}?cursor=invalid` })).statusCode, 400)
+    const newHistory = await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${location.id}/inventory/products/${product.id}/movement-history?limit=1` })
+    equal(newHistory.statusCode, 200)
+    const movementBody = newHistory.json() as {inventory:{movements:Array<{quantityDelta:number;sourceLabel:string}>}}
+    equal(movementBody.inventory.movements[0]?.quantityDelta, 6); equal(movementBody.inventory.movements[0]?.sourceLabel, 'Retail inventory source')
+    await access.grant('manager-1', otherLocation.id, context); await access.revoke('manager-1', location.id, context)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: listUrl })).statusCode, 403)
   } finally {
     await app.close()
     inventory.close()
@@ -1878,6 +1895,14 @@ test('Goods Receipt routes enforce warehouse-only capability and active Location
     equal((await inventory.findBalance(product.id,warehouseA.id))?.onHandQuantity,4)
     equal((await inventory.findBalance(product.id,warehouseB.id)),undefined)
     equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,200)
+    const retryDraft=await request(app,sessions['manager-1']!,{method:'POST',url:base,payload:{receiptReference:'GR-HTTP-LOSS',lines:[{productId:product.id,quantity:2}]}})
+    const retryId=(retryDraft.json()as {goodsReceipt:{id:string}}).goodsReceipt.id
+    // The first real route invocation commits; the simulated client deliberately discards its success response.
+    await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${retryId}/complete`,payload:{}})
+    equal((await inventory.findBalance(product.id,warehouseA.id))?.onHandQuantity,6)
+    const retry=await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${retryId}/complete`,payload:{}})
+    equal(retry.statusCode,200);equal((retry.json()as {goodsReceipt:{status:string;id:string}}).goodsReceipt.status,'completed')
+    const db=new DatabaseSync(databaseFile);try{equal((db.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_goods_receipt' AND source_id=?").get(retryId)as {count:number}).count,1);equal((db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action='retail.goods_receipt_completed' AND entity_id=?").get(retryId)as {count:number}).count,1)}finally{db.close()}
     await access.revoke('manager-1',warehouseA.id,context)
     equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,403)
   } finally { await app.close();inventory.close();catalog.close();access.close();if(previousDatabaseFile===undefined)delete process.env.DATABASE_FILE;else process.env.DATABASE_FILE=previousDatabaseFile;rmSync(directory,{recursive:true,force:true}) }

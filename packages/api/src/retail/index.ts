@@ -50,12 +50,35 @@ export interface RetailInventoryMovementResponse {
   createdAt: string
 }
 
+export interface RetailInventoryListItemResponse {
+  productId: string
+  sourceId: string
+  name: string
+  barcodes: string[]
+  locationId: string
+  onHandQuantity: number
+  updatedAt?: string
+}
+
+export interface RetailInventoryListResponse {
+  inventory: { items: RetailInventoryListItemResponse[]; nextCursor?: string }
+}
+
+export interface RetailInventoryMovementListItemResponse extends RetailInventoryMovementResponse {
+  sourceLabel: string
+}
+
+export interface RetailInventoryMovementListResponse {
+  inventory: { balance?: RetailInventoryBalanceResponse; movements: RetailInventoryMovementListItemResponse[]; nextCursor?: string }
+}
+
 export interface RetailReconciliationSessionResponse { id: string; locationId: string; purpose: 'opening' | 'daily'; status: 'open' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
 export interface RetailReconciliationLineResponse { sessionId: string; productId: string; expectedQuantity: number; actualQuantity: number; variance: number; classification: 'matched' | 'shortage' | 'surplus'; recordedAt: string; recordedBy: string }
 
 export interface RetailGoodsReceiptResponse { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: 'draft' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
 export interface RetailGoodsReceiptLineRequest { productId: string; quantity: number }
 export interface RetailGoodsReceiptLineResponse { id: string; receiptId: string; productId: string; quantity: number }
+export interface RetailGoodsReceiptListResponse { goodsReceipts: { items: RetailGoodsReceiptResponse[]; nextCursor?: string } }
 
 export interface RetailCompletedSaleListItemResponse {
   id: string

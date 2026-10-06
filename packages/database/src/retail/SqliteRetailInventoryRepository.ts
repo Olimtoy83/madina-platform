@@ -11,6 +11,8 @@ import { openDatabaseConnection } from '../connectionPolicy.js'
 
 interface BalanceRow { product_id: string; location_id: string; on_hand_quantity: number; updated_at: string }
 interface MovementRow { id: string; product_id: string; location_id: string; quantity_delta: number; movement_type: RetailInventoryMovementType; source_type: string; source_id: string; source_line_id: string; created_at: string }
+export interface RetailInventoryListItem { productId:string; sourceId:string; name:string; barcodes:string[]; locationId:string; onHandQuantity:number; updatedAt?:Date }
+export interface RetailInventoryMovementPage { movements:RetailInventoryMovement[]; nextCursor?:{createdAt:string;id:string} }
 
 export interface RecordRetailInventoryMovementInput {
   productId: string
@@ -55,8 +57,29 @@ export class SqliteRetailInventoryRepository {
     return (this.database.prepare('SELECT product_id, location_id, on_hand_quantity, updated_at FROM retail_inventory_balances WHERE location_id = ? ORDER BY product_id').all(locationId) as unknown as BalanceRow[]).map(toBalance)
   }
 
+  async listInventory(locationId:string, input:{search?:string;cursor?:{name:string;id:string};limit:number}):Promise<{items:RetailInventoryListItem[];nextCursor?:{name:string;id:string}}> {
+    const term=input.search?.trim()
+    const filters=['p.status=\'active\'']
+    const values:string[]=[]
+    if(term){ filters.push('(p.name LIKE ? OR p.source_id LIKE ? OR EXISTS (SELECT 1 FROM retail_product_barcodes search_barcode WHERE search_barcode.product_id=p.id AND search_barcode.value LIKE ?))'); values.push(`%${term}%`,`%${term}%`,`%${term}%`) }
+    if(input.cursor){ filters.push('(p.name > ? OR (p.name = ? AND p.id > ?))'); values.push(input.cursor.name,input.cursor.name,input.cursor.id) }
+    const rows=this.database.prepare(`SELECT p.id,p.source_id,p.name,b.on_hand_quantity,b.updated_at FROM retail_products p LEFT JOIN retail_inventory_balances b ON b.product_id=p.id AND b.location_id=? WHERE ${filters.join(' AND ')} ORDER BY p.name,p.id LIMIT ?`).all(locationId,...values,input.limit) as unknown as Array<{id:string;source_id:string;name:string;on_hand_quantity:number|null;updated_at:string|null}>
+    const items=rows.map(row=>({productId:row.id,sourceId:row.source_id,name:row.name,barcodes:(this.database.prepare('SELECT value FROM retail_product_barcodes WHERE product_id=? ORDER BY value,id').all(row.id) as Array<{value:string}>).map(value=>value.value),locationId,onHandQuantity:row.on_hand_quantity??0,updatedAt:row.updated_at?new Date(row.updated_at):undefined}))
+    const last=items.at(-1)
+    return {items,nextCursor:rows.length===input.limit&&last?{name:last.name,id:last.productId}:undefined}
+  }
+
   async listMovements(productId: string, locationId: string): Promise<RetailInventoryMovement[]> {
     return (this.database.prepare('SELECT id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at FROM retail_inventory_movements WHERE product_id = ? AND location_id = ? ORDER BY created_at, id').all(productId, locationId) as unknown as MovementRow[]).map(toMovement)
+  }
+
+  async listMovementPage(productId:string,locationId:string,input:{cursor?:{createdAt:string;id:string};limit:number}):Promise<RetailInventoryMovementPage>{
+    const values:string[]=[productId,locationId]
+    let predicate='product_id=? AND location_id=?'
+    if(input.cursor){predicate+=' AND (created_at < ? OR (created_at = ? AND id < ?))';values.push(input.cursor.createdAt,input.cursor.createdAt,input.cursor.id)}
+    const movements=(this.database.prepare(`SELECT id, product_id, location_id, quantity_delta, movement_type, source_type, source_id, source_line_id, created_at FROM retail_inventory_movements WHERE ${predicate} ORDER BY created_at DESC,id DESC LIMIT ?`).all(...values,input.limit) as unknown as MovementRow[]).map(toMovement)
+    const last=movements.at(-1)
+    return {movements,nextCursor:movements.length===input.limit&&last?{createdAt:last.createdAt.toISOString(),id:last.id}:undefined}
   }
 
   async recordMovement(input: RecordRetailInventoryMovementInput, context: CommandContext): Promise<RetailInventoryMovement> {

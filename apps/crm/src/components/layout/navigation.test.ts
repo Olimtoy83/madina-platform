@@ -56,7 +56,7 @@ describe('CRM navigation', () => {
     for (const items of [adminItems, managerItems]) {
       const paths = items.map((item) => item.path)
       expect(paths.indexOf('/retail/sales')).toBe(paths.indexOf('/retail/pos') + 1)
-      expect(paths.indexOf('/retail/offline-operations')).toBe(paths.indexOf('/retail/sales') + 1)
+      expect(paths.indexOf('/retail/offline-operations')).toBeGreaterThan(paths.indexOf('/retail/sales'))
       expect(paths.indexOf('/retail/terminal-setup')).toBe(paths.indexOf('/retail/offline-operations') + 1)
     }
     expect(operatorItems.some((item) => item.path === '/retail/sales')).toBe(false)
@@ -69,5 +69,15 @@ describe('CRM navigation', () => {
 
   it('does not render navigation before authentication is established', () => {
     expect(getVisibleNavigationItems(null)).toEqual([])
+  })
+
+  it('offers inventory and goods-receipts workflows only to roles with their read capabilities', () => {
+    const managerItems = getVisibleNavigationItems({ id: 'user-manager', username: 'manager', role: 'manager' })
+    const viewerItems = getVisibleNavigationItems({ id: 'user-viewer', username: 'viewer', role: 'viewer' })
+
+    expect(managerItems.some((item) => item.path === '/retail/inventory')).toBe(true)
+    expect(managerItems.some((item) => item.path === '/retail/goods-receipts')).toBe(true)
+    expect(viewerItems.some((item) => item.path === '/retail/inventory')).toBe(false)
+    expect(viewerItems.some((item) => item.path === '/retail/goods-receipts')).toBe(false)
   })
 })

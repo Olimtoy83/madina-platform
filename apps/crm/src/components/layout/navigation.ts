@@ -46,6 +46,16 @@ export const navigationItems: readonly NavigationItem[] = [
     retailCapability: 'retail:sales:read',
   },
   {
+    label: 'Розница: остатки',
+    path: '/retail/inventory',
+    retailCapability: 'retail:inventory:read',
+  },
+  {
+    label: 'Розница: поступления',
+    path: '/retail/goods-receipts',
+    retailCapability: 'retail:goods-receipts:read',
+  },
+  {
     label: 'Офлайн-операции',
     path: '/retail/offline-operations',
     retailCapability: 'retail:sales:read',

@@ -18,6 +18,8 @@ import { OfflineOperations } from '../../pages/OfflineOperations/OfflineOperatio
 import { TerminalSetup } from '../../pages/TerminalSetup/TerminalSetup'
 import { RetailSalesJournal } from '../../pages/RetailSales/RetailSalesJournal'
 import { RetailSaleDetail } from '../../pages/RetailSales/RetailSaleDetail'
+import { RetailInventory } from '../../pages/RetailInventory/RetailInventory'
+import { RetailGoodsReceipts } from '../../pages/RetailGoodsReceipts/RetailGoodsReceipts'
 import { RetailAccessBoundary } from '../RetailAccessBoundary'
 import { RouteRecovery } from '../RouteRecovery'
 
@@ -103,6 +105,14 @@ export const router = createBrowserRouter([
             <RetailSaleDetail />
           </RetailAccessBoundary>
         ),
+      },
+      {
+        path: 'retail/inventory',
+        element: <RetailAccessBoundary capability="retail:inventory:read"><RetailInventory /></RetailAccessBoundary>,
+      },
+      {
+        path: 'retail/goods-receipts',
+        element: <RetailAccessBoundary capability="retail:goods-receipts:read"><RetailGoodsReceipts /></RetailAccessBoundary>,
       },
       {
         path: 'retail/offline-operations',

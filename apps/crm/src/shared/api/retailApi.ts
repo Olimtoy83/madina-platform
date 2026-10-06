@@ -1,4 +1,4 @@
-import type { RetailCompletedSalesListResponse, RetailProductResponse } from '@madina/api'
+import type { RetailCompletedSalesListResponse, RetailProductResponse, RetailInventoryListResponse, RetailInventoryMovementListResponse, RetailGoodsReceiptListResponse, RetailGoodsReceiptResponse, RetailGoodsReceiptLineResponse } from '@madina/api'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
 import { HttpError, requestJson, requestResponse } from './httpClient'
 
@@ -106,6 +106,13 @@ export interface RetailReturnCompletionResult {
   status: 200 | 201
   body: RetailReturnCompletionResponse
 }
+
+export interface RetailInventoryQuery { search?:string; cursor?:string; limit?:string }
+export interface RetailInventoryPage { items:RetailInventoryListResponse['inventory']['items']; nextCursor?:string }
+export interface RetailMovementPage { balance?: RetailInventoryMovementListResponse['inventory']['balance']; movements:RetailInventoryMovementListResponse['inventory']['movements']; nextCursor?:string }
+export interface RetailGoodsReceiptDetail { goodsReceipt:RetailGoodsReceiptResponse; lines:RetailGoodsReceiptLineResponse[] }
+export interface RetailGoodsReceiptPage { items:RetailGoodsReceiptResponse[]; nextCursor?:string }
+export interface RetailGoodsReceiptDraft { receiptReference:string; supplierReference?:string; shipmentReference?:string; notes?:string; lines:ReadonlyArray<{productId:string;quantity:number}> }
 
 export interface RetailSaleCompletionResult {
   status: 200 | 201
@@ -306,6 +313,15 @@ export async function getRetailCompletedSales(
   )
   return response.sales
 }
+
+function retailQuery(query:object):string { const params=new URLSearchParams(); for(const [key,value] of Object.entries(query)) if(typeof value==='string')params.set(key,value); return params.size?`?${params}`:'' }
+export async function getRetailInventory(locationId:string,query:RetailInventoryQuery={}):Promise<RetailInventoryPage>{const response=await requestJson<RetailInventoryListResponse>(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/inventory${retailQuery(query)}`);return response.inventory}
+export async function getRetailMovementHistory(locationId:string,productId:string,query:Omit<RetailInventoryQuery,'search'>={}):Promise<RetailMovementPage>{const response=await requestJson<RetailInventoryMovementListResponse>(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/inventory/products/${encodeURIComponent(productId)}/movement-history${retailQuery(query)}`);return response.inventory}
+export async function getRetailGoodsReceipts(locationId:string,query:Omit<RetailInventoryQuery,'search'>={}):Promise<RetailGoodsReceiptPage>{const response=await requestJson<RetailGoodsReceiptListResponse>(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts${retailQuery(query)}`);return response.goodsReceipts}
+export function getRetailGoodsReceipt(locationId:string,receiptId:string):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts/${encodeURIComponent(receiptId)}`)}
+export async function createRetailGoodsReceipt(locationId:string,payload:RetailGoodsReceiptDraft):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts`,{method:'POST',body:payload})}
+export async function updateRetailGoodsReceipt(locationId:string,receiptId:string,payload:Omit<RetailGoodsReceiptDraft,'receiptReference'>):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts/${encodeURIComponent(receiptId)}`,{method:'PATCH',body:payload})}
+export async function completeRetailGoodsReceipt(locationId:string,receiptId:string):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts/${encodeURIComponent(receiptId)}/complete`,{method:'POST'})}
 
 export async function completeRetailReturn(
   locationId: string,
