@@ -109,7 +109,7 @@ describe('retailApi', () => {
   })
 
   it('loads the encoded completed Retail Sale evidence without client-side monetary mapping', async () => {
-    const body = { sale: { id: 'sale-1', location_id: 'location-1', status: 'completed', currency_code: 'USD', currency_exponent: 2, payable_total_minor: 99, completed_at: '2026-09-19T00:00:00.000Z' }, items: [{ sale_item_id: 'item-1', product_id: 'product-1', source_id: 'SKU-1', name: 'Product', quantity: 1, unit_price_minor: 100, line_total_minor: 100, discount_amount_minor: 1, already_returned_quantity: 0, already_refunded_amount_minor: 0 }], paymentAllocations: [] }
+    const body = { sale: { id: 'sale-1', location_id: 'location-1', location_name: 'Store', location_code: 'STORE', status: 'completed', currency_code: 'USD', currency_exponent: 2, payable_total_minor: 99, completed_at: '2026-09-19T00:00:00.000Z' }, items: [{ sale_item_id: 'item-1', product_id: 'product-1', source_id: 'SKU-1', name: 'Product', quantity: 1, unit_price_minor: 100, line_total_minor: 100, discount_amount_minor: 1, already_returned_quantity: 0, already_refunded_amount_minor: 0 }], paymentAllocations: [] }
     const fetchMock = vi.fn().mockResolvedValue(response(body))
     vi.stubGlobal('fetch', fetchMock)
     await expect(getRetailCompletedSale('location / 1', 'sale / 1')).resolves.toEqual(body)

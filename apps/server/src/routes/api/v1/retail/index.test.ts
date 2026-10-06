@@ -1430,8 +1430,9 @@ test('Retail completed Sale reads and Returns enforce scoped authority and expos
     equal((await request(app, sessions['operator-1']!, { method: 'GET', url: base })).statusCode, 403)
     const read = await request(app, sessions['manager-1']!, { method: 'GET', url: base })
     equal(read.statusCode, 200)
-    const readBody = read.json() as { sale: { payable_total_minor: number }; items: Array<{ sale_item_id: string; unit_price_minor: number; line_total_minor: number; discount_amount_minor: number; already_returned_quantity: number }>; paymentAllocations: Array<{ amount_minor: number; already_refunded_amount_minor: number }> }
+    const readBody = read.json() as { sale: { location_id: string; location_name: string; location_code: string; payable_total_minor: number }; items: Array<{ sale_item_id: string; unit_price_minor: number; line_total_minor: number; discount_amount_minor: number; already_returned_quantity: number }>; paymentAllocations: Array<{ amount_minor: number; already_refunded_amount_minor: number }> }
     equal(readBody.sale.payable_total_minor, 299)
+    deepEqual({ location_id: readBody.sale.location_id, location_name: readBody.sale.location_name, location_code: readBody.sale.location_code }, { location_id: store.id, location_name: 'Return A', location_code: 'RETURN-A' })
     deepEqual(readBody.items[0], { sale_item_id: 'return-read-item', product_id: product.id, source_id: 'RETURN-P', name: 'Return Product', quantity: 3, unit_price_minor: 100, line_total_minor: 300, discount_amount_minor: 1, already_returned_quantity: 0, already_refunded_amount_minor: 0 })
     equal(readBody.paymentAllocations[0]?.amount_minor, 299)
     equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${other.id}/sales/return-read-sale` })).statusCode, 403)
@@ -1889,19 +1890,28 @@ test('Goods Receipt routes enforce warehouse-only capability and active Location
     equal((await request(app,sessions['manager-1']!,{method:'POST',url:`/api/v1/retail/locations/${warehouseB.id}/goods-receipts`,payload})).statusCode,403)
     const created=await request(app,sessions['manager-1']!,{method:'POST',url:base,payload})
     equal(created.statusCode,201)
-    const receiptId=(created.json() as {goodsReceipt:{id:string;locationId:string}}).goodsReceipt.id
-    equal((created.json() as {goodsReceipt:{locationId:string}}).goodsReceipt.locationId,warehouseA.id)
-    equal((await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${receiptId}/complete`,payload:{locationId:warehouseB.id,role:'admin'}})).statusCode,200)
+    const createdBody=created.json() as {goodsReceipt:{id:string;locationId:string};lines:Array<{productId:string;productName:string;productSourceId:string}>}
+    const receiptId=createdBody.goodsReceipt.id
+    equal(createdBody.goodsReceipt.locationId,warehouseA.id)
+    deepEqual(((line)=>({productId:line?.productId,productName:line?.productName,productSourceId:line?.productSourceId}))(createdBody.lines[0]),{productId:product.id,productName:'Product',productSourceId:'P-1'})
+    const updated=await request(app,sessions['manager-1']!,{method:'PATCH',url:`${base}/${receiptId}`,payload:{lines:[{productId:product.id,quantity:4}]}})
+    equal(updated.statusCode,200)
+    deepEqual(((line)=>({productId:line?.productId,productName:line?.productName,productSourceId:line?.productSourceId}))((updated.json() as {lines:Array<{productId:string;productName:string;productSourceId:string}>}).lines[0]),{productId:product.id,productName:'Product',productSourceId:'P-1'})
+    const completed=await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${receiptId}/complete`,payload:{locationId:warehouseB.id,role:'admin'}})
+    equal(completed.statusCode,200)
+    deepEqual(((line)=>({productId:line?.productId,productName:line?.productName,productSourceId:line?.productSourceId}))((completed.json() as {lines:Array<{productId:string;productName:string;productSourceId:string}>}).lines[0]),{productId:product.id,productName:'Product',productSourceId:'P-1'})
     equal((await inventory.findBalance(product.id,warehouseA.id))?.onHandQuantity,4)
     equal((await inventory.findBalance(product.id,warehouseB.id)),undefined)
-    equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,200)
+    const detail=await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})
+    equal(detail.statusCode,200)
+    deepEqual(((line)=>({productId:line?.productId,productName:line?.productName,productSourceId:line?.productSourceId}))((detail.json() as {lines:Array<{productId:string;productName:string;productSourceId:string}>}).lines[0]),{productId:product.id,productName:'Product',productSourceId:'P-1'})
     const retryDraft=await request(app,sessions['manager-1']!,{method:'POST',url:base,payload:{receiptReference:'GR-HTTP-LOSS',lines:[{productId:product.id,quantity:2}]}})
     const retryId=(retryDraft.json()as {goodsReceipt:{id:string}}).goodsReceipt.id
     // The first real route invocation commits; the simulated client deliberately discards its success response.
     await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${retryId}/complete`,payload:{}})
     equal((await inventory.findBalance(product.id,warehouseA.id))?.onHandQuantity,6)
     const retry=await request(app,sessions['manager-1']!,{method:'POST',url:`${base}/${retryId}/complete`,payload:{}})
-    equal(retry.statusCode,200);equal((retry.json()as {goodsReceipt:{status:string;id:string}}).goodsReceipt.status,'completed')
+    equal(retry.statusCode,200);equal((retry.json()as {goodsReceipt:{status:string;id:string}}).goodsReceipt.status,'completed');deepEqual(((line)=>({productId:line?.productId,productName:line?.productName,productSourceId:line?.productSourceId}))((retry.json()as {lines:Array<{productId:string;productName:string;productSourceId:string}>}).lines[0]),{productId:product.id,productName:'Product',productSourceId:'P-1'})
     const db=new DatabaseSync(databaseFile);try{equal((db.prepare("SELECT COUNT(*) AS count FROM retail_inventory_movements WHERE source_type='retail_goods_receipt' AND source_id=?").get(retryId)as {count:number}).count,1);equal((db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE action='retail.goods_receipt_completed' AND entity_id=?").get(retryId)as {count:number}).count,1)}finally{db.close()}
     await access.revoke('manager-1',warehouseA.id,context)
     equal((await request(app,sessions['manager-1']!,{method:'GET',url:`${base}/${receiptId}`})).statusCode,403)

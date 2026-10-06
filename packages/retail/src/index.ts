@@ -61,7 +61,7 @@ export interface RetailReconciliationLine { sessionId: string; productId: string
 
 export type RetailGoodsReceiptStatus = 'draft' | 'completed'
 export interface RetailGoodsReceipt { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: RetailGoodsReceiptStatus; createdAt: Date; createdBy: string; completedAt?: Date }
-export interface RetailGoodsReceiptLine { id: string; receiptId: string; productId: string; quantity: number }
+export interface RetailGoodsReceiptLine { id: string; receiptId: string; productId: string; productName: string; productSourceId: string; quantity: number }
 export type RetailTransferStatus = 'draft'|'dispatched'|'received'
 export interface RetailTransfer { id:string; sourceLocationId:string; destinationLocationId:string; status:RetailTransferStatus; createdAt:Date; createdBy:string; dispatchedAt?:Date; receivedAt?:Date }
 export interface RetailTransferLine { id:string; transferId:string; productId:string; quantity:number }

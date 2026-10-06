@@ -76,8 +76,10 @@ export class SqliteRetailSaleReturnRepository {
 
   async findCompletedSale(locationId: string, saleId: string): Promise<RetailCompletedSaleRead | undefined> {
     const sale = this.database.prepare(`
-      SELECT id, location_id, status, currency_code, currency_exponent, payable_total_minor, completed_at
-      FROM retail_sales WHERE id = ? AND location_id = ? AND status = 'completed'
+      SELECT sale.id, sale.location_id, location.name AS location_name, location.code AS location_code,
+             sale.status, sale.currency_code, sale.currency_exponent, sale.payable_total_minor, sale.completed_at
+      FROM retail_sales sale JOIN retail_locations location ON location.id = sale.location_id
+      WHERE sale.id = ? AND sale.location_id = ? AND sale.status = 'completed'
     `).get(saleId, locationId)
     if (!sale) return undefined
     const items = this.database.prepare(`

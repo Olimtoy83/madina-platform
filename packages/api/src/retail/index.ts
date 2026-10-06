@@ -77,7 +77,7 @@ export interface RetailReconciliationLineResponse { sessionId: string; productId
 
 export interface RetailGoodsReceiptResponse { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: 'draft' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
 export interface RetailGoodsReceiptLineRequest { productId: string; quantity: number }
-export interface RetailGoodsReceiptLineResponse { id: string; receiptId: string; productId: string; quantity: number }
+export interface RetailGoodsReceiptLineResponse { id: string; receiptId: string; productId: string; productName: string; productSourceId: string; quantity: number }
 export interface RetailGoodsReceiptListResponse { goodsReceipts: { items: RetailGoodsReceiptResponse[]; nextCursor?: string } }
 
 export interface RetailCompletedSaleListItemResponse {

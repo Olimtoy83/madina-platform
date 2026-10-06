@@ -97,3 +97,23 @@ it('keeps receipt reading available but hides management controls from read-only
   expect(screen.queryByRole('button', { name: 'Завершить поступление' })).toBeNull()
   expect(screen.queryByLabelText('Найти активный retail-товар')).toBeNull()
 })
+
+it('renders current product name and source ID for a saved draft receipt', async () => {
+  api.getRetailGoodsReceipt.mockResolvedValue({ ...draft, lines: [{ id: 'line-1', receiptId: 'r1', productId: 'product-uuid', productName: 'Tea', productSourceId: 'SKU-2', quantity: 1 }] })
+  render(<RetailGoodsReceipts />)
+  await openDraft()
+  expect(screen.getByText('Tea')).toBeTruthy()
+  expect(screen.getByText('SKU-2')).toBeTruthy()
+  expect(screen.queryByText('product-uuid')).toBeNull()
+})
+
+it('renders current product name and source ID for a completed receipt', async () => {
+  api.getRetailGoodsReceipt.mockResolvedValue({ ...completed, lines: [{ id: 'line-1', receiptId: 'r1', productId: 'product-uuid', productName: 'Tea', productSourceId: 'SKU-2', quantity: 1 }] })
+  render(<RetailGoodsReceipts />)
+  await screen.findByText('GR-1')
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Открыть' }))
+  await screen.findByText('Завершённое поступление')
+  expect(screen.getByText('Tea')).toBeTruthy()
+  expect(screen.getByText('SKU-2')).toBeTruthy()
+  expect(screen.queryByText('product-uuid')).toBeNull()
+})

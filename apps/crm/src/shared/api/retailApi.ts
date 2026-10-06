@@ -51,6 +51,8 @@ export interface RetailCompletedSale {
   sale: {
     id: string
     location_id: string
+    location_name: string
+    location_code: string
     status: 'completed'
     currency_code: string
     currency_exponent: number

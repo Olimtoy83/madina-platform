@@ -73,6 +73,15 @@ test('migration 039 creates immutable Return evidence and return capability assi
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
 
+test('completed Sale detail resolves current location display identity while retaining location ID', async () => fixture(async (value) => {
+  const product = await productWithStock(value, 'LOCATION-IDENTITY', 100, 1)
+  await value.sales.complete(value.location.id, { clientOperationId: 'sale-location-identity', saleId: 'sale-location-identity', lines: [{ id: 'sale-location-item', productId: product.id, quantity: 1 }], allocations: [{ id: 'sale-location-payment', method: 'cash', amountMinor: 100, ordinal: 0 }] }, context)
+  const read = await value.returns.findCompletedSale(value.location.id, 'sale-location-identity') as { sale: { location_id: string; location_name: string; location_code: string } }
+  equal(read.sale.location_id, value.location.id)
+  equal(read.sale.location_name, 'Return Store')
+  equal(read.sale.location_code, 'RETURN')
+}))
+
 test('discounted partial Returns use deterministic minor-unit allocation, replay once, and preserve original evidence', async () => fixture(async (value) => {
   const product = await productWithStock(value, 'ROUNDING', 100, 3)
   await value.sales.complete(value.location.id, { clientOperationId: 'sale-round', saleId: 'sale-round', lines: [{ id: 'sale-round-item', productId: product.id, quantity: 3, discountAmountMinor: 1 }], allocations: [{ id: 'sale-round-payment', method: 'cash', amountMinor: 299, ordinal: 0 }] }, context)
