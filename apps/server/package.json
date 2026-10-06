@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "bootstrap-admin": "node dist/cli/bootstrapAdminCommand.js",
+    "uat:provision": "node dist/cli/provisionSabonoUatCommand.js",
     "db:backup": "node dist/cli/databaseBackupCommand.js",
     "db:check": "node dist/cli/databaseCheckCommand.js",
     "start": "node dist/index.js",
