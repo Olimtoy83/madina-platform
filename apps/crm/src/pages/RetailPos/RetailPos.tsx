@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
 import {
   getRetailLocations,
@@ -158,6 +158,7 @@ function getRecoveryGateMessage(
 
 export function RetailPos() {
   const auth = useAuth()
+  const [searchParams] = useSearchParams()
   const { user } = auth
   const commitOfflineSale = useCommitOfflineSale()
   const canApplyDiscount = canRetail(user, 'retail:sales:discount')
@@ -203,6 +204,7 @@ export function RetailPos() {
   const [returnSubmissionState, setReturnSubmissionState] = useState<ReturnSubmissionState>('idle')
   const [returnSuccess, setReturnSuccess] = useState<RetailReturnCompletionResult>()
   const [isReturnDisclosureOpen, setIsReturnDisclosureOpen] = useState(false)
+  const returnEntryApplied = useRef(false)
   const searchRequestGeneration = useRef(0)
   const barcodeRequestGeneration = useRef(0)
   const priceRequestGeneration = useRef(0)
@@ -350,6 +352,19 @@ export function RetailPos() {
   const selectedLocation = locations.find(
     (location) => location.id === selectedLocationId,
   )
+
+  useEffect(() => {
+    const locationId = searchParams.get('locationId')?.trim()
+    const saleId = searchParams.get('returnSaleId')?.trim()
+    if (returnEntryApplied.current || !locationId || !saleId || !locations.some(location => location.id === locationId)) return
+    if (selectedLocationId !== locationId) {
+      selectLocation(locationId)
+      return
+    }
+    returnEntryApplied.current = true
+    setIsReturnDisclosureOpen(true)
+    setReturnSaleId(saleId)
+  }, [locations, searchParams, selectedLocationId])
   useEffect(() => {
     const locationId = selectedLocationId
     const generation = ++offlineReadGeneration.current

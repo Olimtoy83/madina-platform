@@ -16,6 +16,8 @@ import { SalesReport } from '../../pages/SalesReport/SalesReport'
 import { RetailPos } from '../../pages/RetailPos/RetailPos'
 import { OfflineOperations } from '../../pages/OfflineOperations/OfflineOperations'
 import { TerminalSetup } from '../../pages/TerminalSetup/TerminalSetup'
+import { RetailSalesJournal } from '../../pages/RetailSales/RetailSalesJournal'
+import { RetailSaleDetail } from '../../pages/RetailSales/RetailSaleDetail'
 import { RetailAccessBoundary } from '../RetailAccessBoundary'
 import { RouteRecovery } from '../RouteRecovery'
 
@@ -83,6 +85,22 @@ export const router = createBrowserRouter([
         element: (
           <RetailAccessBoundary capability="retail:sales:manage">
             <RetailPos />
+          </RetailAccessBoundary>
+        ),
+      },
+      {
+        path: 'retail/sales',
+        element: (
+          <RetailAccessBoundary capability="retail:sales:read">
+            <RetailSalesJournal />
+          </RetailAccessBoundary>
+        ),
+      },
+      {
+        path: 'retail/sales/:saleId',
+        element: (
+          <RetailAccessBoundary capability="retail:sales:read">
+            <RetailSaleDetail />
           </RetailAccessBoundary>
         ),
       },

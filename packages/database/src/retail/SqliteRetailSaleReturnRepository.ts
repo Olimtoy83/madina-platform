@@ -25,6 +25,24 @@ export interface RetailCompletedSaleRead {
   paymentAllocations: unknown[]
 }
 
+export interface RetailCompletedSaleListQuery {
+  completedFrom?: string
+  completedToExclusive?: string
+  cursor?: { completedAt: string; id: string }
+  limit: number
+}
+
+export interface RetailCompletedSaleListItem {
+  id: string
+  locationId: string
+  currencyCode: string
+  currencyExponent: number
+  payableTotalMinor: number
+  completedAt: string
+  paymentMethods: string[]
+  hasReturns: boolean
+}
+
 interface SaleRow { id: string; location_id: string; status: string; currency_code: string; currency_exponent: number; payable_total_minor: number }
 interface SaleItemRow { id: string; sale_id: string; product_id: string; quantity: number; line_total_minor: number; discount_amount_minor: number | null }
 interface PaymentRow { id: string; sale_id: string; method: string; amount_minor: number; ordinal: number }
@@ -86,6 +104,60 @@ export class SqliteRetailSaleReturnRepository {
       WHERE payment.sale_id = ? ORDER BY payment.ordinal, payment.id
     `).all(saleId, saleId) as unknown[]
     return { sale, items, paymentAllocations }
+  }
+
+  async listCompletedSales(
+    locationId: string,
+    query: RetailCompletedSaleListQuery,
+  ): Promise<RetailCompletedSaleListItem[]> {
+    const predicates = ["sale.location_id = ?", "sale.status = 'completed'"]
+    const parameters: (string | number)[] = [locationId]
+    if (query.completedFrom) {
+      predicates.push('sale.completed_at >= ?')
+      parameters.push(query.completedFrom)
+    }
+    if (query.completedToExclusive) {
+      predicates.push('sale.completed_at < ?')
+      parameters.push(query.completedToExclusive)
+    }
+    if (query.cursor) {
+      predicates.push('(sale.completed_at < ? OR (sale.completed_at = ? AND sale.id < ?))')
+      parameters.push(query.cursor.completedAt, query.cursor.completedAt, query.cursor.id)
+    }
+    parameters.push(query.limit)
+    const sales = this.database.prepare(`
+      SELECT sale.id, sale.location_id, sale.currency_code, sale.currency_exponent,
+             sale.payable_total_minor, sale.completed_at,
+             EXISTS(SELECT 1 FROM retail_sale_returns sale_return
+               WHERE sale_return.original_sale_id = sale.id) AS has_returns
+      FROM retail_sales sale
+      WHERE ${predicates.join(' AND ')}
+      ORDER BY sale.completed_at DESC, sale.id DESC
+      LIMIT ?
+    `).all(...parameters) as Array<{
+      id: string
+      location_id: string
+      currency_code: string
+      currency_exponent: number
+      payable_total_minor: number
+      completed_at: string
+      has_returns: number
+    }>
+    const paymentMethods = this.database.prepare(`
+      SELECT method FROM retail_payment_allocations
+      WHERE sale_id = ? ORDER BY ordinal, id
+    `)
+    return sales.map((sale) => ({
+      id: sale.id,
+      locationId: sale.location_id,
+      currencyCode: sale.currency_code,
+      currencyExponent: sale.currency_exponent,
+      payableTotalMinor: sale.payable_total_minor,
+      completedAt: sale.completed_at,
+      paymentMethods: (paymentMethods.all(sale.id) as Array<{ method: string }>)
+        .map((payment) => payment.method),
+      hasReturns: sale.has_returns === 1,
+    }))
   }
 
   async complete(locationId: string, input: RetailSaleReturnInput, context: CommandContext): Promise<RetailSaleReturnResult> {

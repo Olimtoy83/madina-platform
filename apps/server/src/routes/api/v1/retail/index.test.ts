@@ -1385,11 +1385,12 @@ test('Retail completed Sale reads and Returns enforce scoped authority and expos
   const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'return-api' }
   const store = await access.createLocation({ code: 'RETURN-A', name: 'Return A', type: 'store', status: 'active' }, context)
   const other = await access.createLocation({ code: 'RETURN-B', name: 'Return B', type: 'store', status: 'active' }, context)
+  const inactive = await access.createLocation({ code: 'RETURN-I', name: 'Return inactive', type: 'store', status: 'inactive' }, context)
   await access.configureCurrency(store.id, 'USD', 2, context)
   const product = await catalog.createProduct({ sourceId: 'RETURN-P', name: 'Return Product' }, context)
   await catalog.setPrice(product.id, store.id, 100, context)
   await inventory.recordMovement({ productId: product.id, locationId: store.id, quantityDelta: 30, type: 'opening', sourceType: 'test', sourceId: 'return-api', sourceLineId: 'seed' }, context)
-  await access.grant('admin-1', store.id, context); await access.grant('manager-1', store.id, context)
+  await access.grant('admin-1', store.id, context); await access.grant('manager-1', store.id, context); await access.grant('manager-1', inactive.id, context)
   await sales.complete(store.id, { clientOperationId: 'return-read-sale', saleId: 'return-read-sale', lines: [{ id: 'return-read-item', productId: product.id, quantity: 3, discountAmountMinor: 1 }], allocations: [{ id: 'return-read-payment', method: 'cash', amountMinor: 299, ordinal: 0 }] }, context)
   const mixedProduct = await catalog.createProduct({ sourceId: 'RETURN-MIXED', name: 'Mixed Return Product' }, context)
   await catalog.setPrice(mixedProduct.id, store.id, 500, context)
@@ -1399,8 +1400,32 @@ test('Retail completed Sale reads and Returns enforce scoped authority and expos
   process.env.DATABASE_FILE = databaseFile
   const app = buildApp()
   const base = `/api/v1/retail/locations/${store.id}/sales/return-read-sale`
+  const journal = `/api/v1/retail/locations/${store.id}/sales`
   try {
     await app.ready()
+    equal((await app.inject({ method: 'GET', url: journal })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'GET', url: journal })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${other.id}/sales` })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `/api/v1/retail/locations/${inactive.id}/sales` })).statusCode, 403)
+    const firstJournalPage = await request(app, sessions['manager-1']!, { method: 'GET', url: `${journal}?limit=1` })
+    equal(firstJournalPage.statusCode, 200)
+    const firstJournalBody = firstJournalPage.json() as { sales: { items: Array<{ id: string; locationId: string; paymentMethods: string[]; hasReturns: boolean }>; nextCursor?: string } }
+    equal(firstJournalBody.sales.items.length, 1)
+    equal(firstJournalBody.sales.items[0]?.locationId, store.id)
+    equal((firstJournalBody.sales.items[0]?.paymentMethods.length ?? 0) > 0, true)
+    equal(typeof firstJournalBody.sales.nextCursor, 'string')
+    const secondJournalPage = await request(app, sessions['manager-1']!, { method: 'GET', url: `${journal}?limit=1&cursor=${encodeURIComponent(firstJournalBody.sales.nextCursor!)}` })
+    equal(secondJournalPage.statusCode, 200)
+    const secondJournalBody = secondJournalPage.json() as { sales: { items: Array<{ id: string }> } }
+    equal(secondJournalBody.sales.items.length, 1)
+    equal(secondJournalBody.sales.items[0]?.id === firstJournalBody.sales.items[0]?.id, false)
+    const completeSales = await request(app, sessions['manager-1']!, { method: 'GET', url: `${journal}?dateFrom=2000-01-01&dateTo=2999-12-31` })
+    equal(completeSales.statusCode, 200)
+    const completeSalesBody = completeSales.json() as { sales: { items: Array<{ id: string }> } }
+    deepEqual(completeSalesBody.sales.items.map(sale => sale.id).sort(), ['return-mixed-sale', 'return-read-sale'])
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `${journal}?dateFrom=2999-01-01` })).statusCode, 200)
+    equal(((await request(app, sessions['manager-1']!, { method: 'GET', url: `${journal}?dateFrom=2999-01-01` })).json() as { sales: { items: unknown[] } }).sales.items.length, 0)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `${journal}?dateFrom=not-a-date` })).statusCode, 400)
     equal((await app.inject({ method: 'GET', url: base })).statusCode, 401)
     equal((await request(app, sessions['operator-1']!, { method: 'GET', url: base })).statusCode, 403)
     const read = await request(app, sessions['manager-1']!, { method: 'GET', url: base })

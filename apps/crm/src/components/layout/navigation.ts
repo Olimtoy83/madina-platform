@@ -41,6 +41,11 @@ export const navigationItems: readonly NavigationItem[] = [
     retailCapability: 'retail:sales:manage',
   },
   {
+    label: 'Журнал розничных продаж',
+    path: '/retail/sales',
+    retailCapability: 'retail:sales:read',
+  },
+  {
     label: 'Офлайн-операции',
     path: '/retail/offline-operations',
     retailCapability: 'retail:sales:read',

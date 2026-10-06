@@ -1,4 +1,4 @@
-import type { RetailProductResponse } from '@madina/api'
+import type { RetailCompletedSalesListResponse, RetailProductResponse } from '@madina/api'
 import type { RetailLocation, RetailProduct } from '@madina/retail'
 import { HttpError, requestJson, requestResponse } from './httpClient'
 
@@ -76,6 +76,18 @@ export interface RetailCompletedSale {
     ordinal: number
     already_refunded_amount_minor: number
   }>
+}
+
+export interface RetailCompletedSalesQuery {
+  dateFrom?: string
+  dateTo?: string
+  cursor?: string
+  limit?: string
+}
+
+export interface RetailCompletedSales {
+  items: RetailCompletedSalesListResponse['sales']['items']
+  nextCursor?: string
 }
 
 export interface RetailReturnRequest {
@@ -280,6 +292,19 @@ export function getRetailCompletedSale(locationId: string, saleId: string): Prom
   return requestJson<RetailCompletedSale>(
     `${retailLocationsUrl}/${encodeURIComponent(locationId)}/sales/${encodeURIComponent(saleId)}`,
   )
+}
+
+export async function getRetailCompletedSales(
+  locationId: string,
+  query: RetailCompletedSalesQuery = {},
+): Promise<RetailCompletedSales> {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) if (value !== undefined) search.set(key, value)
+  const suffix = search.size > 0 ? `?${search.toString()}` : ''
+  const response = await requestJson<RetailCompletedSalesListResponse>(
+    `${retailLocationsUrl}/${encodeURIComponent(locationId)}/sales${suffix}`,
+  )
+  return response.sales
 }
 
 export async function completeRetailReturn(

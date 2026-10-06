@@ -56,3 +56,21 @@ export interface RetailReconciliationLineResponse { sessionId: string; productId
 export interface RetailGoodsReceiptResponse { id: string; receiptReference: string; locationId: string; supplierReference?: string; shipmentReference?: string; notes?: string; status: 'draft' | 'completed'; createdAt: string; createdBy: string; completedAt?: string }
 export interface RetailGoodsReceiptLineRequest { productId: string; quantity: number }
 export interface RetailGoodsReceiptLineResponse { id: string; receiptId: string; productId: string; quantity: number }
+
+export interface RetailCompletedSaleListItemResponse {
+  id: string
+  locationId: string
+  currencyCode: string
+  currencyExponent: number
+  payableTotalMinor: number
+  completedAt: string
+  paymentMethods: string[]
+  hasReturns: boolean
+}
+
+export interface RetailCompletedSalesListResponse {
+  sales: {
+    items: RetailCompletedSaleListItemResponse[]
+    nextCursor?: string
+  }
+}

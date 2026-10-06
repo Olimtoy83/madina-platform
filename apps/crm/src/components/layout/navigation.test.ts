@@ -24,7 +24,7 @@ describe('CRM navigation', () => {
     ])
   })
 
-  it('shows Retail POS only to roles with retail sales capability', () => {
+  it('shows Retail POS and Sales Journal only to roles with the required retail capabilities', () => {
     const adminItems = getVisibleNavigationItems({
       id: 'user-admin',
       username: 'admin',
@@ -55,9 +55,12 @@ describe('CRM navigation', () => {
     expect(viewerItems.some((item) => item.path === '/retail/pos')).toBe(false)
     for (const items of [adminItems, managerItems]) {
       const paths = items.map((item) => item.path)
-      expect(paths.indexOf('/retail/offline-operations')).toBe(paths.indexOf('/retail/pos') + 1)
+      expect(paths.indexOf('/retail/sales')).toBe(paths.indexOf('/retail/pos') + 1)
+      expect(paths.indexOf('/retail/offline-operations')).toBe(paths.indexOf('/retail/sales') + 1)
       expect(paths.indexOf('/retail/terminal-setup')).toBe(paths.indexOf('/retail/offline-operations') + 1)
     }
+    expect(operatorItems.some((item) => item.path === '/retail/sales')).toBe(false)
+    expect(viewerItems.some((item) => item.path === '/retail/sales')).toBe(false)
     expect(operatorItems.some((item) => item.path === '/retail/offline-operations')).toBe(false)
     expect(viewerItems.some((item) => item.path === '/retail/offline-operations')).toBe(false)
     expect(operatorItems.some((item) => item.path === '/retail/terminal-setup')).toBe(false)

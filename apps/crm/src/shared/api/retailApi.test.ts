@@ -3,6 +3,7 @@ import {
   completeRetailSale,
   completeRetailReturn,
   getRetailCompletedSale,
+  getRetailCompletedSales,
   getRetailLocations,
   getRetailOfflineAuthorities,
   getRetailProductByBarcode,
@@ -113,6 +114,14 @@ describe('retailApi', () => {
     vi.stubGlobal('fetch', fetchMock)
     await expect(getRetailCompletedSale('location / 1', 'sale / 1')).resolves.toEqual(body)
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/retail/locations/location%20%2F%201/sales/sale%20%2F%201'])
+  })
+
+  it('loads the location-scoped completed Retail Sales journal with server-owned filters and cursor', async () => {
+    const body = { sales: { items: [{ id: 'sale-1', locationId: 'location-1', currencyCode: 'USD', currencyExponent: 2, payableTotalMinor: 99, completedAt: '2026-09-19T00:00:00.000Z', paymentMethods: ['cash'], hasReturns: false }], nextCursor: 'next-page' } }
+    const fetchMock = vi.fn().mockResolvedValue(response(body))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(getRetailCompletedSales('location / 1', { dateFrom: '2026-09-01', dateTo: '2026-09-30', cursor: 'next page', limit: '10' })).resolves.toEqual(body.sales)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/retail/locations/location%20%2F%201/sales?dateFrom=2026-09-01&dateTo=2026-09-30&cursor=next+page&limit=10'])
   })
 
   it.each([201, 200] as const)('posts only Return intent and accepts status %i', async (status) => {

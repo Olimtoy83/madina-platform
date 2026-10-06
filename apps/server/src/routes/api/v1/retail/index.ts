@@ -37,6 +37,57 @@ function hasRetailPermission(
   return hasRetailCapability(role, capability)
 }
 
+interface RetailCompletedSalesJournalQuery {
+  dateFrom?: string
+  dateTo?: string
+  cursor?: string
+  limit?: string
+}
+
+interface NormalizedRetailCompletedSalesJournalQuery {
+  completedFrom?: string
+  completedToExclusive?: string
+  cursor?: { completedAt: string; id: string }
+  limit: number
+}
+
+function dateStart(value: string, field: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error(`Retail completed Sales ${field} must be YYYY-MM-DD.`)
+  const date = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw new Error(`Retail completed Sales ${field} must be a valid date.`)
+  return date.toISOString()
+}
+
+function decodeRetailCompletedSalesCursor(value: string): { completedAt: string; id: string } {
+  try {
+    const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error()
+    const cursor = decoded as { completedAt?: unknown; id?: unknown }
+    if (typeof cursor.completedAt !== 'string' || typeof cursor.id !== 'string' || !cursor.id.trim() || Number.isNaN(new Date(cursor.completedAt).getTime()) || new Date(cursor.completedAt).toISOString() !== cursor.completedAt) throw new Error()
+    return { completedAt: cursor.completedAt, id: cursor.id }
+  } catch {
+    throw new Error('Retail completed Sales cursor is invalid.')
+  }
+}
+
+function encodeRetailCompletedSalesCursor(value: { completedAt: string; id: string }): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64url')
+}
+
+function normalizeRetailCompletedSalesJournalQuery(query: RetailCompletedSalesJournalQuery): NormalizedRetailCompletedSalesJournalQuery {
+  const limit = query.limit === undefined ? 50 : Number(query.limit)
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('Retail completed Sales limit must be an integer between 1 and 100.')
+  const completedFrom = query.dateFrom === undefined ? undefined : dateStart(query.dateFrom, 'dateFrom')
+  let completedToExclusive: string | undefined
+  if (query.dateTo !== undefined) {
+    const inclusiveDate = new Date(dateStart(query.dateTo, 'dateTo'))
+    inclusiveDate.setUTCDate(inclusiveDate.getUTCDate() + 1)
+    completedToExclusive = inclusiveDate.toISOString()
+  }
+  if (completedFrom && completedToExclusive && completedFrom >= completedToExclusive) throw new Error('Retail completed Sales date range is invalid.')
+  return { completedFrom, completedToExclusive, cursor: query.cursor === undefined ? undefined : decodeRetailCompletedSalesCursor(query.cursor), limit }
+}
+
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
   if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailStoreOpeningRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository || !options.retailSaleRepository || !options.retailSaleReturnRepository || !options.retailOfflineSaleSyncRepository || !options.retailOfflineStockConflictMaterializationRepository || !options.retailOfflineStockConflictLifecycleRepository || !options.retailOfflineAuthorityRepository) return
   const retailAccessRepository = options.retailAccessRepository
@@ -284,6 +335,33 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
   app.post('/locations/:locationId/offline-stock-conflicts/resolve',{preHandler:[requireRetailLocationAccess(app,retailAccessRepository,'retail:offline-stock-conflicts:materialize',r=>(r.params as {locationId?:string}).locationId),requireTrustedOrigin()]},async(request,reply)=>{const body=request.body as {offlineOperationId?:string;saleItemId?:string;commandId?:string;expectedCurrentState?:string;disposition?:string;reason?:string;evidence?:string;correctiveRecord?:{type?:string;id?:string}};if(!body||typeof body.offlineOperationId!=='string'||typeof body.saleItemId!=='string'||typeof body.commandId!=='string'||body.expectedCurrentState!=='under_review'||typeof body.disposition!=='string'||typeof body.reason!=='string'||typeof body.evidence!=='string'||!body.correctiveRecord||typeof body.correctiveRecord.type!=='string'||typeof body.correctiveRecord.id!=='string')return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Offline Stock Conflict resolution input is invalid.'});try{const context=getAuthenticatedCommandContext(request);return{lifecycle:await retailOfflineStockConflictLifecycleRepository.resolve((request.params as {locationId:string}).locationId,{offlineOperationId:body.offlineOperationId,saleItemId:body.saleItemId,commandId:body.commandId,expectedCurrentState:'under_review',disposition:body.disposition,reason:body.reason,evidence:body.evidence,correctiveRecord:{type:body.correctiveRecord.type,id:body.correctiveRecord.id},actorUserId:context.actorUserId})}}catch(error){const message=error instanceof Error?error.message:'Retail Offline Stock Conflict resolution conflict.';const badRequest=message.includes(' is required.');return reply.code(badRequest?400:409).send({statusCode:badRequest?400:409,error:badRequest?'Bad Request':'Conflict',message})}})
 
   app.post('/locations/:locationId/offline-stock-conflicts/reopen',{preHandler:[requireRetailLocationAccess(app,retailAccessRepository,'retail:offline-stock-conflicts:materialize',r=>(r.params as {locationId?:string}).locationId),requireTrustedOrigin()]},async(request,reply)=>{const body=request.body as {offlineOperationId?:string;saleItemId?:string;commandId?:string;expectedCurrentState?:string;reason?:string};if(!body||typeof body.offlineOperationId!=='string'||typeof body.saleItemId!=='string'||typeof body.commandId!=='string'||body.expectedCurrentState!=='resolved'||typeof body.reason!=='string')return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Offline Stock Conflict reopen input is invalid.'});try{const context=getAuthenticatedCommandContext(request);return{lifecycle:await retailOfflineStockConflictLifecycleRepository.reopen((request.params as {locationId:string}).locationId,{offlineOperationId:body.offlineOperationId,saleItemId:body.saleItemId,commandId:body.commandId,expectedCurrentState:'resolved',reason:body.reason,actorUserId:context.actorUserId})}}catch(error){const message=error instanceof Error?error.message:'Retail Offline Stock Conflict reopen conflict.';const badRequest=message.includes(' is required.');return reply.code(badRequest?400:409).send({statusCode:badRequest?400:409,error:badRequest?'Bad Request':'Conflict',message})}})
+  app.get('/locations/:locationId/sales', {
+    preHandler: requireRetailLocationAccess(app, retailAccessRepository, 'retail:sales:read', request => (
+      request.params as { locationId?: string }
+    ).locationId),
+  }, async (request, reply) => {
+    try {
+      const query = normalizeRetailCompletedSalesJournalQuery(request.query as RetailCompletedSalesJournalQuery)
+      const locationId = (request.params as { locationId: string }).locationId
+      const page = await retailSaleReturnRepository.listCompletedSales(locationId, { ...query, limit: query.limit + 1 })
+      const items = page.slice(0, query.limit)
+      const last = items.at(-1)
+      return {
+        sales: {
+          items,
+          nextCursor: page.length > query.limit && last
+            ? encodeRetailCompletedSalesCursor({ completedAt: last.completedAt, id: last.id })
+            : undefined,
+        },
+      }
+    } catch (error) {
+      return reply.code(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: error instanceof Error ? error.message : 'Retail completed Sales query is invalid.',
+      })
+    }
+  })
   app.get('/locations/:locationId/sales/:saleId',{preHandler:requireRetailLocationAccess(app,retailAccessRepository,'retail:sales:read',r=>(r.params as {locationId?:string}).locationId)},async(request,reply)=>{const {locationId,saleId}=request.params as {locationId:string;saleId:string};const sale=await retailSaleReturnRepository.findCompletedSale(locationId,saleId);if(!sale)return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail Sale not found.'});return sale})
   app.post('/locations/:locationId/sales/:saleId/returns',{preHandler:[requireRetailLocationAccess(app,retailAccessRepository,'retail:sales:return',r=>(r.params as {locationId?:string}).locationId),requireTrustedOrigin()]},async(request,reply)=>{const body=request.body as {clientOperationId?:string;items?:unknown};if(!body||typeof body.clientOperationId!=='string'||!Array.isArray(body.items))return reply.code(400).send({statusCode:400,error:'Bad Request',message:'Retail Sale Return input is invalid.'});const {locationId,saleId}=request.params as {locationId:string;saleId:string};try{const {replayed,...result}=await retailSaleReturnRepository.complete(locationId,{clientOperationId:body.clientOperationId,originalSaleId:saleId,items:body.items as never},getAuthenticatedCommandContext(request));reply.code(replayed?200:201);return result}catch(error){const message=error instanceof Error?error.message:'Retail Sale Return conflict.';const validation=['Retail Sale Return clientOperationId is required.','Retail Sale Return originalSaleId is required.','Retail Sale Return items are required.','Retail Sale Return saleItemId is required.','Retail Sale Return quantity is invalid.','Retail Sale Return duplicate SaleItem.'];if(validation.includes(message))return reply.code(400).send({statusCode:400,error:'Bad Request',message});if(message==='Retail Sale Return original Sale is invalid.'||message==='Retail Sale Return SaleItem is invalid.'||message==='Retail Sale Return Location mismatch.')return reply.code(404).send({statusCode:404,error:'Not Found',message:'Retail Sale not found.'});return reply.code(409).send({statusCode:409,error:'Conflict',message})}})
 
