@@ -12,7 +12,7 @@ const inventory = (item: Record<string, unknown>) => ({ items: [{ productId: 'pr
 beforeEach(() => {
   api.getRetailLocations.mockResolvedValue([location])
   api.getRetailInventory.mockResolvedValue(inventory({}))
-  api.getRetailMovementHistory.mockResolvedValue({ balance: { onHandQuantity: 0 }, movements: [{ id: 'm-1', createdAt: '2026-10-01T00:00:00.000Z', type: 'opening', quantityDelta: 2, sourceLabel: 'Opening stock' }] })
+  api.getRetailMovementHistory.mockResolvedValue({ balance: { onHandQuantity: 0 }, movements: [{ id: 'm-1', createdAt: '2026-10-01T00:00:00.000Z', type: 'opening', quantityDelta: 2, sourceType: 'retail_sale', sourceLabel: 'Sale' }] })
 })
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
@@ -22,8 +22,18 @@ it('renders authoritative non-zero stock and opens movement history', async () =
   await screen.findByText('Zero product (SKU-1)')
   expect(screen.getByText('7')).toBeTruthy()
   await userEvent.click(screen.getByRole('button', { name: 'Движения' }))
-  await waitFor(() => expect(screen.getByText('Opening stock')).toBeTruthy())
+  await waitFor(() => expect(screen.getByText('Начальный остаток')).toBeTruthy())
+  expect(screen.getByText('Продажа')).toBeTruthy()
   expect(screen.getByText('+2')).toBeTruthy()
+})
+
+it('uses the factual source label for an unknown movement source', async () => {
+  api.getRetailMovementHistory.mockResolvedValue({ balance: { onHandQuantity: 0 }, movements: [{ id: 'm-unknown', createdAt: '2026-10-01T00:00:00.000Z', type: 'goods_receipt', quantityDelta: 2, sourceType: 'future_source', sourceLabel: 'Future source' }] })
+  render(<RetailInventory />)
+  await screen.findByText('Zero product (SKU-1)')
+  await userEvent.click(screen.getByRole('button', { name: 'Движения' }))
+  await screen.findByText('Поступление')
+  expect(screen.getByText('Future source')).toBeTruthy()
 })
 
 it('uses the production search control for source identity and barcode searches', async () => {

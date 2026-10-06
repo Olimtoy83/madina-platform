@@ -4,6 +4,7 @@ import type { RetailLocation } from '@madina/retail'
 import { Alert, Button, Card, EmptyState, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@madina/ui'
 import { getRetailCompletedSales, getRetailLocations, type RetailCompletedSales } from '../../shared/api/retailApi'
 import { retailSaleDetailPath } from './retailSalesLinks'
+import { retailPaymentMethodLabel } from '../../shared/retail/presentation'
 
 function money(value: number, currency: string, exponent: number): string {
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency, minimumFractionDigits: exponent, maximumFractionDigits: exponent }).format(value / 10 ** exponent)
@@ -52,6 +53,6 @@ export function RetailSalesJournal() {
       <Button type="button" onClick={() => load()}>Применить</Button>
     </Card>
     {error && <Alert variant="danger" title="Не удалось загрузить журнал">{error}</Alert>}
-    {loading ? <p>Загрузка продаж…</p> : history?.items.length ? <Card><Table><TableHead><TableRow><TableHeader>Дата</TableHeader><TableHeader>Продажа</TableHeader><TableHeader>Оплата</TableHeader><TableHeader>Итого</TableHeader><TableHeader>Возвраты</TableHeader></TableRow></TableHead><TableBody>{history.items.map(sale => <TableRow key={sale.id}><TableCell>{new Date(sale.completedAt).toLocaleString('ru-RU')}</TableCell><TableCell><Link to={retailSaleDetailPath(locationId, sale.id)}>{sale.id}</Link></TableCell><TableCell>{sale.paymentMethods.join(', ') || '—'}</TableCell><TableCell>{money(sale.payableTotalMinor, sale.currencyCode, sale.currencyExponent)}</TableCell><TableCell>{sale.hasReturns ? 'Есть' : 'Нет'}</TableCell></TableRow>)}</TableBody></Table>{history.nextCursor && <Button type="button" variant="secondary" disabled={loadingMore} onClick={() => load(locationId, history.nextCursor, true)}>{loadingMore ? 'Загрузка…' : 'Показать ещё'}</Button>}</Card> : <EmptyState title="Завершённых продаж нет" description="Для выбранных условий пока нет retail продаж." />}
+    {loading ? <p>Загрузка продаж…</p> : history?.items.length ? <Card><Table><TableHead><TableRow><TableHeader>Дата</TableHeader><TableHeader>Продажа</TableHeader><TableHeader>Оплата</TableHeader><TableHeader>Итого</TableHeader><TableHeader>Возвраты</TableHeader></TableRow></TableHead><TableBody>{history.items.map(sale => <TableRow key={sale.id}><TableCell>{new Date(sale.completedAt).toLocaleString('ru-RU')}</TableCell><TableCell><Link to={retailSaleDetailPath(locationId, sale.id)}>{sale.id}</Link></TableCell><TableCell>{sale.paymentMethods.map(retailPaymentMethodLabel).join(', ') || '—'}</TableCell><TableCell>{money(sale.payableTotalMinor, sale.currencyCode, sale.currencyExponent)}</TableCell><TableCell>{sale.hasReturns ? 'Есть' : 'Нет'}</TableCell></TableRow>)}</TableBody></Table>{history.nextCursor && <Button type="button" variant="secondary" disabled={loadingMore} onClick={() => load(locationId, history.nextCursor, true)}>{loadingMore ? 'Загрузка…' : 'Показать ещё'}</Button>}</Card> : <EmptyState title="Завершённых продаж нет" description="Для выбранных условий пока нет retail продаж." />}
   </section>
 }
