@@ -128,10 +128,12 @@ test('Retail location product edit atomically changes identity, appends barcode,
       const updated = await catalog.updateProductAtLocation(product.id, location.id, { name: 'qqqqqqqq', status: 'inactive', appendBarcode: '0002', unitPriceMinor: 100000 }, context)
       equal(updated.sourceId, '1100000'); equal(updated.name, 'qqqqqqqq'); equal(updated.status, 'inactive'); deepEqual((await catalog.listBarcodes(product.id)).map(item => item.value), ['0001', '0002']); equal(await catalog.findPrice(product.id, location.id), 100000)
       equal((database.prepare('SELECT COUNT(*) AS count FROM retail_inventory_movements').get() as { count: number }).count, 0)
-      await catalog.updateProduct(product.id, { name: 'qqqqqqqq', status: 'active' }, context)
+      await rejects(catalog.setPrice(product.id, location.id, 110000, context), /Retail Product is inactive/)
+      const reactivated = await catalog.updateProductAtLocation(product.id, location.id, { name: 'qwerty-fixed', status: 'active', appendBarcode: '0003', unitPriceMinor: 100000 }, context)
+      equal(reactivated.sourceId, '1100000'); equal(reactivated.name, 'qwerty-fixed'); equal(reactivated.status, 'active'); deepEqual((await catalog.listBarcodes(product.id)).map(item => item.value), ['0001', '0002', '0003']); equal(await catalog.findPrice(product.id, location.id), 100000)
       const before = { product: await catalog.findProduct(product.id), barcodes: await catalog.listBarcodes(product.id), price: await catalog.findPrice(product.id, location.id) }
       database.exec("CREATE TRIGGER fail_edit_price_update BEFORE UPDATE ON retail_product_prices BEGIN SELECT RAISE(ABORT, 'forced edit price failure'); END;")
-      await rejects(catalog.updateProductAtLocation(product.id, location.id, { name: 'must rollback', status: 'active', appendBarcode: '0003', unitPriceMinor: 110000 }, context), /forced edit price failure/)
+      await rejects(catalog.updateProductAtLocation(product.id, location.id, { name: 'must rollback', status: 'active', appendBarcode: '0004', unitPriceMinor: 110000 }, context), /forced edit price failure/)
       deepEqual(await catalog.findProduct(product.id), before.product); deepEqual(await catalog.listBarcodes(product.id), before.barcodes); equal(await catalog.findPrice(product.id, location.id), before.price)
     } finally { database.close(); access.close() }
   })

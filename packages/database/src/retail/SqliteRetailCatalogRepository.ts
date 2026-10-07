@@ -111,7 +111,7 @@ export class SqliteRetailCatalogRepository {
     if (input.appendBarcode !== undefined && input.appendBarcode.trim() !== '' && !barcode) throw new Error('Retail Product barcode is invalid.')
     if (input.unitPriceMinor !== undefined && (!Number.isSafeInteger(input.unitPriceMinor) || input.unitPriceMinor <= 0)) throw new Error('Retail Product price must be a positive safe integer.')
     if (input.unitPriceMinor !== undefined) {
-      if (existing.status !== 'active') throw new Error('Retail Product is inactive.')
+      if (existing.status !== 'active' && input.status !== 'active') throw new Error('Retail Product is inactive.')
       const location = this.database.prepare('SELECT status FROM retail_locations WHERE id=?').get(locationId) as { status: string } | undefined
       if (!location) throw new Error('Retail Location not found.')
       if (location.status !== 'active') throw new Error('Retail Location is inactive.')
