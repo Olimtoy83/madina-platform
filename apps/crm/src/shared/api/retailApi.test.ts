@@ -218,12 +218,12 @@ describe('retailApi', () => {
     ])
   })
 
-  it('does not issue an unbounded Product request for a blank search', async () => {
-    const fetchMock = vi.fn()
+  it('loads the Product catalog when the search is blank', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ products: [] }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(getRetailProducts('   ')).resolves.toEqual([])
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/v1/retail/products'])
   })
 
   it('uses the encoded barcode endpoint and maps Product timestamps', async () => {

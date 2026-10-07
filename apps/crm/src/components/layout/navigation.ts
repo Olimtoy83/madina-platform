@@ -50,6 +50,11 @@ export const navigationItems: readonly NavigationItem[] = [
     retailCapability: 'retail:sales:read',
   },
   {
+    label: 'Розница: товары',
+    path: '/retail/products',
+    retailCapability: 'retail:products:read',
+  },
+  {
     label: 'Розница: остатки',
     path: '/retail/inventory',
     retailCapability: 'retail:inventory:read',
@@ -74,6 +79,7 @@ export const navigationItems: readonly NavigationItem[] = [
 const sabonoRetailLabels: Readonly<Record<string, string>> = {
   '/retail/pos': 'Касса',
   '/retail/sales': 'Продажи',
+  '/retail/products': 'Товары',
   '/retail/inventory': 'Остатки',
   '/retail/goods-receipts': 'Поступления',
 }

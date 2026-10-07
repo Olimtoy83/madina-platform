@@ -20,6 +20,7 @@ import { RetailSalesJournal } from '../../pages/RetailSales/RetailSalesJournal'
 import { RetailSaleDetail } from '../../pages/RetailSales/RetailSaleDetail'
 import { RetailInventory } from '../../pages/RetailInventory/RetailInventory'
 import { RetailGoodsReceipts } from '../../pages/RetailGoodsReceipts/RetailGoodsReceipts'
+import { RetailProducts } from '../../pages/RetailProducts/RetailProducts'
 import { RetailAccessBoundary } from '../RetailAccessBoundary'
 import { RouteRecovery } from '../RouteRecovery'
 import { navigationProfile } from '../navigationProfile'
@@ -109,6 +110,10 @@ export const router = createBrowserRouter([
             <RetailSaleDetail />
           </RetailAccessBoundary>
         ),
+      },
+      {
+        path: 'retail/products',
+        element: <RetailAccessBoundary capability="retail:products:read"><RetailProducts /></RetailAccessBoundary>,
       },
       {
         path: 'retail/inventory',

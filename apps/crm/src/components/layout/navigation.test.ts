@@ -81,6 +81,7 @@ describe('CRM navigation', () => {
     expect(items.map(({ label, path }) => ({ label, path }))).toEqual([
       { label: 'Касса', path: '/retail/pos' },
       { label: 'Продажи', path: '/retail/sales' },
+      { label: 'Товары', path: '/retail/products' },
       { label: 'Остатки', path: '/retail/inventory' },
       { label: 'Поступления', path: '/retail/goods-receipts' },
     ])
@@ -129,6 +130,7 @@ function navigationPathsForManager(): readonly string[] {
     '/statistics',
     '/retail/pos',
     '/retail/sales',
+    '/retail/products',
     '/retail/inventory',
     '/retail/goods-receipts',
     '/retail/offline-operations',

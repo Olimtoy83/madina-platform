@@ -1,6 +1,7 @@
 import type { ProductWorkbookRowError } from '@madina/api'
 import type { Product } from '@madina/core'
 import ExcelJS from 'exceljs'
+import { hasForbiddenWorkbookPackageEntry, inspectWorkbookZipContainer } from './workbookZipSafety.js'
 
 export const PRODUCT_IMPORT_TEMPLATE_VERSION =
   'madina-products-import-v1'
@@ -155,7 +156,10 @@ export async function parseProductImportWorkbook(
     return { ok: false, errors }
   }
 
-  const zipInspection = inspectZipContainer(bytes)
+  const zipInspection = inspectWorkbookZipContainer(bytes, {
+    maxEntries: PRODUCT_IMPORT_MAX_ZIP_ENTRIES,
+    maxUncompressedBytes: PRODUCT_IMPORT_MAX_UNCOMPRESSED_BYTES,
+  })
   if (!zipInspection.ok) {
     addError(errors, {
       row: 0,
@@ -166,7 +170,7 @@ export async function parseProductImportWorkbook(
   }
 
   if (
-    zipInspection.entryNames.some(isForbiddenPackageEntry) ||
+    hasForbiddenWorkbookPackageEntry(zipInspection.entryNames) ||
     containsForbiddenPackageText(bytes)
   ) {
     addError(errors, {
@@ -508,99 +512,10 @@ function isZipFile(bytes: Buffer): boolean {
     bytes[3] === 0x04
 }
 
-function isForbiddenPackageEntry(entryName: string): boolean {
-  return entryName === 'xl/vbaProject.bin' ||
-    entryName.startsWith('xl/externalLinks/')
-}
-
 function containsForbiddenPackageText(bytes: Buffer): boolean {
   const packageText = bytes.toString('latin1')
   return packageText.includes('xl/vbaProject.bin') ||
     packageText.includes('xl/externalLinks/')
-}
-
-type ZipInspection =
-  | { ok: true; entryNames: readonly string[] }
-  | { ok: false; code: string; message: string }
-
-function inspectZipContainer(bytes: Buffer): ZipInspection {
-  const endOfCentralDirectory = findEndOfCentralDirectory(bytes)
-  if (endOfCentralDirectory === undefined) {
-    return invalidZipInspection('Workbook ZIP central directory is missing.')
-  }
-
-  const entryCount = bytes.readUInt16LE(endOfCentralDirectory + 10)
-  const centralDirectorySize = bytes.readUInt32LE(endOfCentralDirectory + 12)
-  let offset = bytes.readUInt32LE(endOfCentralDirectory + 16)
-
-  if (
-    entryCount > PRODUCT_IMPORT_MAX_ZIP_ENTRIES ||
-    offset + centralDirectorySize > bytes.length
-  ) {
-    return invalidZipInspection('Workbook ZIP structure exceeds supported limits.')
-  }
-
-  const entryNames: string[] = []
-  let totalUncompressedBytes = 0
-
-  for (let index = 0; index < entryCount; index += 1) {
-    if (offset + 46 > bytes.length || bytes.readUInt32LE(offset) !== 0x02014b50) {
-      return invalidZipInspection('Workbook ZIP entry is invalid.')
-    }
-
-    const flags = bytes.readUInt16LE(offset + 8)
-    const compressedSize = bytes.readUInt32LE(offset + 20)
-    const uncompressedSize = bytes.readUInt32LE(offset + 24)
-    const nameLength = bytes.readUInt16LE(offset + 28)
-    const extraLength = bytes.readUInt16LE(offset + 30)
-    const commentLength = bytes.readUInt16LE(offset + 32)
-    const nextOffset = offset + 46 + nameLength + extraLength + commentLength
-
-    if (
-      flags & 0x0001 ||
-      compressedSize === 0xffffffff ||
-      uncompressedSize === 0xffffffff ||
-      nextOffset > bytes.length
-    ) {
-      return invalidZipInspection('Workbook ZIP entry is unsupported.')
-    }
-
-    totalUncompressedBytes += uncompressedSize
-    if (
-      totalUncompressedBytes > PRODUCT_IMPORT_MAX_UNCOMPRESSED_BYTES ||
-      (uncompressedSize > 1_024 * 1_024 &&
-        (compressedSize === 0 || uncompressedSize > compressedSize * 100))
-    ) {
-      return {
-        ok: false,
-        code: 'unsafe_workbook_content',
-        message: 'Workbook ZIP compression exceeds supported safety limits.',
-      }
-    }
-
-    entryNames.push(bytes.toString('utf8', offset + 46, offset + 46 + nameLength))
-    offset = nextOffset
-  }
-
-  return { ok: true, entryNames }
-}
-
-function findEndOfCentralDirectory(bytes: Buffer): number | undefined {
-  const minimumOffset = Math.max(0, bytes.length - 65_557)
-
-  for (let offset = bytes.length - 22; offset >= minimumOffset; offset -= 1) {
-    if (bytes.readUInt32LE(offset) === 0x06054b50) return offset
-  }
-
-  return undefined
-}
-
-function invalidZipInspection(message: string): ZipInspection {
-  return {
-    ok: false,
-    code: 'invalid_xlsx',
-    message,
-  }
 }
 
 function addError(

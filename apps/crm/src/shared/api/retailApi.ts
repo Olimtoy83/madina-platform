@@ -1,5 +1,5 @@
 import type { RetailCompletedSalesListResponse, RetailProductResponse, RetailInventoryListResponse, RetailInventoryMovementListResponse, RetailGoodsReceiptListResponse, RetailGoodsReceiptResponse, RetailGoodsReceiptLineResponse } from '@madina/api'
-import type { RetailLocation, RetailProduct } from '@madina/retail'
+import type { RetailLocation, RetailProduct, RetailProductPriceImportResult, RetailProductPriceImportRow, RetailProductStatus } from '@madina/retail'
 import { HttpError, requestJson, requestResponse } from './httpClient'
 
 const retailLocationsUrl = '/api/v1/retail/locations'
@@ -24,6 +24,10 @@ interface RetailProductsListResponse {
 interface RetailProductPriceResponse {
   unitPriceMinor: number
 }
+
+export interface RetailProductDetail { product: RetailProduct; barcodes: ReadonlyArray<{ value: string }> }
+export interface RetailWorkbookError { row: number; column?: string; code: string; message: string }
+export interface RetailWorkbookPreflight { rows: readonly RetailProductPriceImportRow[]; result: RetailProductPriceImportResult }
 
 export interface RetailSaleCompletionRequest {
   clientOperationId: string
@@ -238,17 +242,24 @@ export async function getRetailOfflineAuthorityPermits(locationId: string, autho
 }
 
 export async function getRetailProducts(
-  search: string,
+  search = '',
 ): Promise<RetailProduct[]> {
   const term = search.trim()
-  if (!term) return []
-
   const response = await requestJson<RetailProductsListResponse>(
-    `${retailProductsUrl}?search=${encodeURIComponent(term)}`,
+    term ? `${retailProductsUrl}?search=${encodeURIComponent(term)}` : retailProductsUrl,
   )
 
   return response.products.map(toRetailProduct)
 }
+
+export function getRetailProductDetail(productId: string): Promise<RetailProductDetail> { return requestJson(`${retailProductsUrl}/${encodeURIComponent(productId)}`) }
+export function createRetailProduct(payload: { sourceId: string; name: string; status: RetailProductStatus }): Promise<RetailProduct> { return requestJson<{ product: RetailProductResponse }>(retailProductsUrl, { method: 'POST', body: payload }).then(value => toRetailProduct(value.product)) }
+export function updateRetailProduct(productId: string, payload: { name: string; status: RetailProductStatus }): Promise<RetailProduct> { return requestJson<{ product: RetailProductResponse }>(`${retailProductsUrl}/${encodeURIComponent(productId)}`, { method: 'PATCH', body: payload }).then(value => toRetailProduct(value.product)) }
+export function addRetailProductBarcode(productId: string, value: string): Promise<void> { return requestJson(`${retailProductsUrl}/${encodeURIComponent(productId)}/barcodes`, { method: 'POST', body: { value } }) }
+export function setRetailProductPrice(locationId: string, productId: string, unitPriceMinor: number): Promise<void> { return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/products/${encodeURIComponent(productId)}/price`, { method: 'PUT', body: { unitPriceMinor } }) }
+export function importRetailProductsWithPrices(locationId: string, dryRun: boolean, rows: readonly RetailProductPriceImportRow[]): Promise<RetailProductPriceImportResult> { return requestJson<{ result: RetailProductPriceImportResult }>(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/products/imports`, { method: 'POST', body: { dryRun, rows } }).then(value => value.result) }
+export async function preflightRetailProductWorkbook(locationId: string, file: File): Promise<RetailWorkbookPreflight> { const body = new FormData(); body.append('file', file); const response = await requestResponse(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/products/import-workbook/preflight`, { method: 'POST', body }); return (await response.json() as { preflight: RetailWorkbookPreflight }).preflight }
+export async function downloadRetailProductTemplate(): Promise<Blob> { const response = await requestResponse(`${retailProductsUrl}/import-template`); return response.blob() }
 
 export async function getRetailProductByBarcode(
   barcode: string,

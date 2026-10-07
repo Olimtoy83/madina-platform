@@ -2,9 +2,10 @@ import { RetailInsufficientStockError, StoreOpeningError } from '@madina/databas
 import type { SqliteRetailAccessRepository, SqliteRetailCatalogRepository, SqliteRetailGoodsReceiptRepository, SqliteRetailInventoryRepository, SqliteRetailStoreOpeningRepository, SqliteRetailReconciliationRepository, SqliteRetailTransferRepository, SqliteRetailSaleRepository, SqliteRetailSaleReturnRepository, SqliteRetailOfflineSaleSyncRepository, SqliteRetailOfflineStockConflictMaterializationRepository, SqliteRetailOfflineStockConflictLifecycleRepository, SqliteRetailOfflineAuthorityRepository } from '@madina/database'
 import type { RetailCapability } from '@madina/retail'
 import { hasRetailCapability } from '@madina/retail'
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { getAuthenticatedCommandContext, requireAuthentication, requireTrustedOrigin } from '../../../../plugins/authentication.js'
 import { requireRetailLocationAccess, requireRetailLocationsAccess } from '../../../../security/retailLocationAccess.js'
+import { createRetailProductImportTemplateWorkbook, parseRetailProductImportWorkbook, RETAIL_PRODUCT_WORKBOOK_MIME_TYPE, type RetailWorkbookError } from '../../../../workbooks/retailProductsWorkbook.js'
 
 interface RetailRoutesOptions {
   retailAccessRepository?: SqliteRetailAccessRepository
@@ -94,6 +95,7 @@ function retailPage(query:RetailPageQuery, kind:'inventory'|'movement'|'receipt'
 function encodeRetailCursor(value:Record<string,string>):string{return Buffer.from(JSON.stringify(value)).toString('base64url')}
 function movementSourceLabel(type:string):string { return ({retail_sale:'Sale',retail_sale_return:'Return',retail_goods_receipt:'Goods receipt',retail_transfer_dispatched:'Transfer dispatched',retail_transfer_received:'Transfer received',retail_store_opening:'Opening stock',retail_offline_sale_sync:'Offline sale sync',retail_offline_stock_conflict_materialization:'Verified offline materialization'} as Record<string,string>)[type]??'Retail inventory source' }
 function sendGoodsReceiptError(reply:{code(statusCode:number):{send(payload:unknown):void}},error:unknown):void{const message=error instanceof Error?error.message:'Retail Goods Receipt conflict.';const bad=message.includes('is required.')||message.includes('quantity must')||message.includes('duplicate Product')||message.includes('input is invalid.');const notFound=message==='Retail Product not found.'||message==='Retail Location not found.'||message==='Retail Goods Receipt not found.';reply.code(bad?400:notFound?404:409).send({statusCode:bad?400:notFound?404:409,error:bad?'Bad Request':notFound?'Not Found':'Conflict',message})}
+async function readRetailWorkbook(request: FastifyRequest): Promise<{ ok: true; bytes: Buffer } | { ok: false; errors: RetailWorkbookError[] }> { let file: Buffer | undefined; const errors: RetailWorkbookError[] = []; try { for await (const part of request.parts()) { if (part.type !== 'file' || part.fieldname !== 'file' || file) { errors.push({ row: 0, code: 'invalid_multipart', message: 'Нужен один файл XLSX в поле file.' }); continue } file = await part.toBuffer() } } catch { return { ok: false, errors: [{ row: 0, code: 'invalid_multipart', message: 'Не удалось прочитать файл XLSX.' }] } } return file && errors.length === 0 ? { ok: true, bytes: file } : { ok: false, errors: errors.length ? errors : [{ row: 0, code: 'missing_file', message: 'Выберите файл XLSX.' }] } }
 
 export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app, options) => {
   if (!options.retailAccessRepository || !options.retailCatalogRepository || !options.retailInventoryRepository || !options.retailStoreOpeningRepository || !options.retailReconciliationRepository || !options.retailGoodsReceiptRepository || !options.retailTransferRepository || !options.retailSaleRepository || !options.retailSaleReturnRepository || !options.retailOfflineSaleSyncRepository || !options.retailOfflineStockConflictMaterializationRepository || !options.retailOfflineStockConflictLifecycleRepository || !options.retailOfflineAuthorityRepository) return
@@ -303,6 +305,30 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
       const message = error instanceof Error ? error.message : 'Retail Product price import error.'
       return reply.code(message.includes('currency configuration') ? 400 : 409).send({ statusCode: message.includes('currency configuration') ? 400 : 409, error: message.includes('currency configuration') ? 'Bad Request' : 'Conflict', message })
     }
+  })
+
+  app.get('/products/import-template', { preHandler: requireAuthentication(app) }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:import')) return sendRetailPermissionError(reply)
+    const workbook = await createRetailProductImportTemplateWorkbook()
+    reply.header('Content-Disposition', 'attachment; filename="sabono-retail-products-v1.xlsx"').type(RETAIL_PRODUCT_WORKBOOK_MIME_TYPE).send(workbook)
+  })
+
+  app.post('/locations/:locationId/products/import-workbook/preflight', {
+    preHandler: [
+      requireRetailLocationAccess(app, retailAccessRepository, 'retail:products:import', (request) => (request.params as { locationId?: string }).locationId),
+      requireRetailLocationAccess(app, retailAccessRepository, 'retail:prices:manage', (request) => (request.params as { locationId?: string }).locationId),
+      requireTrustedOrigin(),
+    ],
+  }, async (request, reply) => {
+    const upload = await readRetailWorkbook(request)
+    if (!upload.ok) return reply.code(422).send({ statusCode: 422, error: 'Unprocessable Entity', message: 'Проверка шаблона не пройдена.', errors: upload.errors })
+    const location = await retailAccessRepository.findLocation((request.params as { locationId: string }).locationId)
+    if (!location || location.currencyExponent === undefined) return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Для точки не настроена валюта.' })
+    const preflight = await parseRetailProductImportWorkbook(upload.bytes, location.currencyExponent)
+    if (!preflight.ok) return reply.code(422).send({ statusCode: 422, error: 'Unprocessable Entity', message: 'Проверка шаблона не пройдена.', errors: preflight.errors })
+    try { return { preflight: { rows: preflight.rows, result: await retailCatalogRepository.importProductsWithPrices(location.id, preflight.rows, true, getAuthenticatedCommandContext(request)) } } } catch (error) { return reply.code(409).send({ statusCode: 409, error: 'Conflict', message: error instanceof Error ? error.message : 'Предварительная проверка импорта не выполнена.' }) }
   })
 
   app.post('/locations', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
