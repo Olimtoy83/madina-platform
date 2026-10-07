@@ -102,6 +102,31 @@ export class SqliteRetailCatalogRepository {
     return record
   }
 
+  async updateProductAtLocation(productId: string, locationId: string, input: { name: string; status: RetailProductStatus; appendBarcode?: string; unitPriceMinor?: number }, context: CommandContext): Promise<RetailProduct> {
+    const existing = await this.findProduct(productId)
+    if (!existing) throw new Error('Retail Product not found.')
+    const name = requiredText(input.name, 'name')
+    if (input.status !== 'active' && input.status !== 'inactive') throw new Error('Retail Product status is invalid.')
+    const barcode = input.appendBarcode === undefined || input.appendBarcode.trim() === '' ? undefined : normalizeRetailBarcode(input.appendBarcode)
+    if (input.appendBarcode !== undefined && input.appendBarcode.trim() !== '' && !barcode) throw new Error('Retail Product barcode is invalid.')
+    if (input.unitPriceMinor !== undefined && (!Number.isSafeInteger(input.unitPriceMinor) || input.unitPriceMinor <= 0)) throw new Error('Retail Product price must be a positive safe integer.')
+    if (input.unitPriceMinor !== undefined) {
+      if (existing.status !== 'active') throw new Error('Retail Product is inactive.')
+      const location = this.database.prepare('SELECT status FROM retail_locations WHERE id=?').get(locationId) as { status: string } | undefined
+      if (!location) throw new Error('Retail Location not found.')
+      if (location.status !== 'active') throw new Error('Retail Location is inactive.')
+    }
+    if (barcode) { const owners = this.barcodeProductIds(barcode); if (owners.some(id => id !== productId)) throw new Error('Retail Product barcode conflicts with another Product.'); if (owners.includes(productId)) throw new Error('Retail Product barcode already exists.') }
+    const updated: RetailProduct = { ...existing, name, status: input.status, updatedAt: new Date() }
+    await this.transaction(async () => {
+      this.database.prepare('UPDATE retail_products SET name = ?, status = ?, updated_at = ? WHERE id = ?').run(updated.name, updated.status, updated.updatedAt.toISOString(), updated.id)
+      this.audit(context, updated.id, 'retail.product_updated')
+      if (barcode) { const now = new Date(); this.database.prepare('INSERT INTO retail_product_barcodes (id, product_id, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(randomUUID(), productId, barcode, now.toISOString(), now.toISOString()); this.audit(context, productId, 'retail.product_barcode_added', { barcode }) }
+      if (input.unitPriceMinor !== undefined) { const now = new Date().toISOString(); this.database.prepare('INSERT INTO retail_product_prices(product_id,location_id,unit_price_minor,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(product_id,location_id) DO UPDATE SET unit_price_minor=excluded.unit_price_minor,updated_at=excluded.updated_at').run(productId, locationId, input.unitPriceMinor, now, now); this.audit(context, productId, 'retail.product_price_set', { locationId, unitPriceMinor: input.unitPriceMinor }) }
+    })
+    return updated
+  }
+
   async importProducts(rows: readonly RetailProductImportRow[], dryRun: boolean, context: CommandContext): Promise<RetailProductImportResult> {
     const outcomes: RetailProductImportOutcome[] = []
     const products = new Map((await this.listProducts()).map((product) => [product.sourceId, product]))

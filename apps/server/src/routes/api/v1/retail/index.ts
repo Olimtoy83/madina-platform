@@ -272,6 +272,18 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
     try { return { product: await retailCatalogRepository.updateProduct((request.params as { productId: string }).productId, { name: body.name, status: body.status }, getAuthenticatedCommandContext(request)) } } catch (error) { return reply.code(error instanceof Error && error.message === 'Retail Product not found.' ? 404 : 400).send({ statusCode: error instanceof Error && error.message === 'Retail Product not found.' ? 404 : 400, error: 'Retail Product error', message: error instanceof Error ? error.message : 'Retail Product error.' }) }
   })
 
+  app.patch('/locations/:locationId/products/:productId', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
+    const principal = await app.authenticateRequest(request)
+    if (!principal) return
+    if (!hasRetailPermission(principal.role, 'retail:products:manage') || !hasRetailPermission(principal.role, 'retail:prices:manage')) return sendRetailPermissionError(reply)
+    const body = request.body as { name?: string; status?: 'active' | 'inactive'; appendBarcode?: string; unitPriceMinor?: number } | undefined
+    if (!body || typeof body.name !== 'string' || (body.status !== 'active' && body.status !== 'inactive') || (body.appendBarcode !== undefined && typeof body.appendBarcode !== 'string') || (body.unitPriceMinor !== undefined && !Number.isSafeInteger(body.unitPriceMinor))) return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Product update input is invalid.' })
+    const locationId = (request.params as { locationId: string }).locationId
+    const location = await retailAccessRepository.findLocation(locationId)
+    if (!location || location.status !== 'active' || !await retailAccessRepository.hasActiveGrant(principal.id, locationId)) return sendRetailPermissionError(reply)
+    try { return { product: await retailCatalogRepository.updateProductAtLocation((request.params as { productId: string }).productId, locationId, { name: body.name, status: body.status, appendBarcode: body.appendBarcode, unitPriceMinor: body.unitPriceMinor }, getAuthenticatedCommandContext(request)) } } catch (error) { const message = error instanceof Error ? error.message : 'Retail Product update error.'; return reply.code(message === 'Retail Product not found.' || message === 'Retail Location not found.' ? 404 : 409).send({ statusCode: message === 'Retail Product not found.' || message === 'Retail Location not found.' ? 404 : 409, error: 'Retail Product update error', message }) }
+  })
+
   app.post('/products/:productId/barcodes', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
     if (!principal) return

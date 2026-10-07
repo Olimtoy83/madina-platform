@@ -1808,6 +1808,62 @@ test('Retail location product import requires import and price access, protects 
   }
 })
 
+test('Retail location product edit applies the combined catalog change through the HTTP route', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-product-edit-routes-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [
+    { id: 'admin-1', role: 'admin' },
+    { id: 'manager-1', role: 'manager' },
+    { id: 'operator-1', role: 'operator' },
+  ])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const catalog = new SqliteRetailCatalogRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'product-edit-route-test' }
+  const location = await access.createLocation({ code: 'CATALOG', name: 'Catalog store', type: 'store', status: 'active' }, context)
+  const ungrantedLocation = await access.createLocation({ code: 'NO-GRANT', name: 'No grant', type: 'store', status: 'active' }, context)
+  await access.configureCurrency(location.id, 'UZS', 0, context)
+  await access.configureCurrency(ungrantedLocation.id, 'UZS', 0, context)
+  await access.grant('admin-1', location.id, context)
+  const product = await catalog.createProduct({ sourceId: 'SKU-1', name: 'Original product' }, context)
+  await catalog.addBarcode(product.id, '0001', context)
+  await catalog.setPrice(product.id, location.id, 90000, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  const payload = { name: 'Renamed product', status: 'inactive' as const, appendBarcode: '0002', unitPriceMinor: 100000 }
+  const url = `/api/v1/retail/locations/${location.id}/products/${product.id}`
+
+  try {
+    await app.ready()
+    equal((await app.inject({ method: 'PATCH', url, payload })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'PATCH', url, payload })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'PATCH', url, payload })).statusCode, 403)
+    equal((await request(app, sessions['admin-1']!, { method: 'PATCH', url: `/api/v1/retail/locations/${ungrantedLocation.id}/products/${product.id}`, payload })).statusCode, 403)
+    equal((await app.inject({ method: 'PATCH', url, payload, headers: { cookie: `madina-session=${sessions['admin-1']!}`, origin: 'https://untrusted.example' } })).statusCode, 403)
+
+    const updated = await request(app, sessions['admin-1']!, { method: 'PATCH', url, payload })
+    equal(updated.statusCode, 200)
+    const responseProduct = (updated.json() as { product: { id: string; name: string; status: string } }).product
+    equal(responseProduct.id, product.id)
+    equal(responseProduct.name, payload.name)
+    equal(responseProduct.status, payload.status)
+
+    const persisted = await catalog.findProduct(product.id)
+    equal(persisted?.name, payload.name)
+    equal(persisted?.status, payload.status)
+    deepEqual((await catalog.listBarcodes(product.id)).map((barcode) => barcode.value), ['0001', '0002'])
+    equal(await catalog.findPrice(product.id, location.id), payload.unitPriceMinor)
+  } finally {
+    await app.close()
+    catalog.close()
+    access.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('Retail inventory reads require an active location grant and inventory capability', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'madina-retail-inventory-routes-'))
   const databaseFile = join(directory, 'madina.sqlite')
