@@ -95,6 +95,26 @@ export interface RetailProductImportResult {
   summary: Record<RetailProductImportOutcomeKind, number>
 }
 
+export interface RetailProductPriceImportRow extends RetailProductImportRow {
+  unitPriceMinor: number
+}
+
+export type RetailProductPriceImportEffect = 'created' | 'updated' | 'no_op'
+
+export interface RetailProductPriceImportOutcome extends RetailProductImportOutcome {
+  price?: {
+    kind: RetailProductPriceImportEffect
+    unitPriceMinor: number
+  }
+}
+
+export interface RetailProductPriceImportResult {
+  dryRun: boolean
+  canApply: boolean
+  outcomes: readonly RetailProductPriceImportOutcome[]
+  summary: Record<RetailProductImportOutcomeKind, number>
+}
+
 export interface RetailLocation {
   id: string
   code: string

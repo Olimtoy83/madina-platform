@@ -7,6 +7,9 @@ import type {
   RetailProductImportOutcomeKind,
   RetailProductImportResult,
   RetailProductImportRow,
+  RetailProductPriceImportOutcome,
+  RetailProductPriceImportResult,
+  RetailProductPriceImportRow,
   RetailProductStatus,
 } from '@madina/retail'
 import type { AuditEvent, CommandContext } from '@madina/shared'
@@ -145,6 +148,91 @@ export class SqliteRetailCatalogRepository {
     })
     const summary = Object.fromEntries(outcomeKinds.map((kind) => [kind, outcomes.filter((outcome) => outcome.kind === kind).length])) as Record<RetailProductImportOutcomeKind, number>
     return { dryRun, outcomes, summary }
+  }
+
+  async importProductsWithPrices(locationId: string, rows: readonly RetailProductPriceImportRow[], dryRun: boolean, context: CommandContext): Promise<RetailProductPriceImportResult> {
+    const location = this.database.prepare('SELECT status, currency_code, currency_exponent FROM retail_locations WHERE id = ?').get(locationId) as { status: string; currency_code: string | null; currency_exponent: number | null } | undefined
+    if (!location) throw new Error('Retail Location not found.')
+    if (location.status !== 'active') throw new Error('Retail Location is inactive.')
+    const currencyExponent = location.currency_exponent
+    if (!location.currency_code || !/^[A-Z]{3}$/.test(location.currency_code) || currencyExponent === null || !Number.isSafeInteger(currencyExponent) || currencyExponent < 0 || currencyExponent > 9) throw new Error('Retail Location currency configuration is invalid.')
+
+    const outcomes: RetailProductPriceImportOutcome[] = []
+    const products = new Map((await this.listProducts()).map((product) => [product.sourceId, product]))
+    const barcodeOwners = new Map<string, string>()
+    const prices = new Map<string, number>()
+    for (const product of products.values()) {
+      for (const barcode of await this.listBarcodes(product.id)) barcodeOwners.set(barcode.value, product.id)
+      const price = await this.findPrice(product.id, locationId)
+      if (price !== undefined) prices.set(product.id, price)
+    }
+
+    const mutations: Array<() => void> = []
+    for (const row of rows) {
+      const sourceRef = row.sourceRef || ''
+      const sourceId = row.sourceId?.trim()
+      const name = row.name?.trim()
+      const barcode = row.barcode === undefined ? undefined : normalizeRetailBarcode(row.barcode)
+      if (!sourceId || !name || (row.barcode !== undefined && !barcode) || !Number.isSafeInteger(row.unitPriceMinor) || row.unitPriceMinor <= 0) {
+        outcomes.push({ sourceRef, sourceId, barcode: row.barcode, kind: 'quarantine', reason: !sourceId ? 'missing_source_id' : !name ? 'missing_name' : row.barcode !== undefined && !barcode ? 'invalid_barcode' : 'invalid_unit_price_minor' })
+        continue
+      }
+      const status: RetailProductStatus = row.status === 'inactive' ? 'inactive' : row.status === undefined || row.status === 'active' ? 'active' : 'inactive'
+      if (row.status !== undefined && row.status !== 'active' && row.status !== 'inactive') {
+        outcomes.push({ sourceRef, sourceId, barcode, kind: 'quarantine', reason: 'invalid_status' })
+        continue
+      }
+      let product = products.get(sourceId)
+      if (barcode && barcodeOwners.has(barcode) && barcodeOwners.get(barcode) !== product?.id) {
+        outcomes.push({ sourceRef, sourceId, barcode, kind: 'conflict', reason: 'barcode_associated_with_another_product' })
+        continue
+      }
+      if (status !== 'active') {
+        outcomes.push({ sourceRef, sourceId, barcode, kind: 'quarantine', reason: 'price_requires_active_product' })
+        continue
+      }
+      let kind: RetailProductImportOutcomeKind = 'no_op'
+      if (!product) {
+        product = this.makeProduct({ sourceId, name, status })
+        products.set(sourceId, product)
+        const created = product
+        mutations.push(() => this.insertProduct(created))
+        kind = 'created'
+      } else if (product.name !== name || product.status !== status) {
+        const updated = { ...product, name, status, updatedAt: new Date() }
+        products.set(sourceId, updated)
+        product = updated
+        mutations.push(() => this.database.prepare('UPDATE retail_products SET name = ?, status = ?, updated_at = ? WHERE id = ?').run(updated.name, updated.status, updated.updatedAt.toISOString(), updated.id))
+        kind = 'updated'
+      }
+      if (barcode && !barcodeOwners.has(barcode)) {
+        barcodeOwners.set(barcode, product.id)
+        const now = new Date()
+        mutations.push(() => this.database.prepare('INSERT INTO retail_product_barcodes (id, product_id, value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(randomUUID(), product!.id, barcode, now.toISOString(), now.toISOString()))
+      }
+      const currentPrice = prices.get(product.id)
+      const priceKind = currentPrice === undefined ? 'created' : currentPrice === row.unitPriceMinor ? 'no_op' : 'updated'
+      prices.set(product.id, row.unitPriceMinor)
+      if (priceKind !== 'no_op') {
+        const now = new Date().toISOString()
+        const productId = product.id
+        const unitPriceMinor = row.unitPriceMinor
+        mutations.push(() => this.database.prepare('INSERT INTO retail_product_prices(product_id,location_id,unit_price_minor,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(product_id,location_id) DO UPDATE SET unit_price_minor=excluded.unit_price_minor,updated_at=excluded.updated_at').run(productId, locationId, unitPriceMinor, now, now))
+      }
+      outcomes.push({ sourceRef, sourceId, barcode, kind, price: { kind: priceKind, unitPriceMinor: row.unitPriceMinor } })
+    }
+    const canApply = outcomes.every((outcome) => outcome.kind !== 'conflict' && outcome.kind !== 'quarantine')
+    if (!dryRun && canApply && mutations.length) await this.transaction(async () => {
+      mutations.forEach((mutation) => mutation())
+      this.audit(context, 'retail-product-import', 'retail.products_imported', {
+        locationId,
+        rows: rows.length,
+        productsApplied: outcomes.filter((outcome) => outcome.kind === 'created' || outcome.kind === 'updated').length,
+        pricesApplied: outcomes.filter((outcome) => outcome.price?.kind === 'created' || outcome.price?.kind === 'updated').length,
+      })
+    })
+    const summary = Object.fromEntries(outcomeKinds.map((kind) => [kind, outcomes.filter((outcome) => outcome.kind === kind).length])) as Record<RetailProductImportOutcomeKind, number>
+    return { dryRun, canApply, outcomes, summary }
   }
 
   private makeProduct(input: { sourceId: string; name: string; status?: RetailProductStatus }): RetailProduct {

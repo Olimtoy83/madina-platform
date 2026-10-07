@@ -288,6 +288,23 @@ export const retailRoutes: FastifyPluginAsync<RetailRoutesOptions> = async (app,
     return { result: await retailCatalogRepository.importProducts(body.rows as never, body.dryRun, getAuthenticatedCommandContext(request)) }
   })
 
+  app.post('/locations/:locationId/products/imports', {
+    preHandler: [
+      requireRetailLocationAccess(app, retailAccessRepository, 'retail:products:import', (request) => (request.params as { locationId?: string }).locationId),
+      requireRetailLocationAccess(app, retailAccessRepository, 'retail:prices:manage', (request) => (request.params as { locationId?: string }).locationId),
+      requireTrustedOrigin(),
+    ],
+  }, async (request, reply) => {
+    const body = request.body as { dryRun?: boolean; rows?: unknown } | undefined
+    if (!body || typeof body.dryRun !== 'boolean' || !Array.isArray(body.rows)) return reply.code(400).send({ statusCode: 400, error: 'Bad Request', message: 'Retail Product price import input is invalid.' })
+    try {
+      return { result: await retailCatalogRepository.importProductsWithPrices((request.params as { locationId: string }).locationId, body.rows as never, body.dryRun, getAuthenticatedCommandContext(request)) }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Retail Product price import error.'
+      return reply.code(message.includes('currency configuration') ? 400 : 409).send({ statusCode: message.includes('currency configuration') ? 400 : 409, error: message.includes('currency configuration') ? 'Bad Request' : 'Conflict', message })
+    }
+  })
+
   app.post('/locations', { preHandler: [requireAuthentication(app), requireTrustedOrigin()] }, async (request, reply) => {
     const principal = await app.authenticateRequest(request)
     if (!principal) return

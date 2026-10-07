@@ -1753,6 +1753,61 @@ test('Retail Product routes enforce catalog capabilities and preserve determinis
   }
 })
 
+test('Retail location product import requires import and price access, protects origin, and applies catalog prices atomically', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-product-price-import-routes-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [
+    { id: 'admin-1', role: 'admin' },
+    { id: 'manager-1', role: 'manager' },
+    { id: 'operator-1', role: 'operator' },
+  ])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'admin-1', requestId: 'price-import-route-test' }
+  const location = await access.createLocation({ code: 'CATALOG', name: 'Catalog store', type: 'store', status: 'active' }, context)
+  const ungrantedLocation = await access.createLocation({ code: 'NO-GRANT', name: 'No grant', type: 'store', status: 'active' }, context)
+  const inactiveLocation = await access.createLocation({ code: 'INACTIVE', name: 'Inactive', type: 'store', status: 'inactive' }, context)
+  await access.configureCurrency(location.id, 'UZS', 0, context)
+  await access.configureCurrency(ungrantedLocation.id, 'UZS', 0, context)
+  await access.grant('admin-1', location.id, context)
+  await access.grant('admin-1', inactiveLocation.id, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  const url = `/api/v1/retail/locations/${location.id}/products/imports`
+  const payload = { dryRun: false, rows: [{ sourceRef: 'r-1', sourceId: 'SKU-1', name: 'Tea', barcode: '460000000001', unitPriceMinor: 12500 }] }
+  try {
+    await app.ready()
+    equal((await app.inject({ method: 'POST', url, payload })).statusCode, 401)
+    equal((await request(app, sessions['operator-1']!, { method: 'POST', url, payload })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url, payload })).statusCode, 403)
+    equal((await request(app, sessions['admin-1']!, { method: 'POST', url: `/api/v1/retail/locations/${ungrantedLocation.id}/products/imports`, payload })).statusCode, 403)
+    equal((await request(app, sessions['admin-1']!, { method: 'POST', url: `/api/v1/retail/locations/${inactiveLocation.id}/products/imports`, payload })).statusCode, 403)
+    equal((await app.inject({ method: 'POST', url, payload, headers: { cookie: `madina-session=${sessions['admin-1']!}`, origin: 'https://untrusted.example' } })).statusCode, 403)
+
+    const dryRun = await request(app, sessions['admin-1']!, { method: 'POST', url, payload: { ...payload, dryRun: true } })
+    equal(dryRun.statusCode, 200)
+    equal((dryRun.json() as { result: { dryRun: boolean; canApply: boolean; summary: { created: number } } }).result.dryRun, true)
+    equal((dryRun.json() as { result: { canApply: boolean } }).result.canApply, true)
+    const database = new DatabaseSync(databaseFile)
+    try {
+      equal((database.prepare('SELECT COUNT(*) AS count FROM retail_products').get() as { count: number }).count, 0)
+      const applied = await request(app, sessions['admin-1']!, { method: 'POST', url, payload })
+      equal(applied.statusCode, 200)
+      const product = database.prepare("SELECT id FROM retail_products WHERE source_id = 'SKU-1'").get() as { id: string }
+      equal((database.prepare('SELECT unit_price_minor FROM retail_product_prices WHERE product_id=? AND location_id=?').get(product.id, location.id) as { unit_price_minor: number }).unit_price_minor, 12500)
+      equal((database.prepare('SELECT COUNT(*) AS count FROM retail_inventory_movements').get() as { count: number }).count, 0)
+      equal((database.prepare('SELECT COUNT(*) AS count FROM retail_inventory_balances').get() as { count: number }).count, 0)
+    } finally { database.close() }
+  } finally {
+    access.close()
+    await app.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('Retail inventory reads require an active location grant and inventory capability', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'madina-retail-inventory-routes-'))
   const databaseFile = join(directory, 'madina.sqlite')
