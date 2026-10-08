@@ -64,7 +64,7 @@ export interface RetailGoodsReceipt { id: string; receiptReference: string; loca
 export interface RetailGoodsReceiptLine { id: string; receiptId: string; productId: string; productName: string; productSourceId: string; quantity: number }
 export type RetailTransferStatus = 'draft'|'dispatched'|'received'
 export interface RetailTransfer { id:string; sourceLocationId:string; destinationLocationId:string; status:RetailTransferStatus; createdAt:Date; createdBy:string; dispatchedAt?:Date; receivedAt?:Date }
-export interface RetailTransferLine { id:string; transferId:string; productId:string; quantity:number }
+export interface RetailTransferLine { id:string; transferId:string; productId:string; productName:string; productSourceId:string; quantity:number }
 
 export interface RetailProductImportRow {
   sourceRef: string
