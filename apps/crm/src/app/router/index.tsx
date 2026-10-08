@@ -21,6 +21,7 @@ import { RetailSaleDetail } from '../../pages/RetailSales/RetailSaleDetail'
 import { RetailInventory } from '../../pages/RetailInventory/RetailInventory'
 import { RetailGoodsReceipts } from '../../pages/RetailGoodsReceipts/RetailGoodsReceipts'
 import { RetailProducts } from '../../pages/RetailProducts/RetailProducts'
+import { RetailTransfers } from '../../pages/RetailTransfers/RetailTransfers'
 import { RetailAccessBoundary } from '../RetailAccessBoundary'
 import { RouteRecovery } from '../RouteRecovery'
 import { navigationProfile } from '../navigationProfile'
@@ -122,6 +123,10 @@ export const router = createBrowserRouter([
       {
         path: 'retail/goods-receipts',
         element: <RetailAccessBoundary capability="retail:goods-receipts:read"><RetailGoodsReceipts /></RetailAccessBoundary>,
+      },
+      {
+        path: 'retail/transfers',
+        element: <RetailAccessBoundary capability="retail:transfers:read"><RetailTransfers /></RetailAccessBoundary>,
       },
       {
         path: 'retail/offline-operations',

@@ -119,6 +119,11 @@ export interface RetailMovementPage { balance?: RetailInventoryMovementListRespo
 export interface RetailGoodsReceiptDetail { goodsReceipt:RetailGoodsReceiptResponse; lines:RetailGoodsReceiptLineResponse[] }
 export interface RetailGoodsReceiptPage { items:RetailGoodsReceiptResponse[]; nextCursor?:string }
 export interface RetailGoodsReceiptDraft { receiptReference:string; supplierReference?:string; shipmentReference?:string; notes?:string; lines:ReadonlyArray<{productId:string;quantity:number}> }
+export interface RetailTransfer { id:string; sourceLocationId:string; destinationLocationId:string; status:'draft'|'dispatched'|'received'; createdAt:string; createdBy:string; dispatchedAt?:string; receivedAt?:string }
+export interface RetailTransferLine { id:string; transferId:string; productId:string; productName:string; productSourceId:string; quantity:number }
+export interface RetailTransferDetail { transfer:RetailTransfer; lines:RetailTransferLine[] }
+export interface RetailTransferPage { items:RetailTransfer[]; nextCursor?:string }
+export interface RetailTransferDraft { destinationLocationId:string; lines:ReadonlyArray<{productId:string;quantity:number}> }
 
 export interface RetailSaleCompletionResult {
   status: 200 | 201
@@ -131,6 +136,10 @@ export function isRetailSaleInsufficientStockError(error: unknown): boolean {
   if (!(error instanceof HttpError) || error.status !== 409
     || typeof error.body !== 'object' || error.body === null || Array.isArray(error.body)) return false
   return (error.body as { code?: unknown }).code === RETAIL_INSUFFICIENT_STOCK_CODE
+}
+
+export function isRetailInsufficientStockError(error: unknown): boolean {
+  return isRetailSaleInsufficientStockError(error)
 }
 
 export async function getRetailLocations(): Promise<RetailLocation[]> {
@@ -336,6 +345,11 @@ export function getRetailGoodsReceipt(locationId:string,receiptId:string):Promis
 export async function createRetailGoodsReceipt(locationId:string,payload:RetailGoodsReceiptDraft):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts`,{method:'POST',body:payload})}
 export async function updateRetailGoodsReceipt(locationId:string,receiptId:string,payload:Omit<RetailGoodsReceiptDraft,'receiptReference'>):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts/${encodeURIComponent(receiptId)}`,{method:'PATCH',body:payload})}
 export async function completeRetailGoodsReceipt(locationId:string,receiptId:string):Promise<RetailGoodsReceiptDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/goods-receipts/${encodeURIComponent(receiptId)}/complete`,{method:'POST'})}
+export async function getRetailTransfers(locationId:string,query:Omit<RetailInventoryQuery,'search'>={}):Promise<RetailTransferPage>{const response=await requestJson<{transfers:RetailTransferPage}>(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/transfers${retailQuery(query)}`);return response.transfers}
+export function getRetailTransfer(locationId:string,transferId:string):Promise<RetailTransferDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(locationId)}/transfers/${encodeURIComponent(transferId)}`)}
+export function createRetailTransfer(sourceLocationId:string,payload:RetailTransferDraft):Promise<RetailTransferDetail>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(sourceLocationId)}/transfers`,{method:'POST',body:payload})}
+export function dispatchRetailTransfer(sourceLocationId:string,transferId:string):Promise<{transfer:RetailTransfer}>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(sourceLocationId)}/transfers/${encodeURIComponent(transferId)}/dispatch`,{method:'POST'})}
+export function receiveRetailTransfer(destinationLocationId:string,transferId:string):Promise<{transfer:RetailTransfer}>{return requestJson(`${retailLocationsUrl}/${encodeURIComponent(destinationLocationId)}/transfers/${encodeURIComponent(transferId)}/receive`,{method:'POST'})}
 
 export async function completeRetailReturn(
   locationId: string,

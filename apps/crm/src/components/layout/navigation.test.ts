@@ -84,6 +84,7 @@ describe('CRM navigation', () => {
       { label: 'Товары', path: '/retail/products' },
       { label: 'Остатки', path: '/retail/inventory' },
       { label: 'Поступления', path: '/retail/goods-receipts' },
+      { label: 'Перемещения', path: '/retail/transfers' },
     ])
   })
 
@@ -110,8 +111,10 @@ describe('CRM navigation', () => {
 
     expect(managerItems.some((item) => item.path === '/retail/inventory')).toBe(true)
     expect(managerItems.some((item) => item.path === '/retail/goods-receipts')).toBe(true)
+    expect(managerItems.some((item) => item.path === '/retail/transfers')).toBe(true)
     expect(viewerItems.some((item) => item.path === '/retail/inventory')).toBe(false)
     expect(viewerItems.some((item) => item.path === '/retail/goods-receipts')).toBe(false)
+    expect(viewerItems.some((item) => item.path === '/retail/transfers')).toBe(false)
   })
 })
 
@@ -133,6 +136,7 @@ function navigationPathsForManager(): readonly string[] {
     '/retail/products',
     '/retail/inventory',
     '/retail/goods-receipts',
+    '/retail/transfers',
     '/retail/offline-operations',
     '/retail/terminal-setup',
   ]
