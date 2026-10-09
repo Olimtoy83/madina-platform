@@ -2124,6 +2124,146 @@ test('Retail Transfer routes require both persisted Locations and reject request
   }
 })
 
+test('Retail Transfer security boundaries deny expired sessions, untrusted origins, missing grants, and deactivated locations without effects', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-transfer-security-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [{ id: 'manager-1', role: 'manager' }])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const catalog = new SqliteRetailCatalogRepository(databaseFile)
+  const inventory = new SqliteRetailInventoryRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'manager-1', requestId: 'transfer-security-test' }
+  const warehouse = await access.createLocation({ code: 'SEC-WAREHOUSE', name: 'Warehouse', type: 'central_warehouse', status: 'active' }, context)
+  const store = await access.createLocation({ code: 'SEC-STORE', name: 'Store', type: 'store', status: 'active' }, context)
+  const product = await catalog.createProduct({ sourceId: 'SEC-PRODUCT', name: 'Security product' }, context)
+  await inventory.recordMovement({ productId: product.id, locationId: warehouse.id, quantityDelta: 20, type: 'opening', sourceType: 'test', sourceId: 'security-seed', sourceLineId: '1' }, context)
+  await access.grant('manager-1', store.id, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  const observer = new DatabaseSync(databaseFile)
+  const warehouseTransfers = `/api/v1/retail/locations/${warehouse.id}/transfers`
+  const transferPayload = { destinationLocationId: store.id, lines: [{ productId: product.id, quantity: 2 }] }
+  const effects = (transferId: string) => {
+    return {
+      status: (observer.prepare('SELECT status FROM retail_transfers WHERE id=?').get(transferId) as { status: string }).status,
+      warehouseStock: (observer.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(product.id, warehouse.id) as { on_hand_quantity: number }).on_hand_quantity,
+      storeStock: (observer.prepare('SELECT on_hand_quantity FROM retail_inventory_balances WHERE product_id=? AND location_id=?').get(product.id, store.id) as { on_hand_quantity?: number } | undefined)?.on_hand_quantity ?? 0,
+      movements: (observer.prepare("SELECT count(*) AS n FROM retail_inventory_movements WHERE source_id=? AND source_type IN ('retail_transfer_dispatched','retail_transfer_received')").get(transferId) as { n: number }).n,
+      audits: (observer.prepare("SELECT count(*) AS n FROM audit_events WHERE entity_id=? AND action IN ('retail.transfer_dispatched','retail.transfer_received')").get(transferId) as { n: number }).n,
+    }
+  }
+  const createDraft = async () => {
+    const response = await request(app, sessions['manager-1']!, { method: 'POST', url: warehouseTransfers, payload: transferPayload })
+    equal(response.statusCode, 201)
+    return (response.json() as { transfer: { id: string } }).transfer.id
+  }
+
+  try {
+    await app.ready()
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: warehouseTransfers, payload: { ...transferPayload, grants: [warehouse.id, store.id] } })).statusCode, 403)
+    await access.grant('manager-1', warehouse.id, context)
+    const storeOnlyTransfer = await createDraft()
+    await access.revoke('manager-1', warehouse.id, context)
+    const storeOnlyBefore = effects(storeOnlyTransfer)
+    equal((await request(app, sessions['manager-1']!, { method: 'GET', url: `${warehouseTransfers}/${storeOnlyTransfer}` })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${warehouseTransfers}/${storeOnlyTransfer}/dispatch`, payload: {} })).statusCode, 403)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${store.id}/transfers/${storeOnlyTransfer}/receive`, payload: {} })).statusCode, 403)
+    deepEqual(effects(storeOnlyTransfer), storeOnlyBefore)
+    await access.grant('manager-1', warehouse.id, context)
+
+    const originTransfer = await createDraft()
+    const originDraft = effects(originTransfer)
+    const invalidDispatch = await app.inject({ method: 'POST', url: `${warehouseTransfers}/${originTransfer}/dispatch`, payload: {}, headers: { cookie: `madina-session=${sessions['manager-1']!}`, origin: 'https://untrusted.example' } })
+    equal(invalidDispatch.statusCode, 403)
+    deepEqual(effects(originTransfer), originDraft)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${warehouseTransfers}/${originTransfer}/dispatch`, payload: {} })).statusCode, 200)
+    const originDispatched = effects(originTransfer)
+    const invalidReceive = await app.inject({ method: 'POST', url: `/api/v1/retail/locations/${store.id}/transfers/${originTransfer}/receive`, payload: {}, headers: { cookie: `madina-session=${sessions['manager-1']!}`, origin: 'https://untrusted.example' } })
+    equal(invalidReceive.statusCode, 403)
+    deepEqual(effects(originTransfer), originDispatched)
+
+    const sourceDeactivationTransfer = await createDraft()
+    const sourceDeactivationBefore = effects(sourceDeactivationTransfer)
+    observer.prepare("UPDATE retail_locations SET status='inactive' WHERE id=?").run(warehouse.id)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${warehouseTransfers}/${sourceDeactivationTransfer}/dispatch`, payload: {} })).statusCode, 403)
+    deepEqual(effects(sourceDeactivationTransfer), sourceDeactivationBefore)
+    observer.prepare("UPDATE retail_locations SET status='active' WHERE id=?").run(warehouse.id)
+
+    const destinationDeactivationTransfer = await createDraft()
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${warehouseTransfers}/${destinationDeactivationTransfer}/dispatch`, payload: {} })).statusCode, 200)
+    const destinationDeactivationBefore = effects(destinationDeactivationTransfer)
+    observer.prepare("UPDATE retail_locations SET status='inactive' WHERE id=?").run(store.id)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `/api/v1/retail/locations/${store.id}/transfers/${destinationDeactivationTransfer}/receive`, payload: {} })).statusCode, 403)
+    deepEqual(effects(destinationDeactivationTransfer), destinationDeactivationBefore)
+
+    observer.prepare("UPDATE auth_sessions SET created_at='2000-01-01T00:00:00.000Z', expires_at='2000-01-01T00:00:00.000Z' WHERE user_id=?").run('manager-1')
+    const expiredBefore = effects(destinationDeactivationTransfer)
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url: `${warehouseTransfers}/${destinationDeactivationTransfer}/dispatch`, payload: {} })).statusCode, 401)
+    deepEqual(effects(destinationDeactivationTransfer), expiredBefore)
+  } finally {
+    await app.close(); inventory.close(); catalog.close(); access.close(); observer.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  }
+})
+
+test('Retail Transfer create validates destination shape before destination grant access without effects', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'madina-retail-transfer-destination-validation-'))
+  const databaseFile = join(directory, 'madina.sqlite')
+  const previousDatabaseFile = process.env.DATABASE_FILE
+  initializeDatabase(databaseFile)
+  const sessions = await seedSessions(databaseFile, [{ id: 'manager-1', role: 'manager' }])
+  const access = new SqliteRetailAccessRepository(databaseFile)
+  const catalog = new SqliteRetailCatalogRepository(databaseFile)
+  const context = { actorType: 'user' as const, actorUserId: 'manager-1', requestId: 'transfer-destination-validation' }
+  const source = await access.createLocation({ code: 'DEST-VALIDATION-SOURCE', name: 'Source', type: 'central_warehouse', status: 'active' }, context)
+  const destination = await access.createLocation({ code: 'DEST-VALIDATION-DEST', name: 'Destination', type: 'store', status: 'active' }, context)
+  const ungrantedDestination = await access.createLocation({ code: 'DEST-VALIDATION-UNGRANTED', name: 'Ungranted', type: 'store', status: 'active' }, context)
+  const product = await catalog.createProduct({ sourceId: 'DEST-VALIDATION-PRODUCT', name: 'Product' }, context)
+  await access.grant('manager-1', source.id, context)
+  await access.grant('manager-1', destination.id, context)
+  process.env.DATABASE_FILE = databaseFile
+  const app = buildApp()
+  const url = `/api/v1/retail/locations/${source.id}/transfers`
+  const effects = () => {
+    const database = new DatabaseSync(databaseFile)
+    try {
+      return {
+        transfers: (database.prepare('SELECT count(*) AS n FROM retail_transfers').get() as { n: number }).n,
+        lines: (database.prepare('SELECT count(*) AS n FROM retail_transfer_lines').get() as { n: number }).n,
+        movements: (database.prepare("SELECT count(*) AS n FROM retail_inventory_movements WHERE source_type LIKE 'retail_transfer_%'").get() as { n: number }).n,
+        audits: (database.prepare("SELECT count(*) AS n FROM audit_events WHERE entity_type='retail_transfer'").get() as { n: number }).n,
+      }
+    } finally { database.close() }
+  }
+
+  try {
+    await app.ready()
+    const before = effects()
+    equal((await app.inject({ method: 'POST', url, payload: { lines: [{ productId: product.id, quantity: 1 }] }, headers: { origin: 'http://localhost:80' } })).statusCode, 401)
+    deepEqual(effects(), before)
+    for (const payload of [
+      { lines: [{ productId: product.id, quantity: 1 }] },
+      { destinationLocationId: '', lines: [{ productId: product.id, quantity: 1 }] },
+      { destinationLocationId: 42, lines: [{ productId: product.id, quantity: 1 }] },
+    ]) {
+      const response = await request(app, sessions['manager-1']!, { method: 'POST', url, payload })
+      equal(response.statusCode, 400)
+      equal((response.json() as { code?: string }).code, 'RETAIL_TRANSFER_INVALID_INPUT')
+      deepEqual(effects(), before)
+    }
+    equal((await request(app, sessions['manager-1']!, { method: 'POST', url, payload: { destinationLocationId: ungrantedDestination.id, lines: [{ productId: product.id, quantity: 1 }] } })).statusCode, 403)
+    deepEqual(effects(), before)
+  } finally {
+    await app.close(); catalog.close(); access.close()
+    if (previousDatabaseFile === undefined) delete process.env.DATABASE_FILE
+    else process.env.DATABASE_FILE = previousDatabaseFile
+    rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  }
+})
+
 test('Store opening capability belongs only to admin', () => {
   equal(hasRetailCapability('admin', 'retail:inventory:opening:manage'), true)
   for (const role of ['manager', 'operator', 'viewer'] as const) equal(hasRetailCapability(role, 'retail:inventory:opening:manage'), false)
@@ -2330,3 +2470,5 @@ test('offline stock-conflict review route enforces command security, actor prove
     const stale=await request(fixture.app,fixture.session,{method:'POST',url,payload:{...payload,commandId:'review-http-stale'}});equal(stale.statusCode,409);equal((stale.json()as{message:string}).message,'STALE_INCIDENT_STATE');deepEqual(effects().state,{current_state:'under_review',version:2});equal(effects().events,1)
   })
 })
+
+test('Retail Transfer create validates client input and preserves authorization and origin boundaries',async()=>{const directory=mkdtempSync(join(tmpdir(),'madina-retail-transfer-validation-')),databaseFile=join(directory,'madina.sqlite'),previous=process.env.DATABASE_FILE;initializeDatabase(databaseFile);const sessions=await seedSessions(databaseFile,[{id:'manager-1',role:'manager'}]),access=new SqliteRetailAccessRepository(databaseFile),catalog=new SqliteRetailCatalogRepository(databaseFile),inventory=new SqliteRetailInventoryRepository(databaseFile),context={actorType:'user' as const,actorUserId:'manager-1',requestId:'transfer-validation'},source=await access.createLocation({code:'SOURCE-V',name:'Source',type:'central_warehouse',status:'active'},context),destination=await access.createLocation({code:'DEST-V',name:'Destination',type:'store',status:'active'},context),product=await catalog.createProduct({sourceId:'P-V',name:'Product'},context);await access.grant('manager-1',source.id,context);await access.grant('manager-1',destination.id,context);process.env.DATABASE_FILE=databaseFile;const app=buildApp(),url=`/api/v1/retail/locations/${source.id}/transfers`,effects=()=>{const db=new DatabaseSync(databaseFile);try{return(db.prepare('SELECT count(*) AS n FROM retail_transfers').get()as {n:number}).n}finally{db.close()}};try{await app.ready();for(const payload of [{destinationLocationId:destination.id,lines:[]},{destinationLocationId:destination.id,lines:[null]},{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:0}]},{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:1.5}]},{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:'1'}]},{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:1},{productId:product.id,quantity:1}]},{destinationLocationId:destination.id,lines:[{productId:'missing',quantity:1}]},{destinationLocationId:source.id,lines:[{productId:product.id,quantity:1}]}]){const response=await request(app,sessions['manager-1']!,{method:'POST',url,payload});equal(response.statusCode,400);equal((response.json()as {code?:string}).code,'RETAIL_TRANSFER_INVALID_INPUT');equal(effects(),0)}equal((await app.inject({method:'POST',url,payload:{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:1}]},headers:{cookie:'madina-session=unknown',origin:'http://localhost:80'}})).statusCode,401);equal((await app.inject({method:'POST',url,payload:{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:1}]},headers:{cookie:`madina-session=${sessions['manager-1']!}`,origin:'https://untrusted.example'}})).statusCode,403);await access.revoke('manager-1',destination.id,context);equal((await request(app,sessions['manager-1']!,{method:'POST',url,payload:{destinationLocationId:destination.id,lines:[{productId:product.id,quantity:1}]}})).statusCode,403);equal(effects(),0)}finally{await app.close();inventory.close();catalog.close();access.close();if(previous===undefined)delete process.env.DATABASE_FILE;else process.env.DATABASE_FILE=previous;rmSync(directory,{recursive:true,force:true})}})
